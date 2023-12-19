@@ -21,6 +21,8 @@ Safe Operations: Elementary Functions
 
 Safe versions of elementary functions like `sqrt` or `abs`.
 """
+from __future__ import annotations
+
 import torch
 
 from .._typing import Any, Tensor
