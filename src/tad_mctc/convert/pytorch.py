@@ -51,7 +51,7 @@ def str_to_device(s: str) -> torch.device:
     d = {
         "cpu": torch.device("cpu"),
         "cuda": None
-        if torch.cuda.is_available()
+        if not torch.cuda.is_available()
         else torch.device("cuda", index=torch.cuda.current_device()),
     }
 
