@@ -26,7 +26,7 @@ import torch
 from tad_mctc._typing import DD, Tensor
 from tad_mctc.autograd import jac
 from tad_mctc.batch import pack
-from tad_mctc.convert import reshape_fortran
+from tad_mctc.convert import reshape_fortran, tensor_to_numpy
 from tad_mctc.data import radii
 from tad_mctc.ncoord import cn_d3 as get_cn
 
@@ -105,10 +105,11 @@ def test_jacobian(dtype: torch.dtype, name: str) -> None:
 
     fjac = jac(get_cn, argnums=1)
     jacobian: Tensor = fjac(numbers, positions)  # type: ignore
+    jac_np = tensor_to_numpy(jacobian)
 
-    assert pytest.approx(ref.cpu(), abs=tol * 10.5) == jacobian.cpu()
+    assert pytest.approx(ref.cpu(), abs=tol * 10.5) == jac_np
     assert pytest.approx(ref.cpu(), abs=tol * 10) == numgrad.cpu()
-    assert pytest.approx(numgrad.cpu(), abs=tol) == jacobian.cpu()
+    assert pytest.approx(numgrad.cpu(), abs=tol) == jac_np
 
 
 def calc_numgrad(numbers: Tensor, positions: Tensor) -> Tensor:
