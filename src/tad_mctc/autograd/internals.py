@@ -28,7 +28,7 @@ the traditional way of using `forward` with the `ctx` argument does not work.
 """
 import torch
 
-__all__ = ["jacrev", "jacobian"]
+__all__ = ["jacrev"]
 
 
 if torch.__version__ < (2, 0, 0):  # type: ignore[import-error]
@@ -36,7 +36,5 @@ if torch.__version__ < (2, 0, 0):  # type: ignore[import-error]
         from functorch import jacrev  # type: ignore[import-error]
     except ModuleNotFoundError:
         jacrev = None
-        from torch.autograd.functional import jacobian  # type: ignore[import-error]
-
 else:
     from torch.func import jacrev  # type: ignore[import-error]
