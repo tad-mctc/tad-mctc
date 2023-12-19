@@ -50,7 +50,9 @@ def str_to_device(s: str) -> torch.device:
     """
     d = {
         "cpu": torch.device("cpu"),
-        "cuda": torch.device("cuda", index=torch.cuda.current_device()),
+        "cuda": None
+        if torch.cuda.is_available()
+        else torch.device("cuda", index=torch.cuda.current_device()),
     }
 
     if s not in d:
