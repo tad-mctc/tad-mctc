@@ -3,7 +3,7 @@ import torch
 
 import tad_mctc as mctc
 
-numbers = mctc.data.pse.symbol_to_number("C C C C N C S H H H H H".split())
+numbers = mctc.convert.symbol_to_number("C C C C N C S H H H H H".split())
 
 # coordinates in Bohr
 positions = torch.tensor(

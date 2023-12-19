@@ -1,20 +1,20 @@
-# This file is part of tad_mctc.
+# This file is part of tad-mctc.
 #
 # SPDX-Identifier: LGPL-3.0
 # Copyright (C) 2023 Marvin Friede
 #
-# tad_mctc is free software: you can redistribute it and/or modify it under
+# tad-mctc is free software: you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
 # tad_mctc is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with tad_mctc. If not, see <https://www.gnu.org/licenses/>.
+# along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
 Coordination number: EEQ
 ========================
@@ -97,7 +97,7 @@ def cn_d3(
 
     eps = torch.tensor(torch.finfo(positions.dtype).eps, **dd)
 
-    mask = real_pairs(numbers, diagonal=True)
+    mask = real_pairs(numbers, mask_diagonal=True)
     distances = torch.where(mask, storch.cdist(positions, positions, p=2), eps)
 
     rc = rcov.unsqueeze(-2) + rcov.unsqueeze(-1)
@@ -106,4 +106,5 @@ def cn_d3(
         counting_function(distances, rc, kcn, **kwargs),
         torch.tensor(0.0, **dd),
     )
+
     return torch.sum(cf, dim=-1)

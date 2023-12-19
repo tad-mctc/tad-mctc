@@ -1,20 +1,20 @@
-# This file is part of tad_mctc.
+# This file is part of tad-mctc.
 #
 # SPDX-Identifier: LGPL-3.0
 # Copyright (C) 2023 Marvin Friede
 #
-# tad_mctc is free software: you can redistribute it and/or modify it under
+# tad-mctc is free software: you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
 # tad_mctc is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with tad_mctc. If not, see <https://www.gnu.org/licenses/>.
+# along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
 Type annotations
 ================
@@ -29,7 +29,7 @@ from __future__ import annotations
 import sys
 
 # pylint: disable=unused-import
-from typing import Any, NoReturn, Protocol, TypedDict
+from typing import Any, Literal, NoReturn, Protocol, TypedDict
 
 import torch
 from torch import Tensor
@@ -64,7 +64,7 @@ if sys.version_info >= (3, 10):
     # not type aliases, hence "|" is not allowed before Python 3.10
 
     Sliceable = list[Tensor] | tuple[Tensor, ...]
-    Size = list[int] | tuple[int] | torch.Size
+    Size = list[int] | tuple[int, ...] | torch.Size
     TensorOrTensors = list[Tensor] | tuple[Tensor, ...] | Tensor
     DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
 elif sys.version_info >= (3, 9):

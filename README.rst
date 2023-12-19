@@ -1,4 +1,4 @@
-Torch autodiff Utility
+Torch Autodiff Utility
 ======================
 
 .. image:: https://img.shields.io/badge/python-%3E=3.8-blue.svg
@@ -50,7 +50,7 @@ Collection of utility functions for PyTorch implementations of projects from the
 
 - units
 
-The name is inspired by the "modular computation tool chain library" `mctc-lib <https://github.com/grimme-lab/mctc-lib/>`__.
+The name is inspired by the "modular computation tool chain library (`mctc-lib <https://github.com/grimme-lab/mctc-lib/>`__)".
 
 
 Installation
@@ -141,7 +141,7 @@ The following example shows how to calculate the DFT-D4 dispersion energy for a 
     import torch
     import tad_mctc as mctc
 
-    numbers = mctc.data.pse.symbol_to_number(symbols="C C C C N C S H H H H H".split())
+    numbers = mctc.convert.symbol_to_number(symbols="C C C C N C S H H H H H".split())
 
     # coordinates in Bohr
     positions = torch.tensor(
@@ -178,8 +178,8 @@ The next example shows the calculation of dispersion energies for a batch of str
 
     # S22 system 4: formamide dimer
     numbers = mctc.batch.pack((
-        mctc.data.pse.symbol_to_number("C C N N H H H H H H O O".split()),
-        mctc.data.pse.symbol_to_number("C O N H H H".split()),
+        mctc.convert.symbol_to_number("C C N N H H H H H H O O".split()),
+        mctc.convert.symbol_to_number("C O N H H H".split()),
     ))
 
     # coordinates in Bohr

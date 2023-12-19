@@ -1,14 +1,37 @@
+# This file is part of tad-mctc.
+#
+# SPDX-Identifier: LGPL-3.0
+# Copyright (C) 2023 Marvin Friede
+#
+# tad-mctc is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# tad_mctc is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
+Autograd utility: Gradcheck
+===========================
+
 Collection of utility functions for testing.
 """
 from __future__ import annotations
 
-from tad_multicharge._typing import Any, Callable, Protocol, Tensor, TensorOrTensors
 from torch.autograd.gradcheck import gradcheck, gradgradcheck
+
+from .._typing import Any, Callable, Protocol, Tensor, TensorOrTensors
 
 __all__ = ["dgradcheck", "dgradgradcheck"]
 
+
 FAST_MODE = True
+"""Default for fast_mode argument (True)."""
 
 
 class _GradcheckFunction(Protocol):
@@ -79,7 +102,8 @@ def _wrap_gradcheck(
             diffvars.detach_()
         else:
             for diffvar in diffvars:
-                diffvar.detach_()
+                if isinstance(diffvar, Tensor):
+                    diffvar.detach_()
 
     return True
 

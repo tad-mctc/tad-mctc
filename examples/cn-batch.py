@@ -6,8 +6,8 @@ import tad_mctc as mctc
 # S22 system 4: formamide dimer
 numbers = mctc.batch.pack(
     (
-        mctc.data.pse.symbol_to_number("C C N N H H H H H H O O".split()),
-        mctc.data.pse.symbol_to_number("C O N H H H".split()),
+        mctc.convert.symbol_to_number("C C N N H H H H H H O O".split()),
+        mctc.convert.symbol_to_number("C O N H H H".split()),
     )
 )
 

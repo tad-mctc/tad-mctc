@@ -1,20 +1,20 @@
-# This file is part of tad_mctc.
+# This file is part of tad-mctc.
 #
 # SPDX-Identifier: LGPL-3.0
 # Copyright (C) 2023 Marvin Friede
 #
-# tad_mctc is free software: you can redistribute it and/or modify it under
+# tad-mctc is free software: you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
 # tad_mctc is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU Lesser General Public License for more details.
 #
 # You should have received a copy of the GNU Lesser General Public License
-# along with tad_mctc. If not, see <https://www.gnu.org/licenses/>.
+# along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
 Safe Operations: Elementary Functions
 =====================================
@@ -62,6 +62,7 @@ def divide(
     elif isinstance(eps, Tensor):
         eps = eps.to(device=x.device, dtype=x.dtype)
     else:
+        print("hello")
         raise TypeError(
             "Value for clamping must be None (default), Tensor, float, or int, "
             f"but {type(eps)} was given."
@@ -102,6 +103,11 @@ def sqrt(x: Tensor, eps: Tensor | float | int | None = None) -> Tensor:
         raise TypeError(
             "Value for clamping must be None (default), Tensor, float, or int, "
             f"but {type(eps)} was given."
+        )
+
+    if eps < 0.0:
+        raise ValueError(
+            f"Value for clamping must be larger than 0.0, but {eps} was given."
         )
 
     return torch.sqrt(torch.clamp(x, min=eps))
