@@ -55,7 +55,6 @@ else:
     from typing import Callable, Generator, Sequence
 
 # type aliases that do not require "from __future__ import annotations"
-CountingFunction = Callable[[Tensor, Tensor, Tensor | float | int], Tensor]
 WeightingFunction = Callable[[Tensor, Any], Tensor]
 
 
@@ -67,6 +66,7 @@ if sys.version_info >= (3, 10):
     Size = list[int] | tuple[int, ...] | torch.Size
     TensorOrTensors = list[Tensor] | tuple[Tensor, ...] | Tensor
     DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
+    CountingFunction = Callable[[Tensor, Tensor, Tensor | float | int], Tensor]
 elif sys.version_info >= (3, 9):
     # in Python 3.9, "from __future__ import annotations" works with type
     # aliases but requires using `Union` from typing
@@ -75,6 +75,7 @@ elif sys.version_info >= (3, 9):
     Sliceable = Union[list[Tensor], tuple[Tensor, ...]]
     Size = Union[list[int], tuple[int], torch.Size]
     TensorOrTensors = Union[list[Tensor], tuple[Tensor, ...], Tensor]
+    CountingFunction = Callable[[Tensor, Tensor, Union[Tensor, float, int]], Tensor]
 
     # no Union here, same as 3.10
     DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
@@ -87,6 +88,7 @@ elif sys.version_info >= (3, 8):
     Size = Union[List[int], Tuple[int], torch.Size]
     TensorOrTensors = Union[List[Tensor], Tuple[Tensor, ...], Tensor]
     DampingFunction = Callable[[int, Tensor, Tensor, Dict[str, Tensor]], Tensor]
+    CountingFunction = Callable[[Tensor, Tensor, Union[Tensor, float, int]], Tensor]
 else:
     vinfo = sys.version_info
     raise RuntimeError(
