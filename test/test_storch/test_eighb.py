@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import pytest
 import torch
+
+# required for generalized eigenvalue problem
 from scipy import linalg
 
 from tad_mctc import storch
