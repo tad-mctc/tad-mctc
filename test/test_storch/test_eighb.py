@@ -121,11 +121,9 @@ def test_eighb_standard_batch():
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
     for _ in range(10):
-        sizes = torch.randint(2, 10, (11,), device=DEVICE)
+        sizes = np.random.randint(2, 10, (11,))
         a = [
-            symmetrize(
-                numpy_to_tensor(np.random.rand(int(s), int(s)), **dd), force=True
-            )
+            symmetrize(numpy_to_tensor(np.random.rand(s, s), **dd), force=True)
             for s in sizes
         ]
         a_batch = pack(a)
@@ -177,16 +175,14 @@ def test_eighb_general_batch():
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
     for _ in range(10):
-        sizes = torch.randint(2, 10, (11,), device=DEVICE)
+        sizes = np.random.randint(2, 10, (11,))
         a = [
-            symmetrize(
-                numpy_to_tensor(np.random.rand(int(s), int(s)), **dd), force=True
-            )
+            symmetrize(numpy_to_tensor(np.random.rand(s, s), **dd), force=True)
             for s in sizes
         ]
         b = [
             symmetrize(
-                torch.eye(int(s), **dd) * numpy_to_tensor(np.random.rand(int(s)), **dd),
+                torch.eye(s, **dd) * numpy_to_tensor(np.random.rand(s), **dd),
                 force=True,
             )
             for s in sizes
@@ -268,12 +264,10 @@ def test_eighb_broadening_grad():
         assert grad_is_safe, f"Non-degenerate single test failed on {method}"
 
     # Generate a batch of standard eigenvalue test instances
-    sizes = torch.randint(3, 8, (5,), device=DEVICE)
+    sizes = np.random.randint(3, 8, (5,))
     a2 = pack(
         [
-            symmetrize(
-                numpy_to_tensor(np.random.rand(int(s), int(s)), **dd), force=True
-            )
+            symmetrize(numpy_to_tensor(np.random.rand(s, s), **dd), force=True)
             for s in sizes
         ]
     )
@@ -284,7 +278,7 @@ def test_eighb_broadening_grad():
 
         grad_is_safe = dgradcheck(
             eigen_proxy,
-            (a2, method, sizes),
+            (a2, method, numpy_to_tensor(sizes, **dd)),
             raise_exception=False,
             fast_mode=FAST_MODE,
         )
@@ -319,18 +313,15 @@ def test_eighb_general_grad():
         grad_is_safe = dgradcheck(
             eigen_proxy,
             (a1, b1, scheme),  # type: ignore
-            raise_exception=False,
             fast_mode=FAST_MODE,
         )
         assert grad_is_safe, f"Non-degenerate single test failed on {scheme}"
 
     # Generate a batch of generalised eigenvalue test instances
-    sizes = torch.randint(3, 8, (5,), device=DEVICE)
+    sizes = np.random.randint(3, 8, (5,))
     a2 = pack(
         [
-            symmetrize(
-                numpy_to_tensor(np.random.rand(int(s), int(s)), **dd), force=True
-            )
+            symmetrize(numpy_to_tensor(np.random.rand(s, s), **dd), force=True)
             for s in sizes
         ]
     )
@@ -350,8 +341,7 @@ def test_eighb_general_grad():
 
         grad_is_safe = dgradcheck(
             eigen_proxy,
-            (a2, b2, scheme, sizes),  # type: ignore
-            raise_exception=False,
+            (a2, b2, scheme, numpy_to_tensor(sizes, **dd)),  # type: ignore
             fast_mode=FAST_MODE,
         )
         assert grad_is_safe, f"Non-degenerate batch test failed on {scheme}"
