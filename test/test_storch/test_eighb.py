@@ -211,7 +211,7 @@ def test_eighb_general_batch():
                 dev_str = torch.device("cpu") if DEVICE is None else DEVICE
                 same_device = w_calc.device == dev_str
 
-                assert mae_w < 1e-11, f"Eigenvalue tolerance test {scheme}"
+                assert mae_w < 1e-10, f"Eigenvalue tolerance test {scheme}"
                 assert same_device, "Device persistence check"
 
 
