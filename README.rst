@@ -17,8 +17,8 @@ Torch Autodiff Utility
     :target: https://www.gnu.org/licenses/lgpl-3.0
     :alt: LGPL-3.0
 
-.. image:: https://github.com/tad-mctc/tad-mctc/workflows/CI/badge.svg
-    :target: https://github.com/tad-mctc/tad-mctc/actions
+.. image:: https://github.com/tad-mctc/tad-mctc/actions/workflows/python.yaml/badge.svg
+    :target: https://github.com/tad-mctc/tad-mctc/actions/workflows/python.yaml
     :alt: CI
 
 .. image:: https://readthedocs.org/projects/tad-mctc/badge/?version=latest
