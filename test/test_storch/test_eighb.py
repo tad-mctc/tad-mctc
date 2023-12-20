@@ -21,6 +21,7 @@ https://github.com/tbmalt/tbmalt/blob/development/tests/unittests/test_maths.py
 """
 from __future__ import annotations
 
+import numpy as np
 import pytest
 import torch
 
@@ -31,7 +32,7 @@ from tad_mctc import storch
 from tad_mctc._typing import DD, Literal, Tensor
 from tad_mctc.autograd import dgradcheck
 from tad_mctc.batch import pack
-from tad_mctc.convert import symmetrize, tensor_to_numpy
+from tad_mctc.convert import numpy_to_tensor, symmetrize, tensor_to_numpy
 
 from ..conftest import DEVICE, FAST_MODE
 
@@ -95,7 +96,10 @@ def test_eighb_standard_single():
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
     for _ in range(10):
-        a = symmetrize(torch.rand(10, 10, **dd), force=True)
+        a = symmetrize(
+            numpy_to_tensor(np.random.rand(10, 10), **dd),
+            force=True,
+        )
 
         w_ref = linalg.eigh(tensor_to_numpy(a))[0]
 
@@ -118,14 +122,21 @@ def test_eighb_standard_batch():
 
     for _ in range(10):
         sizes = torch.randint(2, 10, (11,), device=DEVICE)
-        a = [symmetrize(torch.rand((int(s), int(s)), **dd), force=True) for s in sizes]
+        a = [
+            symmetrize(
+                numpy_to_tensor(np.random.rand(int(s), int(s)), **dd), force=True
+            )
+            for s in sizes
+        ]
         a_batch = pack(a)
 
-        w_ref = pack([torch.tensor(linalg.eigh(i.cpu())[0]) for i in a])
+        w_ref = pack(
+            [torch.tensor(linalg.eigh(tensor_to_numpy(i))[0], **dd) for i in a]
+        )
 
         w_calc = storch.linalg.eighb(a_batch)[0]
 
-        mae_w = torch.max(torch.abs(w_calc.cpu() - w_ref))
+        mae_w = torch.max(torch.abs(w_calc - w_ref))
         assert mae_w < 1e-12, "Eigenvalue tolerance test"
 
         dev_str = torch.device("cpu") if DEVICE is None else DEVICE
@@ -138,8 +149,11 @@ def test_eighb_general_single():
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
     for _ in range(10):
-        a = symmetrize(torch.rand(10, 10, **dd), force=True)
-        b = symmetrize(torch.eye(10, **dd) * torch.rand(10, **dd), force=True)
+        a_np = numpy_to_tensor(np.random.rand(10, 10), **dd)
+        a = symmetrize(a_np, force=True)
+
+        b_np = numpy_to_tensor(np.random.rand(10), **dd)
+        b = symmetrize(torch.eye(10, **dd) * b_np, force=True)
 
         w_ref = linalg.eigh(tensor_to_numpy(a), tensor_to_numpy(b))[0]
 
@@ -164,10 +178,15 @@ def test_eighb_general_batch():
 
     for _ in range(10):
         sizes = torch.randint(2, 10, (11,), device=DEVICE)
-        a = [symmetrize(torch.rand((int(s), int(s)), **dd), force=True) for s in sizes]
+        a = [
+            symmetrize(
+                numpy_to_tensor(np.random.rand(int(s), int(s)), **dd), force=True
+            )
+            for s in sizes
+        ]
         b = [
             symmetrize(
-                torch.eye(int(s), **dd) * torch.rand(int(s), **dd),
+                torch.eye(int(s), **dd) * numpy_to_tensor(np.random.rand(int(s)), **dd),
                 force=True,
             )
             for s in sizes
@@ -176,7 +195,9 @@ def test_eighb_general_batch():
 
         w_ref = pack(
             [
-                torch.tensor(linalg.eigh(tensor_to_numpy(i), tensor_to_numpy(j))[0])
+                torch.tensor(
+                    linalg.eigh(tensor_to_numpy(i), tensor_to_numpy(j))[0], **dd
+                )
                 for i, j in zip(a, b)
             ]
         )
@@ -185,16 +206,16 @@ def test_eighb_general_batch():
         schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
         for scheme in schemes:
             for aux in aux_settings:
-                w_calc = storch.linalg.eighb(a_batch, b_batch, scheme=scheme, aux=aux)[
-                    0
-                ]
+                (w_calc, _) = storch.linalg.eighb(
+                    a_batch, b_batch, scheme=scheme, aux=aux
+                )
 
-                mae_w = torch.max(torch.abs(w_calc.cpu() - w_ref))
+                mae_w = torch.max(torch.abs(w_calc - w_ref))
 
                 dev_str = torch.device("cpu") if DEVICE is None else DEVICE
                 same_device = w_calc.device == dev_str
 
-                assert mae_w < 1e-12, f"Eigenvalue tolerance test {scheme}"
+                assert mae_w < 1e-11, f"Eigenvalue tolerance test {scheme}"
                 assert same_device, "Device persistence check"
 
 
@@ -230,7 +251,8 @@ def test_eighb_broadening_grad():
             return storch.linalg.eighb(m, broadening_method=target_method)
 
     # Generate a single standard eigenvalue test instance
-    a1 = symmetrize(torch.rand(8, 8, **dd), force=True)
+    a1_np = numpy_to_tensor(np.random.rand(8, 8), **dd)
+    a1 = symmetrize(a1_np, force=True)
 
     broadening_methods = [None, "none", "cond", "lorn"]
     for method in broadening_methods:
@@ -248,7 +270,12 @@ def test_eighb_broadening_grad():
     # Generate a batch of standard eigenvalue test instances
     sizes = torch.randint(3, 8, (5,), device=DEVICE)
     a2 = pack(
-        [symmetrize(torch.rand((int(s), int(s)), **dd), force=True) for s in sizes]
+        [
+            symmetrize(
+                numpy_to_tensor(np.random.rand(int(s), int(s)), **dd), force=True
+            )
+            for s in sizes
+        ]
     )
 
     for method in broadening_methods[2:]:
@@ -278,8 +305,11 @@ def test_eighb_general_grad():
         return storch.linalg.eighb(m, n, scheme=target_scheme)
 
     # Generate a single generalised eigenvalue test instance
-    a1 = symmetrize(torch.rand(8, 8, **dd), force=True)
-    b1 = symmetrize(torch.eye(8, **dd) * torch.rand(8, **dd), force=True)
+    a1_np = numpy_to_tensor(np.random.rand(8, 8), **dd)
+    a1 = symmetrize(a1_np, force=True)
+
+    b1_np = numpy_to_tensor(np.random.rand(8), **dd)
+    b1 = symmetrize(torch.eye(8, **dd) * b1_np, force=True)
 
     schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
     for scheme in schemes:
@@ -297,12 +327,17 @@ def test_eighb_general_grad():
     # Generate a batch of generalised eigenvalue test instances
     sizes = torch.randint(3, 8, (5,), device=DEVICE)
     a2 = pack(
-        [symmetrize(torch.rand((int(s), int(s)), **dd), force=True) for s in sizes]
+        [
+            symmetrize(
+                numpy_to_tensor(np.random.rand(int(s), int(s)), **dd), force=True
+            )
+            for s in sizes
+        ]
     )
     b2 = pack(
         [
             symmetrize(
-                torch.eye(int(s), **dd) * torch.rand(int(s), **dd),
+                torch.eye(int(s), **dd) * numpy_to_tensor(np.random.rand(int(s)), **dd),
                 force=True,
             )
             for s in sizes

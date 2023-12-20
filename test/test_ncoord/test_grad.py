@@ -21,10 +21,12 @@ functions used for the coordination number within the EEQ model and D4.
 """
 from __future__ import annotations
 
+import numpy as np
 import pytest
 import torch
 
 from tad_mctc._typing import DD, CountingFunction
+from tad_mctc.convert import numpy_to_tensor
 from tad_mctc.ncoord import (
     derf_count,
     dexp_count,
@@ -55,8 +57,8 @@ def test_count(
     cf, dcf = function
     kcn = 7.5
 
-    a = torch.rand(4, **dd)
-    b = torch.rand(4, **dd)
+    a = numpy_to_tensor(np.random.rand(4), **dd)
+    b = numpy_to_tensor(np.random.rand(4), **dd)
 
     a_grad = a.detach().clone().requires_grad_(True)
     count = cf(a_grad, b, kcn)
