@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import torch
 
-from .._typing import Any, Callable, Tensor
+from ..typing import Any, Callable, Tensor
 from .jac import jac
 
 __all__ = ["hessian"]

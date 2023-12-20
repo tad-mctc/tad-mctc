@@ -14,4 +14,5 @@ The following modules are contained with `tad_mctc`.
    io/index
    ncoord/index
    storch/index
+   typing/index
    units/index

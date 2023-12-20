@@ -22,8 +22,8 @@ from __future__ import annotations
 
 import torch
 
-from tad_mctc._typing import Molecule, Tensor, TypedDict
 from tad_mctc.data.molecules import merge_nested_dicts, mols
+from tad_mctc.typing import Molecule, Tensor, TypedDict
 
 
 class Refs(TypedDict):

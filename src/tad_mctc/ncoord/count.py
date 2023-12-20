@@ -35,7 +35,7 @@ from math import pi, sqrt
 import torch
 
 from .. import storch
-from .._typing import Tensor
+from ..typing import Tensor
 from . import defaults
 
 __all__ = [

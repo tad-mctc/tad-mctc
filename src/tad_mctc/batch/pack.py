@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import torch
 
-from .._typing import Size, Tensor, TensorOrTensors
+from ..typing import Size, Tensor, TensorOrTensors
 
 __all__ = ["pack"]
 

@@ -23,12 +23,12 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tad_mctc._typing import DD, Tensor
 from tad_mctc.autograd import jac
 from tad_mctc.batch import pack
 from tad_mctc.convert import reshape_fortran, tensor_to_numpy
 from tad_mctc.data import radii
 from tad_mctc.ncoord import cn_d3 as get_cn
+from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
 from .samples import samples

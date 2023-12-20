@@ -88,5 +88,5 @@ tensor(-0.0034314217)
 """
 import torch
 
-from . import autograd, batch, convert, data, io, ncoord, storch, units
+from . import autograd, batch, convert, data, io, ncoord, storch, typing, units
 from .__version__ import __version__

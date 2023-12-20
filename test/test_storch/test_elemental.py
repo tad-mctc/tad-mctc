@@ -24,7 +24,7 @@ import pytest
 import torch
 
 from tad_mctc import storch
-from tad_mctc._typing import DD
+from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
 

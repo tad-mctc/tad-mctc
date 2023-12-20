@@ -16,85 +16,22 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Type annotations
-================
+Typing: PyTorch
+===============
 
-This module contains all type annotations for this project.
+This module contains PyTorch-related type annotations.
 
-Since typing still significantly changes across different Python versions,
-all the special cases are handled here as well.
+Most importantly, the `TensorLike` base class is defined, which brings
+tensor-like behavior (`.to` and `.type` methods) to classes.
 """
 from __future__ import annotations
-
-import sys
-
-# pylint: disable=unused-import
-from typing import Any, Literal, NoReturn, Protocol, TypedDict
 
 import torch
 from torch import Tensor
 
-# Python 3.11
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
-
-# Python 3.10
-if sys.version_info >= (3, 10):
-    from typing import TypeGuard
-else:
-    from typing_extensions import TypeGuard
-
-# starting with Python 3.9, type hinting generics have been moved
-# from the "typing" to the "collections" module
-# (see PEP 585: https://peps.python.org/pep-0585/)
-if sys.version_info >= (3, 9):
-    from collections.abc import Callable, Generator, Sequence
-else:
-    from typing import Callable, Generator, Sequence
-
-# type aliases that do not require "from __future__ import annotations"
-WeightingFunction = Callable[[Tensor, Any], Tensor]
-
-
-if sys.version_info >= (3, 10):
-    # "from __future__ import annotations" only affects type annotations
-    # not type aliases, hence "|" is not allowed before Python 3.10
-
-    Sliceable = list[Tensor] | tuple[Tensor, ...]
-    Size = list[int] | tuple[int, ...] | torch.Size
-    TensorOrTensors = list[Tensor] | tuple[Tensor, ...] | Tensor
-    DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
-    CountingFunction = Callable[[Tensor, Tensor, Tensor | float | int], Tensor]
-elif sys.version_info >= (3, 9):
-    # in Python 3.9, "from __future__ import annotations" works with type
-    # aliases but requires using `Union` from typing
-    from typing import Union
-
-    Sliceable = Union[list[Tensor], tuple[Tensor, ...]]
-    Size = Union[list[int], tuple[int], torch.Size]
-    TensorOrTensors = Union[list[Tensor], tuple[Tensor, ...], Tensor]
-    CountingFunction = Callable[[Tensor, Tensor, Union[Tensor, float, int]], Tensor]
-
-    # no Union here, same as 3.10
-    DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
-elif sys.version_info >= (3, 8):
-    # in Python 3.8, "from __future__ import annotations" only affects
-    # type annotations not type aliases
-    from typing import Dict, List, Tuple, Union
-
-    Sliceable = Union[List[Tensor], Tuple[Tensor, ...]]
-    Size = Union[List[int], Tuple[int], torch.Size]
-    TensorOrTensors = Union[List[Tensor], Tuple[Tensor, ...], Tensor]
-    DampingFunction = Callable[[int, Tensor, Tensor, Dict[str, Tensor]], Tensor]
-    CountingFunction = Callable[[Tensor, Tensor, Union[Tensor, float, int]], Tensor]
-else:
-    vinfo = sys.version_info
-    raise RuntimeError(
-        f"'tad_mctc' requires at least Python 3.8 (Python {vinfo.major}."
-        f"{vinfo.minor}.{vinfo.micro} found)."
-    )
+from ..exceptions import DtypeError
+from .builtin import Any, NoReturn, TypedDict
+from .compat import Self
 
 
 class Molecule(TypedDict):
@@ -118,12 +55,26 @@ class DD(TypedDict):
 
 
 def get_default_device() -> torch.device:
-    """Default device for tensors."""
+    """
+    Default device for tensors.
+
+    Returns
+    -------
+    torch.device
+        PyTorch `device` type.
+    """
     return torch.tensor(1.0).device
 
 
 def get_default_dtype() -> torch.dtype:
-    """Default data type for floating point tensors."""
+    """
+    Default data type for floating point tensors.
+
+    Returns
+    -------
+    torch.dtype
+        PyTorch `dtype` type.
+    """
     return torch.tensor(1.0).dtype
 
 
@@ -255,16 +206,17 @@ class TensorLike:
                 f"'{self.__class__.__name__}' class."
             )
 
-        allowed_dtypes = (torch.float16, torch.float32, torch.float64)
-        if dtype not in allowed_dtypes:
-            raise ValueError(f"Only float types allowed (received '{dtype}').")
+        if dtype not in self.allowed_dtypes:
+            raise DtypeError(
+                f"Only '{self.allowed_dtypes}' allowed (received '{dtype}')."
+            )
 
         args = {}
         for s in self.__slots__:
             if not s.startswith("__"):
                 attr = getattr(self, s)
                 if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
-                    if attr.dtype in allowed_dtypes:
+                    if attr.dtype in self.allowed_dtypes:
                         attr = attr.type(dtype)  # type: ignore
                 args[s] = attr
 
@@ -273,6 +225,7 @@ class TensorLike:
     def to(self, device: torch.device) -> Self:
         """
         Returns a copy of the `TensorLike` instance on the specified device.
+
         This method creates and returns a new copy of the `TensorLike` instance
         on the specified device "``device``".
 
@@ -309,3 +262,17 @@ class TensorLike:
                 args[s] = attr
 
         return self.__class__(**args, device=device)
+
+    @property
+    def allowed_dtypes(self) -> tuple[torch.dtype, ...]:
+        """
+        Specification of dtypes that the TensorLike object can take. Defaults
+        to float types and must be overridden by subclass if float are not
+        allowed. The IndexHelper is an example that should only allow integers.
+
+        Returns
+        -------
+        tuple[torch.dtype, ...]
+            Collection of allowed dtypes the TensorLike object can take.
+        """
+        return (torch.float16, torch.float32, torch.float64)
