@@ -16,8 +16,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Atomic data: Electronegativities
-================================
+Data: Electronegativities
+=========================
 
 Pauling electronegativities, used for the covalent coordination number.
 """

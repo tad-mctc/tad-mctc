@@ -16,10 +16,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Coordination number: D4
-=======================
+Coordination number: DFT-D4
+===========================
 
-Calculation of D4 coordination number. Includes electronegativity-
+Calculation of DFT-D4 coordination number. Includes electronegativity-
 dependent term.
 """
 from __future__ import annotations

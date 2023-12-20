@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Safeops: Linear Algebra
+SafeOps: Linear Algebra
 =======================
 
 A collection of common mathematical functions.

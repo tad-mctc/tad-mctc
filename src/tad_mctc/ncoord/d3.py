@@ -16,10 +16,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Coordination number: EEQ
-========================
+Coordination number: DFT-D3
+===========================
 
-Calculation of coordination number for the EEQ model.
+Calculation of coordination number for DFT-D3.
 """
 from __future__ import annotations
 

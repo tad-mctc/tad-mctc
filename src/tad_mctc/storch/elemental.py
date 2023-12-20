@@ -16,8 +16,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Safe Operations: Elementary Functions
-=====================================
+SafeOps: Elementary Functions
+=============================
 
 Safe versions of elementary functions like `sqrt` or `abs`.
 """

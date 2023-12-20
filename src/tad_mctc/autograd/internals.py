@@ -16,8 +16,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-PyTorch AD functions
-====================
+Autograd Utility: PyTorch AD functions
+======================================
 
 This module imports PyTorch's own autograd functions, depending on the version.
 
