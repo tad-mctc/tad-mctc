@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import torch
 
-from .._typing import Any, Molecule
 from ..convert import symbol_to_number
+from ..typing import Any, Molecule
 
 __all__ = ["mols", "merge_nested_dicts"]
 

@@ -26,7 +26,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from .._typing import Tensor, get_default_dtype
+from ..typing import Tensor, get_default_dtype
 
 __all__ = ["numpy_to_tensor", "tensor_to_numpy"]
 

@@ -16,34 +16,9 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-SafeOps: Utility and Helpers
-============================
+Exceptions
+==========
 
-Some helper functions.
+This module contains a collection of exceptions and warnings.
 """
-from __future__ import annotations
-
-import torch
-
-from ..typing import Tensor
-
-__all__ = ["get_eps"]
-
-
-def get_eps(x: Tensor) -> Tensor:
-    """
-    Get the smallest value corresponding to the input floating point precision
-    of the input tensor. The small value will have the same dtype and lives on
-    the same device as the input tensor.
-
-    Parameters
-    ----------
-    x : Tensor
-        Input tensor that defines the dtype.
-
-    Returns
-    -------
-    Tensor
-        Smallest value of corresponding dtype.
-    """
-    return torch.tensor(torch.finfo(x.dtype).eps, device=x.device, dtype=x.dtype)
+from .pytorch import *

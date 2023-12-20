@@ -32,8 +32,8 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from .._typing import Literal, Tensor
 from ..convert import symmetrize
+from ..typing import Literal, Tensor
 
 __all__ = ["eighb"]
 

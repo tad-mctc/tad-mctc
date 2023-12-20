@@ -29,10 +29,10 @@ import torch
 from scipy import linalg
 
 from tad_mctc import storch
-from tad_mctc._typing import DD, Literal, Tensor
 from tad_mctc.autograd import dgradcheck
 from tad_mctc.batch import pack
 from tad_mctc.convert import numpy_to_tensor, symmetrize, tensor_to_numpy
+from tad_mctc.typing import DD, Literal, Tensor
 
 from ..conftest import DEVICE, FAST_MODE
 

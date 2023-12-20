@@ -23,7 +23,7 @@ Utilities for calculating Jacobians via autograd.
 """
 from __future__ import annotations
 
-from .._typing import Any, Callable, Tensor
+from ..typing import Any, Callable, Tensor
 from .internals import jacrev  # type: ignore[import-error]
 
 __all__ = ["jac"]

@@ -44,7 +44,7 @@ warn_unused_ignores = true
 plugins = ["covdefaults"]
 source = ["./src"]
 omit = [
-  "./src/tad_mctc/_typing.py",
+  "./src/tad_mctc/typing/*",
   "./src/tad_mctc/autograd/internals.py",
   "./src/tad_mctc/autograd/gradcheck.py",
   "./src/tad_mctc/data/molecules.py"

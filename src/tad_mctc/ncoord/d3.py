@@ -26,9 +26,9 @@ from __future__ import annotations
 import torch
 
 from .. import storch
-from .._typing import Any, CountingFunction, Tensor
 from ..batch import real_pairs
 from ..data import radii
+from ..typing import Any, CountingFunction, Tensor
 from . import defaults
 from .count import exp_count
 

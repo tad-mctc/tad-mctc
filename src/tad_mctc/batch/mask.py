@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import torch
 
-from .._typing import Tensor
+from ..typing import Tensor
 
 __all__ = ["real_atoms", "real_pairs", "real_triples"]
 

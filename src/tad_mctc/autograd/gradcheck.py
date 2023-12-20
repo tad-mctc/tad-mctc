@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from torch.autograd.gradcheck import gradcheck, gradgradcheck
 
-from .._typing import Any, Callable, Protocol, Tensor, TensorOrTensors
+from ..typing import Any, Callable, Protocol, Tensor, TensorOrTensors
 
 __all__ = ["dgradcheck", "dgradgradcheck"]
 

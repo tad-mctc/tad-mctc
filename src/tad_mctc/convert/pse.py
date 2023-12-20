@@ -26,8 +26,8 @@ from __future__ import annotations
 
 import torch
 
-from .._typing import Sequence, Tensor
 from ..data import pse
+from ..typing import Sequence, Tensor
 
 __all__ = ["symbol_to_number", "number_to_symbol"]
 

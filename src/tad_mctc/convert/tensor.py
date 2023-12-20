@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import torch
 
-from .._typing import Size, Tensor
+from ..typing import Size, Tensor
 
 
 def reshape_fortran(x: Tensor, shape: Size) -> Tensor:

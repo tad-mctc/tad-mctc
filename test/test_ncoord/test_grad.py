@@ -25,7 +25,6 @@ import numpy as np
 import pytest
 import torch
 
-from tad_mctc._typing import DD, CountingFunction
 from tad_mctc.convert import numpy_to_tensor
 from tad_mctc.ncoord import (
     derf_count,
@@ -35,6 +34,7 @@ from tad_mctc.ncoord import (
     exp_count,
     gfn2_count,
 )
+from tad_mctc.typing import DD, CountingFunction
 
 from ..conftest import DEVICE
 

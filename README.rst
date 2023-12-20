@@ -34,7 +34,8 @@ Torch Autodiff Utility
     :alt: pre-commit.ci status
 
 
-Collection of utility functions for PyTorch implementations of projects from the `Grimme group <https://github.com/grimme-lab>`__.
+This library is a collection of utility functions that are used in PyTorch (re-)implementations of projects from the `Grimme group <https://github.com/grimme-lab>`__.
+In particular, the *tad-mctc* library provides:
 
 - autograd functions (Jacobian, Hessian)
 
@@ -48,9 +49,11 @@ Collection of utility functions for PyTorch implementations of projects from the
 
 - safeops (autograd-safe implementations of common functions)
 
+- typing (base class for tensor-like behavior of arbitrary classes)
+
 - units
 
-The name is inspired by the "modular computation tool chain library (`mctc-lib <https://github.com/grimme-lab/mctc-lib/>`__)".
+The name is inspired by the Fortran pendant "modular computation tool chain library" (`mctc-lib <https://github.com/grimme-lab/mctc-lib/>`__).
 
 
 Installation
@@ -105,7 +108,8 @@ For development, additionally install the following tools in your environment.
 
 .. code::
 
-    mamba install black covdefaults coverage mypy pre-commit pylint tox
+    mamba install black covdefaults mypy pre-commit pylint pytest pytest-cov pytest-xdist tox
+    pip install pytest-random-order
 
 With pip, add the option ``-e`` for installing in development mode, and add ``[dev]`` for the development dependencies
 

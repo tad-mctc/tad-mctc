@@ -25,7 +25,7 @@ import pytest
 import torch
 
 from tad_mctc import convert
-from tad_mctc._typing import Tensor, get_default_dtype
+from tad_mctc.typing import Tensor, get_default_dtype
 
 
 def test_np_to_torch_float32() -> None:
