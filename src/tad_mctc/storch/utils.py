@@ -16,8 +16,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Safe Operations: Utility and Helpers
-====================================
+SafeOps: Utility and Helpers
+============================
 
 Some helper functions.
 """

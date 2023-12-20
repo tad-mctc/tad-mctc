@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Autograd utility
+Autograd Utility
 ================
 
 This module contains utility functions for automatic differentiation, which
