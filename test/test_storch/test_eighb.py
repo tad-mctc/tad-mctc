@@ -258,7 +258,6 @@ def test_eighb_broadening_grad():
         grad_is_safe = dgradcheck(
             eigen_proxy,
             (a1, method),
-            raise_exception=False,
             fast_mode=FAST_MODE,
         )
         assert grad_is_safe, f"Non-degenerate single test failed on {method}"
@@ -279,7 +278,6 @@ def test_eighb_broadening_grad():
         grad_is_safe = dgradcheck(
             eigen_proxy,
             (a2, method, numpy_to_tensor(sizes, **dd)),
-            raise_exception=False,
             fast_mode=FAST_MODE,
         )
         assert grad_is_safe, f"Non-degenerate batch test failed on {method}"
@@ -313,7 +311,7 @@ def test_eighb_general_grad():
         grad_is_safe = dgradcheck(
             eigen_proxy,
             (a1, b1, scheme),  # type: ignore
-            fast_mode=FAST_MODE,
+            fast_mode=False,
         )
         assert grad_is_safe, f"Non-degenerate single test failed on {scheme}"
 
@@ -342,6 +340,6 @@ def test_eighb_general_grad():
         grad_is_safe = dgradcheck(
             eigen_proxy,
             (a2, b2, scheme, numpy_to_tensor(sizes, **dd)),  # type: ignore
-            fast_mode=FAST_MODE,
+            fast_mode=False,
         )
         assert grad_is_safe, f"Non-degenerate batch test failed on {scheme}"
