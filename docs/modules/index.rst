@@ -9,6 +9,7 @@ The following modules are contained with `tad_mctc`.
 
    autograd/index
    batch/index
+   convert/index
    data/index
    io/index
    ncoord/index
