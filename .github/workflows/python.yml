@@ -1,4 +1,4 @@
-name: Test-CPU
+name: Tests
 
 on:
   push:
