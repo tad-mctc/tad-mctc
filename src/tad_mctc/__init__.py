@@ -19,9 +19,26 @@
 Torch Autodiff Utilities
 ========================
 
-Implementation of the DFT-D4 dispersion model in PyTorch.
-This module allows to process a single structure or a batch of structures for
-the calculation of atom-resolved dispersion energies.
+This library is a collection of utility functions that are used in PyTorch (re-)implementations of projects from the `Grimme group <https://github.com/grimme-lab>`__.
+In particular, the *tad-mctc* library provides:
+
+- autograd functions (Jacobian, Hessian)
+
+- batch utility (packing, masks, ...)
+
+- atomic data (radii, EN, example molecules, ...)
+
+- io (reading coordinate files)
+
+- coordination numbers
+
+- safeops (autograd-safe implementations of common functions)
+
+- typing (base class for tensor-like behavior of arbitrary classes)
+
+- units
+
+The name is inspired by the Fortran pendant "modular computation tool chain library" (`mctc-lib <https://github.com/grimme-lab/mctc-lib/>`__).
 
 .. note::
 
@@ -32,16 +49,16 @@ the calculation of atom-resolved dispersion energies.
 Example
 -------
 >>> import torch
->>> import tad_mctc as d4
+>>> import tad_mctc as mctc
 >>>
 >>> # S22 system 4: formamide dimer
->>> numbers = d4.utils.pack((
-...     d4.utils.to_number("C C N N H H H H H H O O".split()),
-...     d4.utils.to_number("C O N H H H".split()),
+>>> numbers = mctc.batch.pack((
+...     mctc.convert.symbol_to_number("C C N N H H H H H H O O".split()),
+...     mctc.convert.symbol_to_number("C O N H H H".split()),
 ... ))
 >>>
 >>> # coordinates in Bohr
->>> positions = d4.utils.pack((
+>>> positions = mctc.batch.pack((
 ...     torch.tensor([
 ...         [-3.81469488143921, +0.09993441402912, 0.00000000000000],
 ...         [+3.81469488143921, -0.09993441402912, 0.00000000000000],
@@ -66,27 +83,30 @@ Example
 ...     ]),
 ... ))
 >>>
->>> # total charge of both systems
->>> charge = torch.tensor([0.0, 0.0])
+>>> # calculate coordination number
+>>> cn = mctc.ncoord.cn_d4(numbers, positions)
 >>>
->>> # TPSSh-D4-ATM parameters
->>> param = {
-...     "s6": positions.new_tensor(1.0),
-...     "s8": positions.new_tensor(1.85897750),
-...     "s9": positions.new_tensor(1.0),
-...     "a1": positions.new_tensor(0.44286966),
-...     "a2": positions.new_tensor(4.60230534),
-... }
->>>
->>> # calculate dispersion energy in Hartree
->>> energy = torch.sum(d4.dftd4(numbers, positions, charge, param), -1)
 >>> torch.set_printoptions(precision=10)
->>> print(energy)
-tensor([-0.0088341432, -0.0027013607])
->>> print(energy[0] - 2*energy[1])
-tensor(-0.0034314217)
+>>> print(cn)
+tensor([[2.6886456013, 2.6886456013, 2.6314170361, 2.6314167976,
+         0.8594539165, 0.9231414795, 0.8605306745, 0.8605306745,
+         0.8594539165, 0.9231414795, 0.8568341732, 0.8568341732],
+        [2.6886456013, 0.8568335176, 2.6314167976, 0.8605306745,
+         0.8594532013, 0.9231414795, 0.0000000000, 0.0000000000,
+         0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000]])
 """
 import torch
 
-from . import autograd, batch, convert, data, io, ncoord, storch, typing, units
+from . import (
+    autograd,
+    batch,
+    convert,
+    data,
+    exceptions,
+    io,
+    ncoord,
+    storch,
+    typing,
+    units,
+)
 from .__version__ import __version__
