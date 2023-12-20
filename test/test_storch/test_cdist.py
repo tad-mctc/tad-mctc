@@ -20,11 +20,13 @@ Test cdist safeop version.
 """
 from __future__ import annotations
 
+import numpy as np
 import pytest
 import torch
 
 from tad_mctc import storch
 from tad_mctc._typing import DD
+from tad_mctc.convert import numpy_to_tensor
 
 from ..conftest import DEVICE
 
@@ -43,13 +45,13 @@ def test_all(dtype: torch.dtype) -> None:
     failure only happens if `torch.rand` was run before. To be precise,
 
     ```
-    pytest -vv test/test_ncoord/test_grad.py test/test_utils/ --cuda --slow
+    pytest -vv test/test_ncoord/test_grad.py test/test_storch/ --cuda --slow
     ```
 
     fails, while
 
     ```
-    pytest -vv test/test_utils/ --cuda --slow
+    pytest -vv test/test_storch/ --cuda --slow
     ```
 
     works. It also works if I remove the random tensors in the gradient test
@@ -68,16 +70,20 @@ def test_all(dtype: torch.dtype) -> None:
     CUBLAS_WORKSPACE_CONFIG=:4096:8 pytest -vv test/test_ncoord/test_grad.py test/test_utils/ --cuda --slow
     ```
 
-    (For simplicity, I just reduced the tolerances for single precision.)
+    For simplicity, one can just reduce the tolerances for single precision.
+    ```
+    # only one element actually fails
+    if "cuda" in str(DEVICE) and dtype == torch.float:
+        tol = 1e-3
+    ```
+
+    BETTER SOLUTION:
+    Use numpy for generating random tensors and convert the array to a tensor.
     """
     dd: DD = {"device": DEVICE, "dtype": dtype}
     tol = 1e-6 if dtype == torch.float else 1e-14
 
-    # only one element actually fails
-    if "cuda" in str(DEVICE) and dtype == torch.float:
-        tol = 1e-3
-
-    x = torch.randn(2, 3, 4, **dd)
+    x = numpy_to_tensor(np.random.randn(2, 3, 4), **dd)
 
     d1 = storch.cdist(x)
     d2 = storch.distance.cdist_direct_expansion(x, x, p=2)
@@ -94,8 +100,8 @@ def test_ps(dtype: torch.dtype, p: int) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
     tol = 1e-6 if dtype == torch.float else 1e-14
 
-    x = torch.randn(2, 4, 5, **dd)
-    y = torch.randn(2, 4, 5, **dd)
+    x = numpy_to_tensor(np.random.randn(2, 4, 5), **dd)
+    y = numpy_to_tensor(np.random.randn(2, 4, 5), **dd)
 
     d1 = storch.cdist(x, y, p=p)
     d2 = torch.cdist(x, y, p=p)

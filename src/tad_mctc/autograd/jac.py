@@ -25,7 +25,6 @@ from __future__ import annotations
 
 from .._typing import Any, Callable, Tensor
 from .internals import jacrev  # type: ignore[import-error]
-from .internals import jacobian
 
 __all__ = ["jac"]
 
@@ -43,6 +42,13 @@ def jac(f: Callable[..., Tensor], argnums: int = 0) -> Any:  # pragma: no cover
     """
 
     if jacrev is None:
+        try:
+            from torch.autograd.functional import jacobian  # type: ignore[import-error]
+        except ImportError as e:
+            raise ImportError(
+                f"Failed to import required modules. {e}. {e.name} provides "
+                "an API for Jacobian calculations for older PyTorch versions."
+            )
 
         def wrap(*inps: Any) -> Any:
             """

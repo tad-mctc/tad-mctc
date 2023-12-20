@@ -20,13 +20,14 @@ Test linalg safeops.
 """
 from __future__ import annotations
 
+import numpy as np
 import pytest
 import torch
 
 from tad_mctc import storch
 from tad_mctc._typing import DD, Literal, Tensor
 from tad_mctc.autograd import dgradcheck
-from tad_mctc.convert import symmetrize
+from tad_mctc.convert import numpy_to_tensor, symmetrize
 
 from ..conftest import DEVICE, FAST_MODE
 
@@ -91,7 +92,7 @@ hamiltonian = torch.tensor(
 @pytest.mark.parametrize("dtype", [torch.double])
 def test_eighb(broadening: Literal["cond", "lorn", "none"], dtype: torch.dtype) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
-    a = torch.rand((8, 8), **dd)
+    a = numpy_to_tensor(np.random.rand(8, 8), **dd)
     a.requires_grad_(True)
 
     def eigen_proxy(m: Tensor):
@@ -142,8 +143,8 @@ def test_gershgorin(dtype: torch.dtype) -> None:
     ref_min = torch.tensor([-1.4178, -1.0958], **dd)
     ref_max = torch.tensor([0.9272, 3.1334], **dd)
 
-    assert pytest.approx(ref_min, abs=1e-4, rel=1e-4) == _min
-    assert pytest.approx(ref_max, abs=1e-4, rel=1e-4) == _max
+    assert pytest.approx(ref_min.cpu(), abs=1e-4, rel=1e-4) == _min.cpu()
+    assert pytest.approx(ref_max.cpu(), abs=1e-4, rel=1e-4) == _max.cpu()
 
     evals = torch.linalg.eigh(amat)[0]
     _emin = evals.min(-1)[0]
@@ -152,9 +153,9 @@ def test_gershgorin(dtype: torch.dtype) -> None:
     ref_emin = torch.tensor([-1.1543, -0.5760], **dd)
     ref_emax = torch.tensor([0.7007, 2.4032], **dd)
 
-    assert pytest.approx(ref_emin, abs=1e-4, rel=1e-4) == _emin
-    assert pytest.approx(ref_emax, abs=1e-4, rel=1e-4) == _emax
+    assert pytest.approx(ref_emin.cpu(), abs=1e-4, rel=1e-4) == _emin.cpu()
+    assert pytest.approx(ref_emax.cpu(), abs=1e-4, rel=1e-4) == _emax.cpu()
 
     # Gershgorin works?
-    assert pytest.approx(_emin, abs=0.7, rel=0.5) == _min
-    assert pytest.approx(_emax, abs=0.7, rel=0.5) == _emax
+    assert pytest.approx(_emin.cpu(), abs=0.7, rel=0.5) == _min.cpu()
+    assert pytest.approx(_emax.cpu(), abs=0.7, rel=0.5) == _emax.cpu()
