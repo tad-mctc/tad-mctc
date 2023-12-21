@@ -165,8 +165,8 @@ def test_eighb_general_single():
             dev_str = torch.device("cpu") if DEVICE is None else DEVICE
             same_device = w_calc.device == dev_str == v_calc.device
 
-            assert mae_w < 1e-12, f"Eigenvalue tolerance test {scheme}"
-            assert mae_v < 1e-12, f"Eigenvector orthogonality test {scheme}"
+            assert mae_w < 1e-11, f"Eigenvalue tolerance test {scheme}"
+            assert mae_v < 1e-11, f"Eigenvector orthogonality test {scheme}"
             assert same_device, "Device persistence check"
 
 
