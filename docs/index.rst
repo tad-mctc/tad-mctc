@@ -34,7 +34,8 @@ Torch Autodiff Utility
     :alt: pre-commit.ci status
 
 
-Collection of utility functions for PyTorch implementations of projects from the `Grimme group <https://github.com/grimme-lab>`__.
+This library is a collection of utility functions that are used in PyTorch (re-)implementations of projects from the `Grimme group <https://github.com/grimme-lab>`__.
+In particular, the *tad-mctc* library provides:
 
 - autograd functions (Jacobian, Hessian)
 
@@ -48,15 +49,17 @@ Collection of utility functions for PyTorch implementations of projects from the
 
 - safeops (autograd-safe implementations of common functions)
 
+- typing (base class for tensor-like behavior of arbitrary classes)
+
 - units
 
-The name is inspired by the "modular computation tool chain library" `mctc-lib <https://github.com/grimme-lab/mctc-lib/>`__.
+The name is inspired by the Fortran pendant "modular computation tool chain library" (`mctc-lib <https://github.com/grimme-lab/mctc-lib/>`__).
 
 
 Examples
 --------
 
-The following example shows how to calculate the DFT-D4 dispersion energy for a single structure.
+The following example shows how to calculate the coordination number used in the EEQ model for a single structure.
 
 .. code:: python
 
@@ -91,7 +94,7 @@ The following example shows how to calculate the DFT-D4 dispersion energy for a 
     #         3.0779352188, 3.0095663071, 1.0991339684, 0.9968624115,
     #         0.9943327904, 0.9947233200, 0.9945874214, 0.9945726395])
 
-The next example shows the calculation of dispersion energies for a batch of structures.
+The next example shows the calculation of the coordination number used in DFT-D4 for a batch of structures.
 
 .. code:: python
 
@@ -140,6 +143,7 @@ The next example shows the calculation of dispersion energies for a batch of str
     #         [2.6886456013, 0.8568335176, 2.6314167976, 0.8605306745,
     #          0.8594532013, 0.9231414795, 0.0000000000, 0.0000000000,
     #          0.0000000000, 0.0000000000, 0.0000000000, 0.0000000000]])
+
 
 .. toctree::
    :hidden:

@@ -62,7 +62,7 @@ def test_single_cnmax(dtype: torch.dtype, cn_max: int | float | Tensor) -> None:
 
     ref = sample["cn_eeq"].to(**dd)
 
-    cn = get_cn(numbers, positions, cn_max=cn_max)
+    cn = get_cn(numbers, positions, cn_max=cn_max, cutoff=None)
     assert pytest.approx(ref.cpu(), abs=1e-5) == cn.cpu()
 
 

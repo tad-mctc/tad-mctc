@@ -41,7 +41,7 @@ def cn_eeq(
     *,
     counting_function: CountingFunction = erf_count,
     rcov: Tensor | None = None,
-    cutoff: Tensor | None = None,
+    cutoff: Tensor | float | int | None = defaults.CUTOFF_EEQ,
     cn_max: Tensor | float | int | None = defaults.CUTOFF_EEQ_MAX,
     kcn: Tensor | float | int = defaults.KCN_EEQ,
     **kwargs: Any,
@@ -60,8 +60,8 @@ def cn_eeq(
         Calculate weight for pairs. Defaults to `erf_count`.
     rcov : Tensor | None, optional
         Covalent radii for each species. Defaults to `None`.
-    cutoff : Tensor | None, optional
-        Real-space cutoff. Defaults to `None`.
+    cutoff : Tensor | float | int | None, optional
+        Real-space cutoff. Defaults to `defaults.CUTOFF_EEQ`.
     cn_max : Tensor | float | int | None, optional
         Maximum coordination number. Defaults to `defaults.CUTOFF_EEQ_MAX`.
     kcn : Tensor | float | int, optional
