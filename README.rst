@@ -138,7 +138,7 @@ Note that this randomizes the order of tests but skips "large" tests. To modify 
 Examples
 --------
 
-The following example shows how to calculate the DFT-D4 dispersion energy for a single structure.
+The following example shows how to calculate the coordination number used in the EEQ model for a single structure.
 
 .. code:: python
 
@@ -173,7 +173,7 @@ The following example shows how to calculate the DFT-D4 dispersion energy for a 
     #         3.0779352188, 3.0095663071, 1.0991339684, 0.9968624115,
     #         0.9943327904, 0.9947233200, 0.9945874214, 0.9945726395])
 
-The next example shows the calculation of dispersion energies for a batch of structures.
+The next example shows the calculation of the coordination number used in DFT-D4 for a batch of structures.
 
 .. code:: python
 
