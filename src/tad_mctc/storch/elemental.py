@@ -64,7 +64,6 @@ def divide(
     elif isinstance(eps, Tensor):
         eps = eps.to(device=x.device, dtype=x.dtype)
     else:
-        print("hello")
         raise TypeError(
             "Value for clamping must be None (default), Tensor, float, or int, "
             f"but {type(eps)} was given."

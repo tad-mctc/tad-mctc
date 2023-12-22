@@ -21,9 +21,32 @@ Units: Length
 
 This module contains conversions for units of length.
 """
+from .codata import CODATA
+
+__all__ = ["AU2METER", "METER2AU", "AA2METER", "AA2AU"]
+
 
 BOHR_TO_ANGSTROM = 0.529177210903
 """Bohr radius in Angstroms."""
 
 ANGSTROM_TO_BOHR = 1.0 / BOHR_TO_ANGSTROM
 """Conversion factor from Angstrom to Bohr."""
+
+
+AU2METER = CODATA.bohr
+"""
+Conversion from bohr (a.u.) to meter.
+This equals: 1 bohr = 5.29177210903e-11 m.
+"""
+
+METER2AU = 1.0 / AU2METER
+"""Conversion from meter to atomic units."""
+
+AA2METER = 1e-10
+"""Factor for conversion from Angstrom to meter (1e-10)."""
+
+AA2AU = AA2METER * METER2AU
+"""
+Factor for conversion from angstrom to atomic units (bohr).
+This equals: 1 Angstrom = 1.8897261246204404 a.u.
+"""

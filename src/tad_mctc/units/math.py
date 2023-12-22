@@ -16,15 +16,14 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Units
-=====
+Units: Math Constants
+=====================
 
-Collection of units.
+Mathematical constants
 """
-from .codata import *
-from .energy import *
-from .length import *
-from .mass import *
-from .math import *
-from .spectroscopy import *
-from .time import *
+__all__ = ["EULER", "PI"]
+
+
+EULER = 2.7182818284590452353602874713526625
+
+PI = 3.1415926535897932384626433832795029

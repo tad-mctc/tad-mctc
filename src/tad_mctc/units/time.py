@@ -16,15 +16,15 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Units
-=====
+Units: Time
+===========
 
-Collection of units.
+This module contains conversions for units of time.
 """
-from .codata import *
-from .energy import *
-from .length import *
-from .mass import *
-from .math import *
-from .spectroscopy import *
-from .time import *
+from .codata import get_constant
+
+AU2SECOND = get_constant("atomic unit of time")
+"""Conversion from atomic units to seconds. The atomic unit of time (s)."""
+
+SECOND2AU = 1.0 / AU2SECOND
+"""Conversion from seconds to atomic units of time."""
