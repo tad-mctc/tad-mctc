@@ -21,6 +21,8 @@ Data: Masses
 
 This module contains masses.
 """
+from __future__ import annotations
+
 import torch
 
 from ..typing import Tensor
@@ -124,28 +126,3 @@ ATOMIC = GMOL2AU * torch.tensor(
 Isotope-averaged atom masses in atomic units (save as g/mol) from
 https://www.angelo.edu/faculty/kboudrea/periodic/structure_mass.htm.
 """
-
-
-def get_atomic_masses(
-    numbers: Tensor,
-    device: torch.device | None = None,
-    dtype: torch.dtype | None = None,
-) -> Tensor:
-    """
-    Get isotope-averaged atomic masses for all `numbers`.
-
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system.
-    device : torch.device | None, optional
-        Device to store the tensor. If `None` (default), the default device is used.
-    dtype : torch.dtype, optional
-        Data type of the tensor. If `None` (default), the default dtype is used.
-
-    Returns
-    -------
-    Tensor
-        Atomic masses.
-    """
-    return ATOMIC.to(device=device, dtype=dtype)[numbers]

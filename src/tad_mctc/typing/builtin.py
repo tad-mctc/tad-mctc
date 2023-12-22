@@ -21,5 +21,6 @@ Typing: Builtins
 
 This module contains all used built-in type annotations.
 """
-# pylint: disable=unused-import
-from typing import Any, Literal, NoReturn, Protocol, TypedDict
+from typing import IO, Any, Literal, NoReturn, Protocol, TypedDict
+
+__all__ = ["IO", "Any", "Literal", "NoReturn", "Protocol", "TypedDict"]
