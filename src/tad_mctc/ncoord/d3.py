@@ -38,6 +38,7 @@ __all__ = ["cn_d3"]
 def cn_d3(
     numbers: Tensor,
     positions: Tensor,
+    *,
     counting_function: CountingFunction = exp_count,
     rcov: Tensor | None = None,
     cutoff: Tensor | None = None,

@@ -51,9 +51,6 @@ if sys.version_info >= (3, 9):
 else:
     from typing import Callable, Generator, Sequence
 
-# type aliases that do not require "from __future__ import annotations"
-WeightingFunction = Callable[[Tensor, Any], Tensor]
-
 
 if sys.version_info >= (3, 10):
     # "from __future__ import annotations" only affects type annotations
