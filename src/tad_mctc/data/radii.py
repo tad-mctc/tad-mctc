@@ -25,7 +25,7 @@ import torch
 
 from ..units import length
 
-__all__ = ["COV_D3"]
+__all__ = ["COV_D3", "VDW_D3"]
 
 
 # fmt: off

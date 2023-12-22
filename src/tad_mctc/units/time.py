@@ -21,7 +21,12 @@ Units: Time
 
 This module contains conversions for units of time.
 """
+from __future__ import annotations
+
 from .codata import get_constant
+
+__all__ = ["AU2SECOND", "SECOND2AU"]
+
 
 AU2SECOND = get_constant("atomic unit of time")
 """Conversion from atomic units to seconds. The atomic unit of time (s)."""

@@ -21,6 +21,8 @@ Units: Math Constants
 
 Mathematical constants
 """
+from __future__ import annotations
+
 __all__ = ["EULER", "PI"]
 
 

@@ -26,9 +26,7 @@ This module contains the following constants:
 """
 import torch
 
-from ..typing import Tensor
-
-__all__ = ["ECORE", "get_ecore", "ZEFF", "get_zeff", "ZVALENCE", "get_zvalence"]
+__all__ = ["ECORE", "ZEFF", "ZVALENCE"]
 
 
 # fmt: off
@@ -49,31 +47,6 @@ ECORE = torch.tensor([
 """Number of core electrons of all atoms."""
 
 
-def get_ecore(
-    numbers: Tensor,
-    device: torch.device | None = None,
-    dtype: torch.dtype | None = None,
-) -> Tensor:
-    """
-    Get number of core electrons for all `numbers`.
-
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system.
-    device : torch.device | None, optional
-        Device to store the tensor. If `None` (default), the default device is used.
-    dtype : torch.dtype, optional
-        Data type of the tensor. If `None` (default), the default dtype is used.
-
-    Returns
-    -------
-    Tensor
-        Number of core electrons.
-    """
-    return ECORE[numbers].to(device=device, dtype=dtype)
-
-
 ZEFF = torch.tensor([
      0,                                                      # None
      1,                                                 2,   # H-He
@@ -88,31 +61,6 @@ ZEFF = torch.tensor([
     12,13,14,15,16,17,18,19,20,21,22,23,24,25,26             # Rf-Og
 ])
 """Effective nuclear charges."""
-
-
-def get_zeff(
-    numbers: Tensor,
-    device: torch.device | None = None,
-    dtype: torch.dtype | None = None,
-) -> Tensor:
-    """
-    Get number of core electrons for all `numbers`.
-
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system.
-    device : torch.device | None, optional
-        Device to store the tensor. If `None` (default), the default device is used.
-    dtype : torch.dtype, optional
-        Data type of the tensor. If `None` (default), the default dtype is used.
-
-    Returns
-    -------
-    Tensor
-        Number of core electrons.
-    """
-    return ZEFF[numbers].to(device=device, dtype=dtype)
 
 
 ZVALENCE = torch.tensor([
@@ -131,28 +79,3 @@ ZVALENCE = torch.tensor([
 ])
 """Charge of the valence shell."""
 # fmt: on
-
-
-def get_zvalence(
-    numbers: Tensor,
-    device: torch.device | None = None,
-    dtype: torch.dtype | None = None,
-) -> Tensor:
-    """
-    Get charge of valence shell for all `numbers`.
-
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system.
-    device : torch.device | None, optional
-        Device to store the tensor. If `None` (default), the default device is used.
-    dtype : torch.dtype, optional
-        Data type of the tensor. If `None` (default), the default dtype is used.
-
-    Returns
-    -------
-    Tensor
-        Charges of valence shell of atoms.
-    """
-    return ZVALENCE.to(device=device, dtype=dtype)[numbers]

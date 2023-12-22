@@ -21,6 +21,8 @@ Units: CODATA
 
 CODATA values for various physical constants.
 """
+from __future__ import annotations
+
 from scipy.constants import physical_constants
 
 __all__ = ["CODATA"]

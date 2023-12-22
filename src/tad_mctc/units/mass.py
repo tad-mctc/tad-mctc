@@ -21,7 +21,19 @@ Units: Mass
 
 This module contains conversions for units of mass.
 """
+from __future__ import annotations
+
 from .codata import CODATA, get_constant
+
+# fmt: off
+__all__ = [
+    "AU2KG", "KG2AU",
+    "AMU2KG", "KG2AMU",
+    "AMU2AU", "AU2AMU",
+    "AU2GMOL", "GMOL2AU"
+]
+# fmt: on
+
 
 # SI
 
@@ -52,5 +64,3 @@ AU2GMOL = 1e3 * CODATA.me * CODATA.na
 
 GMOL2AU = 1.0 / AU2GMOL
 """Grams per mole (g/mol) to atomic units of mass (electron mass, au)"""
-
-print(AMU2KG, KG2AMU, AMU2AU, AU2AMU, AU2GMOL, GMOL2AU)

@@ -21,6 +21,8 @@ Units: Spectroscopy
 
 This module contains conversions for units usd in spectroscopy.
 """
+from __future__ import annotations
+
 from .codata import CODATA
 from .energy import AU2JOULE, COULOMB2AU
 from .length import AA2AU, METER2AU

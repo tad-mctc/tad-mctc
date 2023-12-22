@@ -21,16 +21,11 @@ Units: Length
 
 This module contains conversions for units of length.
 """
+from __future__ import annotations
+
 from .codata import CODATA
 
 __all__ = ["AU2METER", "METER2AU", "AA2METER", "AA2AU"]
-
-
-BOHR_TO_ANGSTROM = 0.529177210903
-"""Bohr radius in Angstroms."""
-
-ANGSTROM_TO_BOHR = 1.0 / BOHR_TO_ANGSTROM
-"""Conversion factor from Angstrom to Bohr."""
 
 
 AU2METER = CODATA.bohr
