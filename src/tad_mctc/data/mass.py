@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import torch
 
-from ..typing import Tensor
 from ..units.mass import GMOL2AU
 
 __all__ = ["ATOMIC"]
