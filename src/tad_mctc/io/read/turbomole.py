@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import torch
 
-from ...batch import pack
 from ...data import pse
 from ...typing import DD, IO, Any, get_default_dtype
 from ..checks import content_checks, shape_checks

@@ -55,7 +55,7 @@ def test_hessian_runtime_error() -> None:
 
     # Non-tensor input
     x = 5
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValueError):
         hessian(function, (x,), argnums=0)
 
 

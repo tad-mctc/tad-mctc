@@ -263,7 +263,7 @@ def test_eighb_broadening_grad() -> None:
         a1.requires_grad = True
 
         grad_is_safe = dgradcheck(
-            lambda a2: eigen_proxy(a2, target_method=method),
+            lambda a2, method_l=method: eigen_proxy(a2, target_method=method_l),
             (a1,),
             fast_mode=FAST_MODE,
         )
@@ -283,8 +283,10 @@ def test_eighb_broadening_grad() -> None:
         a2.requires_grad = True
 
         grad_is_safe = dgradcheck(
-            lambda a2: eigen_proxy(
-                a2, target_method=method, size_data=numpy_to_tensor(sizes, **dd)
+            lambda a2_l, method_l=method: eigen_proxy(
+                a2_l,
+                target_method=method_l,
+                size_data=numpy_to_tensor(sizes, **dd),
             ),
             (a2,),
             fast_mode=FAST_MODE,
@@ -323,8 +325,11 @@ def test_eighb_general_grad() -> None:
         # dgradcheck detaches!
         a1.requires_grad, b1.requires_grad = True, True
 
+        # dgradcheck only takes tensors, but: Loop variable capture of lambda
         grad_is_safe = dgradcheck(
-            lambda a1, b1: eigen_proxy(a1, b1, target_scheme=scheme),
+            lambda a1_l, b1_l, scheme_l=scheme: eigen_proxy(
+                a1_l, b1_l, target_scheme=scheme_l
+            ),
             (a1, b1),
             fast_mode=False,
         )
@@ -355,8 +360,11 @@ def test_eighb_general_grad() -> None:
         a2.requires_grad, b2.requires_grad = True, True
 
         grad_is_safe = dgradcheck(
-            lambda a2, b2, size_data: eigen_proxy(
-                a2, b2, target_scheme=scheme, size_data=size_data
+            lambda a2_l, b2_l, size_data_l, scheme_l=scheme: eigen_proxy(
+                a2_l,
+                b2_l,
+                size_data=size_data_l,
+                target_scheme=scheme_l,
             ),
             (a2, b2, numpy_to_tensor(sizes, **dd)),
             fast_mode=False,
