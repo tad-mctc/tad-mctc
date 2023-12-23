@@ -16,11 +16,20 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Typing: Builtins
-================
+Units: Time
+===========
 
-This module contains all used built-in type annotations.
+This module contains conversions for units of time.
 """
-from typing import IO, Any, Literal, NoReturn, Protocol, TypedDict
+from __future__ import annotations
 
-__all__ = ["IO", "Any", "Literal", "NoReturn", "Protocol", "TypedDict"]
+from .codata import get_constant
+
+__all__ = ["AU2SECOND", "SECOND2AU"]
+
+
+AU2SECOND = get_constant("atomic unit of time")
+"""Conversion from atomic units to seconds. The atomic unit of time (s)."""
+
+SECOND2AU = 1.0 / AU2SECOND
+"""Conversion from seconds to atomic units of time."""

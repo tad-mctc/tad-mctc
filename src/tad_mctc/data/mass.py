@@ -21,12 +21,16 @@ Data: Masses
 
 This module contains masses.
 """
+from __future__ import annotations
+
 import torch
+
+from ..units.mass import GMOL2AU
 
 __all__ = ["ATOMIC"]
 
 
-ATOMIC = torch.tensor(
+ATOMIC = GMOL2AU * torch.tensor(
     [
         0.0,  # dummy
         1.00797,
@@ -118,6 +122,6 @@ ATOMIC = torch.tensor(
     ]
 )
 """
-Isotope-averaged atom masses in g/mol from
-https://www.angelo.edu/faculty/kboudrea/periodic/structure_mass.htm
+Isotope-averaged atom masses in atomic units (save as g/mol) from
+https://www.angelo.edu/faculty/kboudrea/periodic/structure_mass.htm.
 """

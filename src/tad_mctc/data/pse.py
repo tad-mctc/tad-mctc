@@ -24,8 +24,11 @@ atomic number to symbols and vice versa.
 """
 from __future__ import annotations
 
-__all__ = ["S2Z", "Z2S"]
+__all__ = ["S2Z", "Z2S", "MAX_ELEMENT"]
 
+
+MAX_ELEMENT = 118
+"""Highest atomic number (118, Og)."""
 
 Z2S = {
     0: "X",

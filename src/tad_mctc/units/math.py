@@ -16,11 +16,16 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Typing: Builtins
-================
+Units: Math Constants
+=====================
 
-This module contains all used built-in type annotations.
+Mathematical constants
 """
-from typing import IO, Any, Literal, NoReturn, Protocol, TypedDict
+from __future__ import annotations
 
-__all__ = ["IO", "Any", "Literal", "NoReturn", "Protocol", "TypedDict"]
+__all__ = ["EULER", "PI"]
+
+
+EULER = 2.7182818284590452353602874713526625
+
+PI = 3.1415926535897932384626433832795029
