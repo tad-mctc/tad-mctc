@@ -21,5 +21,4 @@ I/O
 
 This module contains functions for reading files.
 """
-from .read import *
-from .write import *
+from . import read, write
