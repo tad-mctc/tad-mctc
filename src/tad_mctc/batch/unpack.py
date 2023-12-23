@@ -27,7 +27,7 @@ from functools import partial, reduce
 
 import torch
 
-from ..typing import Any, Tensor
+from ..typing import Tensor
 
 __all__ = ["deflate", "unpack"]
 
