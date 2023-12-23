@@ -30,7 +30,7 @@ def test_fail() -> None:
         convert.str_to_device("wrong")
 
 
-def test_str_to_device_no_cuda():
+def test_str_to_device_no_cuda() -> None:
     with patch("torch.cuda.is_available", return_value=False):
         with pytest.raises(KeyError) as exc_info:
             convert.str_to_device("cuda")
