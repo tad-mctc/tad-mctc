@@ -56,7 +56,7 @@ def test_np_to_torch_default() -> None:
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_np_to_torch_with_dtype(dtype) -> None:
+def test_np_to_torch_with_dtype(dtype: torch.dtype) -> None:
     arr = np.zeros((10, 10))
     tensor = convert.numpy_to_tensor(arr, dtype=dtype)
 
@@ -77,7 +77,7 @@ def test_np_to_torch_with_device(device_str: str) -> None:
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-def test_torch_to_np_with_dtype(dtype) -> None:
+def test_torch_to_np_with_dtype(dtype: np.dtype[np.float32 | np.float64]) -> None:
     tensor = torch.zeros((10, 10))
     arr = convert.tensor_to_numpy(tensor, dtype=dtype)
 

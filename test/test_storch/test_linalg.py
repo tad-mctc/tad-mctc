@@ -95,7 +95,7 @@ def test_eighb(broadening: Literal["cond", "lorn", "none"], dtype: torch.dtype) 
     a = numpy_to_tensor(np.random.rand(8, 8), **dd)
     a.requires_grad_(True)
 
-    def eigen_proxy(m: Tensor):
+    def eigen_proxy(m: Tensor) -> tuple[Tensor, Tensor]:
         m = symmetrize(m, force=True)
         return storch.linalg.eighb(a=m, broadening_method=broadening)
 
@@ -111,7 +111,7 @@ def test_eighb_degen(
     dd: DD = {"device": DEVICE, "dtype": dtype}
     hamiltonian.detach_().to(**dd).requires_grad_(True)
 
-    def eigen_proxy(m: Tensor):
+    def eigen_proxy(m: Tensor) -> tuple[Tensor, Tensor]:
         m = symmetrize(m, force=True)
         return storch.linalg.eighb(a=m, broadening_method=broadening)
 

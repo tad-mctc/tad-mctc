@@ -34,7 +34,7 @@ def test_sqrt_fail(dtype: torch.dtype) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     with pytest.raises(TypeError):
-        storch.sqrt(torch.tensor([1, 2, 3], **dd), "0")  # type: ignore
+        storch.sqrt(torch.tensor([1, 2, 3], **dd), str(0))  # type: ignore[arg-type]
 
     with pytest.raises(ValueError):
         storch.sqrt(torch.tensor([-1, 2, 3], **dd), -2)
@@ -66,7 +66,7 @@ def test_divide_fail(dtype: torch.dtype) -> None:
     y = torch.tensor([1, 2, 3], **dd)
 
     with pytest.raises(TypeError):
-        storch.divide(x, y, eps="0")  # type: ignore
+        storch.divide(x, y, eps="0")  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])

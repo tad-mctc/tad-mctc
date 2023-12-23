@@ -217,7 +217,7 @@ class TensorLike:
                 attr = getattr(self, s)
                 if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
                     if attr.dtype in self.allowed_dtypes:
-                        attr = attr.type(dtype)  # type: ignore
+                        attr = attr.type(dtype)
                 args[s] = attr
 
         return self.__class__(**args, dtype=dtype)
@@ -258,7 +258,7 @@ class TensorLike:
             if not s.startswith("__"):
                 attr = getattr(self, s)
                 if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
-                    attr = attr.to(device=device)  # type: ignore
+                    attr = attr.to(device=device)
                 args[s] = attr
 
         return self.__class__(**args, device=device)

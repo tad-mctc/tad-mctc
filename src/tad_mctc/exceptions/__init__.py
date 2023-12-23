@@ -21,4 +21,5 @@ Exceptions
 
 This module contains a collection of exceptions and warnings.
 """
+from .molecule import *
 from .pytorch import *

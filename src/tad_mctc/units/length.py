@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from .codata import CODATA
 
-__all__ = ["AU2METER", "METER2AU", "AA2METER", "AA2AU"]
+__all__ = ["AU2METER", "METER2AU", "AA2METER", "METER2AA", "AA2AU", "AU2AA"]
 
 
 AU2METER = CODATA.bohr
@@ -37,11 +37,19 @@ This equals: 1 bohr = 5.29177210903e-11 m.
 METER2AU = 1.0 / AU2METER
 """Conversion from meter to atomic units."""
 
+
 AA2METER = 1e-10
 """Factor for conversion from Angstrom to meter (1e-10)."""
 
+METER2AA = 1.0 / AA2METER
+"""Factor for conversion from meter to Angstrom (1e10)."""
+
+
 AA2AU = AA2METER * METER2AU
 """
-Factor for conversion from angstrom to atomic units (bohr).
+Factor for conversion from Angstrom to atomic units (bohr).
 This equals: 1 Angstrom = 1.8897261246204404 a.u.
 """
+
+AU2AA = 1.0 / AA2AU
+"""Factor for conversion from atomic units (bohr) to Angstrom."""

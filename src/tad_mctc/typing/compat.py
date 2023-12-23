@@ -25,6 +25,7 @@ all the special cases are handled here.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import torch
 from torch import Tensor
@@ -38,6 +39,7 @@ __all__ = [
     "Callable",
     "Generator",
     "Sequence",
+    "PathLike",
     "Sliceable",
     "Size",
     "TensorOrTensors",
@@ -71,6 +73,7 @@ if sys.version_info >= (3, 10):
     # "from __future__ import annotations" only affects type annotations
     # not type aliases, hence "|" is not allowed before Python 3.10
 
+    PathLike = str | Path
     Sliceable = list[Tensor] | tuple[Tensor, ...]
     Size = list[int] | tuple[int, ...] | torch.Size
     TensorOrTensors = list[Tensor] | tuple[Tensor, ...] | Tensor
@@ -81,6 +84,7 @@ elif sys.version_info >= (3, 9):
     # aliases but requires using `Union` from typing
     from typing import Union
 
+    PathLike = Union[str, Path]
     Sliceable = Union[list[Tensor], tuple[Tensor, ...]]
     Size = Union[list[int], tuple[int], torch.Size]
     TensorOrTensors = Union[list[Tensor], tuple[Tensor, ...], Tensor]
@@ -93,6 +97,7 @@ elif sys.version_info >= (3, 8):
     # type annotations not type aliases
     from typing import Dict, List, Tuple, Union
 
+    PathLike = Union[str, Path]
     Sliceable = Union[List[Tensor], Tuple[Tensor, ...]]
     Size = Union[List[int], Tuple[int], torch.Size]
     TensorOrTensors = Union[List[Tensor], Tuple[Tensor, ...], Tensor]

@@ -25,8 +25,9 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from numpy.typing import DTypeLike, NDArray
 
-from ..typing import Tensor, get_default_dtype
+from ..typing import Any, Tensor, get_default_dtype
 
 __all__ = ["numpy_to_tensor", "tensor_to_numpy"]
 
@@ -43,7 +44,7 @@ numpy_to_torch_dtype_dict = {
 }
 """Dict of NumPy dtype -> torch dtype (when the correspondence exists)"""
 
-torch_to_numpy_dtype_dict = {
+torch_to_numpy_dtype_dict: dict[torch.dtype, DTypeLike] = {
     torch.float16: np.dtype(np.float16),
     torch.float32: np.dtype(np.float32),
     torch.float64: np.dtype(np.float64),
@@ -57,7 +58,7 @@ torch_to_numpy_dtype_dict = {
 
 
 def numpy_to_tensor(
-    x: np.ndarray,
+    x: NDArray[Any],
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
 ) -> Tensor:
@@ -66,7 +67,7 @@ def numpy_to_tensor(
 
     Parameters
     ----------
-    x : np.ndarray
+    x : NDArray[Any]
         Array to convert.
     device : torch.device | None, optional
         Device to store the tensor on. Defaults to `None`.
@@ -79,13 +80,13 @@ def numpy_to_tensor(
         Converted PyTorch tensor.
     """
     if dtype is None:
-        dtype = numpy_to_torch_dtype_dict.get(x.dtype, get_default_dtype())
+        dtype = numpy_to_torch_dtype_dict.get(x.dtype.type, get_default_dtype())
     assert dtype is not None
 
     return torch.from_numpy(x).type(dtype).to(device)
 
 
-def tensor_to_numpy(x: Tensor, dtype: np.dtype | None = None) -> np.ndarray:
+def tensor_to_numpy(x: Tensor, dtype: DTypeLike | None = None) -> NDArray[Any]:
     """
     Convert a PyTorch tensor to a numpy array.
 
@@ -103,7 +104,6 @@ def tensor_to_numpy(x: Tensor, dtype: np.dtype | None = None) -> np.ndarray:
     """
     if dtype is None:
         dtype = torch_to_numpy_dtype_dict.get(x.dtype, np.dtype(np.float64))
-    assert dtype is not None
 
-    _x: np.ndarray = x.detach().cpu().numpy()
+    _x: NDArray[Any] = x.detach().cpu().numpy()
     return _x.astype(dtype)

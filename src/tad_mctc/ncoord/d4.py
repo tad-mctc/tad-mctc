@@ -30,7 +30,7 @@ from .. import storch
 from ..batch import real_pairs
 from ..data import en as eneg
 from ..data import radii
-from ..typing import Any, CountingFunction, Tensor
+from ..typing import DD, Any, CountingFunction, Tensor
 from . import defaults
 from .count import erf_count
 
@@ -80,7 +80,7 @@ def cn_d4(
     ValueError
         If shape mismatch between `numbers`, `positions` and `rcov` is detected.
     """
-    dd = {"device": positions.device, "dtype": positions.dtype}
+    dd: DD = {"device": positions.device, "dtype": positions.dtype}
 
     if cutoff is None:
         cutoff = torch.tensor(defaults.CUTOFF_D4, **dd)

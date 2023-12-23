@@ -48,14 +48,12 @@ def str_to_device(s: str) -> torch.device:
     KeyError
         Unknown device name is given.
     """
-    d = {
-        "cpu": torch.device("cpu"),
-        "cuda": None
-        if not torch.cuda.is_available()
-        else torch.device("cuda", index=torch.cuda.current_device()),
-    }
+    if "cpu" in s:
+        return torch.device("cpu")
 
-    if s not in d:
-        raise KeyError(f"Unknown device '{s}' given.")
+    if "cuda" in s:
+        if not torch.cuda.is_available():
+            raise KeyError(f"No CUDA devices available.")
+        return torch.device("cuda", index=torch.cuda.current_device())
 
-    return d[s]
+    raise KeyError(f"Unknown device '{s}' given.")

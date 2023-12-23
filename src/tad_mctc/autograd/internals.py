@@ -31,7 +31,7 @@ import torch
 __all__ = ["jacrev"]
 
 
-if torch.__version__ < (2, 0, 0):  # type: ignore[import-error]
+if torch.__version__ < (2, 0, 0):  # type: ignore[operator]
     try:
         from functorch import jacrev  # type: ignore[import-error]
     except ModuleNotFoundError:

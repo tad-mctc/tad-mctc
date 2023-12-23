@@ -21,6 +21,14 @@ Typing: Builtins
 
 This module contains all used built-in type annotations.
 """
-from typing import IO, Any, Literal, NoReturn, Protocol, TypedDict
+from typing import IO, Any, Literal, NoReturn, Protocol, TypedDict, runtime_checkable
 
-__all__ = ["IO", "Any", "Literal", "NoReturn", "Protocol", "TypedDict"]
+__all__ = [
+    "IO",
+    "Any",
+    "Literal",
+    "NoReturn",
+    "Protocol",
+    "runtime_checkable",
+    "TypedDict",
+]

@@ -28,7 +28,7 @@ from ..conftest import DEVICE
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
-def test_hessian(dtype: torch.dtype):
+def test_hessian(dtype: torch.dtype) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
     # Create a test input
     A = torch.tensor([[3.0, 2.0], [2.0, 3.0]], **dd)

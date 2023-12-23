@@ -28,7 +28,7 @@ import torch
 from .. import storch
 from ..batch import real_pairs
 from ..data import radii
-from ..typing import Any, CountingFunction, Tensor
+from ..typing import DD, Any, CountingFunction, Tensor
 from . import defaults
 from .count import erf_count
 
@@ -79,7 +79,7 @@ def cn_eeq(
     ValueError
         If shape mismatch between `numbers`, `positions` and `rcov` is detected.
     """
-    dd = {"device": positions.device, "dtype": positions.dtype}
+    dd: DD = {"device": positions.device, "dtype": positions.dtype}
 
     if cutoff is None:
         cutoff = torch.tensor(defaults.CUTOFF_EEQ, **dd)
@@ -121,7 +121,7 @@ def cn_eeq(
 
 def cut_coordination_number(
     cn: Tensor, cn_max: Tensor | float | int = defaults.CUTOFF_EEQ_MAX
-):
+) -> Tensor:
     if isinstance(cn_max, (float, int)):
         cn_max = torch.tensor(cn_max, device=cn.device, dtype=cn.dtype)
 
