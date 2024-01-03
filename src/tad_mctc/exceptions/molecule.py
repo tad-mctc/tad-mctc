@@ -2,9 +2,9 @@
 Exceptions: Structure
 =====================
 
-Exceptions related to the molecular structure.
+Exceptions and warnings related to the molecular structure.
 """
-__all__ = ["MoleculeError"]
+__all__ = ["MoleculeError", "MoleculeWarning"]
 
 
 class MoleculeError(RuntimeError):
@@ -12,4 +12,8 @@ class MoleculeError(RuntimeError):
     Faulty structure detected.
     """
 
-    pass
+
+class MoleculeWarning(RuntimeWarning):
+    """
+    Suspicious/problematic structure detected.
+    """

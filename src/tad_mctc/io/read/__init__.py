@@ -20,6 +20,21 @@ Read
 ====
 
 This module contains functions for reading files.
+
+The simplest interface is provided by the `read` function, which tries to infer
+the file type from the file name or extension.
+
+Example
+-------
+>>> from tad_mctc.io import read
+>>> path = "mol.xyz"
+>>> numbers, positions = read.read(path)
 """
+from .dotfiles import *
+from .frompath import *
+from .orca import *
+from .qcschema import *
+from .reader import *
+from .tblite import *
 from .turbomole import *
 from .xyz import *

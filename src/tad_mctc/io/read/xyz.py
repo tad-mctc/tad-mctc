@@ -30,10 +30,15 @@ from ...batch import pack
 from ...data import pse
 from ...typing import DD, IO, Any, Tensor, get_default_dtype
 from ...units import length
-from ..checks import content_checks, shape_checks
-from .reader import create_path_reader
+from ..checks import content_checks, deflatable_check, shape_checks
+from .frompath import create_path_reader
 
-__all__ = ["read_xyz", "read_xyz_from_path"]
+__all__ = [
+    "read_xyz",
+    "read_xyz_qm9",
+    "read_xyz_from_path",
+    "read_xyz_qm9_from_path",
+]
 
 
 def read_xyz(
@@ -41,6 +46,7 @@ def read_xyz(
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
+    **kwargs: Any,
 ) -> tuple[Tensor, Tensor]:
     """
     Reads an XYZ file and returns atomic numbers and positions as tensors.
@@ -61,8 +67,12 @@ def read_xyz(
     Returns
     -------
     (Tensor, Tensor)
-        (Possibly batched) tensors of atomic numbers and positions. Positions is a tensor of shape (batch_size, nat, 3) in atomic units.
+        (Possibly batched) tensors of atomic numbers and positions. Positions
+        is a tensor of shape (batch_size, nat, 3) in atomic units.
     """
+    line: list[str]
+    natoms_line: str
+
     dd: DD = {
         "device": device,
         "dtype": dtype if dtype is not None else get_default_dtype(),
@@ -94,6 +104,7 @@ def read_xyz(
 
         assert shape_checks(numbers, positions)
         assert content_checks(numbers, positions)
+        assert deflatable_check(positions, fileobj, **kwargs)
 
         numbers_images.append(numbers)
         positions_images.append(positions)
@@ -106,3 +117,67 @@ def read_xyz(
 
 
 read_xyz_from_path = create_path_reader(read_xyz)
+
+
+def read_xyz_qm9(
+    fileobj: IO[Any],
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+    dtype_int: torch.dtype = torch.long,
+) -> tuple[Tensor, Tensor]:
+    """
+    Reads the XYZ file of the QM9 dataset, which does not conform with the
+    standard format, and returns atomic numbers and positions as tensors.
+    Handles only a single structure.
+    Positions are converted to atomic units (bohrs).
+
+    Parameters
+    ----------
+    fileobj : IO[Any]
+        The file-like object to read from.
+    device : torch.device | None, optional
+        Device to store the tensor on. Defaults to `None`.
+    dtype : torch.dtype | None, optional
+        Floating point data type of the tensor. Defaults to `None`.
+    dtype_int : torch.dtype, optional
+        Integer data type of the tensor. Defaults to `torch.long`.
+
+    Returns
+    -------
+    (Tensor, Tensor)
+        Tensors of atomic numbers and positions. Positions is a tensor of shape
+        (nat, 3) in atomic units.
+    """
+    line: list[str]
+    natoms_line: str
+
+    dd: DD = {
+        "device": device,
+        "dtype": dtype if dtype is not None else get_default_dtype(),
+    }
+    ddi: DD = {"device": device, "dtype": dtype_int}
+
+    natoms_line = fileobj.readline()
+    natoms = int(natoms_line.strip())
+
+    # Skip comment line
+    fileobj.readline()
+
+    symbols = []
+    coords = []
+    for _ in range(natoms):
+        line = fileobj.readline().split()
+        symbols.append(line[0].title())
+        coords.append([float(x.replace("*^", "e")) for x in line[1:4]])
+
+    numbers = torch.tensor([pse.S2Z[symbol] for symbol in symbols], **ddi)
+    positions = torch.tensor(coords, **dd) * length.AA2AU
+
+    assert shape_checks(numbers, positions)
+    assert content_checks(numbers, positions)
+    assert deflatable_check(positions, fileobj)
+
+    return numbers, positions
+
+
+read_xyz_qm9_from_path = create_path_reader(read_xyz_qm9)

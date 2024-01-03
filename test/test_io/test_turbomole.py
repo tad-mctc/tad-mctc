@@ -25,6 +25,7 @@ import pytest
 import torch
 
 from tad_mctc.data.molecules import mols as samples
+from tad_mctc.exceptions import EmptyFileError, FormatErrorTM
 from tad_mctc.io import read, write
 from tad_mctc.typing import DD, PathLike
 
@@ -45,7 +46,7 @@ def test_read_fail_empty() -> None:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write("")
 
-        with pytest.raises(ValueError):
+        with pytest.raises(FormatErrorTM):
             read.read_turbomole_from_path(filepath)
 
 
@@ -56,8 +57,15 @@ def test_read_fail_almost_empty() -> None:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write("$coord")
 
-        with pytest.raises(ValueError):
+        with pytest.raises(EmptyFileError):
             read.read_turbomole_from_path(filepath)
+
+
+def test_read_fail_format() -> None:
+    # Create a temporary directory to save the file
+    filepath = Path(__file__).parent.resolve() / "fail" / "coord"
+    with pytest.raises(FormatErrorTM):
+        read.read_turbomole_from_path(filepath)
 
 
 def test_write_fail() -> None:
@@ -65,14 +73,14 @@ def test_write_fail() -> None:
     numbers = sample["numbers"]
     positions = sample["positions"]
 
-    with pytest.raises(FileExistsError):
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            # create file
-            filepath = Path(tmpdirname) / "already_exists"
-            with filepath.open("w", encoding="utf-8") as f:
-                f.write("")
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # create file
+        filepath = Path(tmpdirname) / "already_exists"
+        with filepath.open("w", encoding="utf-8") as f:
+            f.write("")
 
-            # try writing to just created file
+        # try writing to just created file
+        with pytest.raises(FileExistsError):
             write.write_turbomole_to_path(filepath, numbers, positions)
 
 
@@ -119,3 +127,25 @@ def prepend_to_file(file_path: PathLike, text_to_prepend: str) -> None:
     # Write the new text, followed by the original content
     with open(file_path, "w") as file:
         file.write(text_to_prepend + "\n" + original_content)
+
+
+################################################################################
+
+
+@pytest.mark.parametrize("file", ["energy1", "energy2", "energy3", "energy4"])
+def test_read_turbomole_energy_fail(file: str) -> None:
+    p = Path(__file__).parent.resolve() / "fail" / file
+    with pytest.raises(FormatErrorTM):
+        read.read_turbomole_energy_from_path(p)
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+@pytest.mark.parametrize("file", ["energy"])
+def test_read_turbomole_energy(dtype: torch.dtype, file: str) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
+    p = Path(__file__).parent.resolve() / "output" / file
+    e = read.read_turbomole_energy_from_path(p, **dd)
+
+    ref = torch.tensor(-291.856093690170, **dd)
+    assert pytest.approx(ref) == e

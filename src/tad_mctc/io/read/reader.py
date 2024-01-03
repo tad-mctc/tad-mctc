@@ -23,70 +23,153 @@ General reader for file from a path.
 """
 from __future__ import annotations
 
-from functools import wraps
 from pathlib import Path
-from typing import runtime_checkable
 
 import torch
 
-from ...typing import IO, Any, PathLike, Protocol
+from ...typing import IO, Any, PathLike, Tensor
+from .qcschema import read_qcschema
+from .turbomole import read_turbomole
+from .xyz import read_xyz, read_xyz_qm9
 
-__all__ = ["create_path_reader"]
-
-
-@runtime_checkable
-class ReaderFunction(Protocol):
-    def __call__(
-        self,
-        fileobj: IO[Any],
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        ...
+__all__ = ["read", "read_from_path"]
 
 
-@runtime_checkable
-class FileReaderFunction(Protocol):
-    def __call__(
-        self,
-        filepath: PathLike,
-        mode: str = "r",
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        ...
-
-
-def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
+def read(
+    fileobj: IO[Any],
+    ftype: str,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+    dtype_int: torch.dtype = torch.long,
+    **kwargs: Any,
+) -> tuple[Tensor, Tensor]:
     """
-    Creates a function that reads data from a specified file path using a given reader function.
+    Helper to read the structure from the given file.
 
     Parameters
     ----------
-    reader_function : ReaderFunction
-        The function used to read and process the file contents.
+    fileobj : IO[Any]
+        The file-like object to read from.
+    ftype : str | None, optional
+        File type. Defaults to `None`, i.e., infered from the extension.
+    device : torch.device | None, optional
+        Device to store the tensor on. Defaults to `None`.
+    dtype : torch.dtype | None, optional
+        Floating point data type of the tensor. Defaults to `None`.
+    dtype_int : torch.dtype, optional
+        Integer data type of the tensor. Defaults to `torch.long`.
 
     Returns
     -------
-    FileReaderFunction
-        A function that takes a file path, mode, device, and dtype, and returns
-        the processed data.
+    (Tensor, Tensor)
+        (Possibly batched) tensors of atomic numbers and positions. Positions
+        is a tensor of shape (batch_size, nat, 3) in atomic units.
+
+    Raises
+    ------
+    NotImplementedError
+        Reader for specific file type not implemented.
+    ValueError
+        Unknown file type.
     """
+    # path stored in TextIOWrapper
+    fname = fileobj.name.split("/")[-1].lower()
 
-    @wraps(reader_function)
-    def read_from_path(
-        filepath: PathLike,
-        mode: str = "r",
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        path = Path(filepath)
+    if ftype in ("xyz", "log"):
+        numbers, positions = read_xyz(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    elif ftype in ("qm9",):
+        numbers, positions = read_xyz_qm9(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    elif ftype in ("tmol", "tm", "turbomole") or fname == "coord":
+        numbers, positions = read_turbomole(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    elif ftype in ("mol", "sdf", "gen", "pdb"):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' recognized but no reader available."
+        )
+    elif ftype in ("qchem",):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' (Q-Chem) recognized but no reader available."
+        )
+    elif ftype in ("poscar", "contcar", "vasp", "crystal") or fname in (
+        "poscar",
+        "contcar",
+        "vasp",
+    ):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' (VASP/CRYSTAL) recognized but no reader available."
+        )
+    elif ftype in ("ein", "gaussian"):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' (Gaussian) recognized but no reader available."
+        )
+    elif ftype in ("json", "qcschema"):
+        numbers, positions = read_qcschema(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    else:
+        raise ValueError(f"Unknown filetype '{ftype}' in '{fileobj}'.")
 
-        # Check if the file exists
-        if not path.exists():
-            raise FileNotFoundError(f"The file '{path}' does not exist.")
+    return numbers, positions
 
-        with open(filepath, mode=mode, encoding="utf-8") as fileobj:
-            return reader_function(fileobj, device, dtype)
 
-    return read_from_path
+def read_from_path(
+    filepath: PathLike,
+    ftype: str | None = None,
+    mode: str = "r",
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+    dtype_int: torch.dtype = torch.long,
+    **kwargs: Any,
+) -> tuple[Tensor, Tensor]:
+    """
+    Helper to read the structure from the given file path.
+
+    Parameters
+    ----------
+    file : PathLike
+        Path of file containing the structure.
+    ftype : str | None, optional
+        File type. Defaults to `None`, i.e., infered from the extension.
+    mode : str, optional
+        Mode in which the file is opened. Defaults to `"r"`.
+    device : torch.device | None, optional
+        Device to store the tensor on. Defaults to `None`.
+    dtype : torch.dtype | None, optional
+        Floating point data type of the tensor. Defaults to `None`.
+    dtype_int : torch.dtype, optional
+        Integer data type of the tensor. Defaults to `torch.long`.
+
+    Returns
+    -------
+    (Tensor, Tensor)
+        (Possibly batched) tensors of atomic numbers and positions. Positions
+        is a tensor of shape (batch_size, nat, 3) in atomic units.
+
+    Raises
+    ------
+    FileNotFoundError
+        File given does not exist.
+    """
+    path = Path(filepath)
+
+    # Check if the file exists
+    if not path.exists():
+        raise FileNotFoundError(f"The file '{path}' does not exist.")
+
+    if ftype is None:
+        ftype = path.suffix.lower()[1:]
+
+    with open(path, mode=mode, encoding="utf-8") as fileobj:
+        return read(
+            fileobj,
+            ftype,
+            device=device,
+            dtype=dtype,
+            dtype_int=dtype_int,
+            **kwargs,
+        )

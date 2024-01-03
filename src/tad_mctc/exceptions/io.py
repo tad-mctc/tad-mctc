@@ -16,11 +16,24 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Exceptions
-==========
+Exceptions: I/O
+===============
 
-This module contains a collection of exceptions and warnings.
+Exceptions and warnings related to input and output operations.
 """
-from .io import *
-from .molecule import *
-from .pytorch import *
+
+
+class EmptyFileError(RuntimeError):
+    """Error for an empty file."""
+
+
+class FormatError(RuntimeError):
+    """Error for wrong format of a file."""
+
+
+class FormatErrorTM(FormatError):
+    """Format error for a Turbomole file."""
+
+
+class FormatErrorORCA(FormatError):
+    """Format error for an ORCA file."""
