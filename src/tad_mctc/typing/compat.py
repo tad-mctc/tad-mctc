@@ -30,8 +30,6 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
-from .builtin import Any
-
 __all__ = [
     "Tensor",
     "Self",
