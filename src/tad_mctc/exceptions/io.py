@@ -22,6 +22,8 @@ Exceptions: I/O
 Exceptions and warnings related to input and output operations.
 """
 
+__all__ = ["EmptyFileError", "FormatError", "FormatErrorORCA", "FormatErrorTM"]
+
 
 class EmptyFileError(RuntimeError):
     """Error for an empty file."""
@@ -31,9 +33,9 @@ class FormatError(RuntimeError):
     """Error for wrong format of a file."""
 
 
-class FormatErrorTM(FormatError):
-    """Format error for a Turbomole file."""
-
-
 class FormatErrorORCA(FormatError):
     """Format error for an ORCA file."""
+
+
+class FormatErrorTM(FormatError):
+    """Format error for a Turbomole file."""

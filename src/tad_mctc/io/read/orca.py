@@ -29,6 +29,8 @@ from ...exceptions import EmptyFileError, FormatErrorORCA
 from ...typing import IO, Any, Tensor
 from .frompath import create_path_reader
 
+__all__ = ["read_orca_engrad", "read_orca_engrad_from_path"]
+
 
 def read_orca_engrad(
     fileobj: IO[Any],

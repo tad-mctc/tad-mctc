@@ -73,7 +73,7 @@ def read(
         Unknown file type.
     """
     # path stored in TextIOWrapper
-    fname = fileobj.name.split("/")[-1].lower()
+    fname = Path(fileobj.name).name.lower()
 
     if ftype in ("xyz", "log"):
         numbers, positions = read_xyz(
