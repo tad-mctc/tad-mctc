@@ -4,4 +4,10 @@
 
 .. toctree::
 
+   codata
+   energy
    length
+   mass
+   math
+   spectroscopy
+   time

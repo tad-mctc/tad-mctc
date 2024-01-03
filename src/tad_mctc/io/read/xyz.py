@@ -16,8 +16,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Read: XYZ
-=========
+I/O Read: XYZ
+=============
 
 Reader for standard XYZ files.
 See https://en.wikipedia.org/wiki/XYZ_file_format.

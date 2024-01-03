@@ -26,6 +26,7 @@ from __future__ import annotations
 import torch
 
 from ..typing import Tensor
+from .elemental import sqrt as ssqrt
 
 __all__ = ["cdist"]
 
@@ -75,7 +76,7 @@ def euclidean_dist_quadratic_expansion(x: Tensor, y: Tensor) -> Tensor:
     prod = torch.einsum("...ik,...jk->...ij", x, y)
 
     # important: remove negative values that give NaN in backward
-    return torch.sqrt(torch.clamp(n - 2.0 * prod, min=eps))
+    return ssqrt(n - 2.0 * prod, eps=eps)
 
 
 def cdist_direct_expansion(x: Tensor, y: Tensor, p: int = 2) -> Tensor:
