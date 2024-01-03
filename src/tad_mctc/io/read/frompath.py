@@ -30,7 +30,6 @@ Example
 """
 from __future__ import annotations
 
-from functools import wraps
 from pathlib import Path
 from typing import runtime_checkable
 
@@ -80,7 +79,6 @@ def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
         the processed data.
     """
 
-    @wraps(reader_function)
     def read_from_path(
         filepath: PathLike,
         mode: str = "r",
@@ -88,6 +86,30 @@ def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
         dtype: torch.dtype | None = None,
         **kwargs: Any,
     ) -> Tensor | tuple[Tensor, Tensor]:
+        """
+        Reads the file from the specified path.
+
+        Parameters
+        ----------
+        file : PathLike
+            Path of file containing the structure.
+        mode : str, optional
+            Mode in which the file is opened. Defaults to `"r"`.
+        device : torch.device | None, optional
+            Device to store the tensor on. Defaults to `None`.
+        dtype : torch.dtype | None, optional
+            Floating point data type of the tensor. Defaults to `None`.
+
+        Returns
+        -------
+        Tensor | tuple[Tensor, Tensor]
+            Returned tensor or tensors.
+
+        Raises
+        ------
+        FileNotFoundError
+            The file specified in `filepath` cannot be found.
+        """
         path = Path(filepath)
 
         # Check if the file exists
@@ -145,21 +167,41 @@ def create_path_reader_dotfiles(
         A function that takes a file path, mode, device, and dtype, and returns
         the processed data.
     """
+    # return default if file is not found (must be integer to allow integer
+    # dtypes from PyTorch, e.g., 0.0 fails with torch.long)
+    DEFAULT_VALUE = 0
 
-    @wraps(reader_function)
     def read_from_path(
         filepath: PathLike,
         mode: str = "r",
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> Tensor:
+        """
+        Reads the file from the specified path.
+
+        Parameters
+        ----------
+        file : PathLike
+            Path of file containing the structure.
+        mode : str, optional
+            Mode in which the file is opened. Defaults to `"r"`.
+        device : torch.device | None, optional
+            Device to store the tensor on. Defaults to `None`.
+        dtype : torch.dtype | None, optional
+            Floating point data type of the tensor. Defaults to `None`.
+
+        Returns
+        -------
+        Tensor
+            Value stored in the file as tensor.
+        """
         path = Path(filepath)
 
         # Check if the file exists
         if not path.exists():
-            return torch.tensor(0, device=device, dtype=dtype)
+            return torch.tensor(DEFAULT_VALUE, device=device, dtype=dtype)
 
-        print(path.name)
         if path.name not in (".CHRG", ".UHF"):
             path = path / name
 
