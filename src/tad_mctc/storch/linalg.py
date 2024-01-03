@@ -33,7 +33,7 @@ import numpy as np
 import torch
 
 from ..convert import symmetrize
-from ..typing import Literal, Tensor
+from ..typing import Any, Literal, Tensor
 
 __all__ = ["eighb"]
 
@@ -149,7 +149,7 @@ class _SymEigB(torch.autograd.Function):
 
     @staticmethod
     def forward(
-        ctx, a: Tensor, method: str = "cond", factor: float = 1e-12
+        ctx: Any, a: Tensor, method: str = "cond", factor: float = 1e-12
     ) -> tuple[Tensor, Tensor]:
         """Calculate the eigenvalues and eigenvectors of a symmetric matrix.
 
@@ -204,7 +204,7 @@ class _SymEigB(torch.autograd.Function):
         return w, v
 
     @staticmethod
-    def backward(ctx, w_bar: Tensor, v_bar: Tensor) -> tuple[Tensor, None, None]:
+    def backward(ctx: Any, w_bar: Tensor, v_bar: Tensor) -> tuple[Tensor, None, None]:  # type: ignore[override]
         """Evaluates gradients of the eigen decomposition operation.
 
         Evaluates gradients of the matrix from which the eigenvalues
@@ -228,7 +228,8 @@ class _SymEigB(torch.autograd.Function):
 
         # __Preamble__
         # Retrieve eigenvalues (w) and eigenvectors (v) from ctx
-        w, v = ctx.saved_tensors
+        w: Tensor = ctx.saved_tensors[0]
+        v: Tensor = ctx.saved_tensors[1]
 
         # Retrieve, the broadening factor and convert to a tensor entity
         if not isinstance(ctx.bf, Tensor):
@@ -243,7 +244,8 @@ class _SymEigB(torch.autograd.Function):
         lambda_bar = w_bar.diag_embed()
 
         # Identify the indices of the upper triangle of the F matrix
-        tri_u = torch.triu_indices(*v.shape[-2:], offset=1)
+        rows, cols = v.shape[-2:]
+        tri_u = torch.triu_indices(*(rows, cols), offset=1)
 
         # Construct the deltas
         deltas = w[..., tri_u[1]] - w[..., tri_u[0]]
@@ -350,7 +352,7 @@ def eighb(
     factor: float = 1e-12,
     sort_out: bool = True,
     aux: bool = True,
-    **kwargs,
+    **kwargs: Any,
 ) -> tuple[Tensor, Tensor]:
     r"""Solves general & standard eigen-problems, with optional broadening.
 

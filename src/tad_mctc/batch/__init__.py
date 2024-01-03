@@ -23,3 +23,4 @@ Functions for dealing with batched calculations.
 """
 from .mask import *
 from .pack import *
+from .unpack import *

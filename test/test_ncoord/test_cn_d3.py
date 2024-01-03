@@ -104,7 +104,7 @@ def test_jacobian(dtype: torch.dtype, name: str) -> None:
     positions.requires_grad_(True)
 
     fjac = jac(get_cn, argnums=1)
-    jacobian: Tensor = fjac(numbers, positions)  # type: ignore
+    jacobian: Tensor = fjac(numbers, positions)
     jac_np = tensor_to_numpy(jacobian)
 
     assert pytest.approx(ref.cpu(), abs=tol * 10.5) == jac_np

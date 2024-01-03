@@ -26,7 +26,7 @@ import torch
 from tad_mctc.convert import reshape_fortran, symmetrize
 
 
-def test_reshape_fortran_1d():
+def test_reshape_fortran_1d() -> None:
     x = torch.tensor([1, 2, 3, 4, 5, 6])
     reshaped = reshape_fortran(x, (3, 2))
 
@@ -38,7 +38,7 @@ def test_reshape_fortran_1d():
     assert torch.equal(reshaped, expected_values)
 
 
-def test_reshape_fortran_2d():
+def test_reshape_fortran_2d() -> None:
     x = torch.tensor([[1, 2], [3, 4], [5, 6]])
 
     new_shape = (2, 3)
@@ -52,7 +52,7 @@ def test_reshape_fortran_2d():
     assert torch.equal(reshaped, expected_values)
 
 
-def test_reshape_fortran_scalar():
+def test_reshape_fortran_scalar() -> None:
     x = torch.tensor(5)
     assert len(x.shape) == 0
 

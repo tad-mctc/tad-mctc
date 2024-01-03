@@ -38,6 +38,17 @@ disallow_untyped_defs = true
 warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_ignores = true
+exclude = '''
+  (?x)
+  ^src/tad_mctc/autograd
+  | ^src/tad_mctc/units/codata.py$
+  | ^test/conftest.py$
+  | ^examples/
+  | ^build/
+  | ^dist/
+  | ^setup.py$
+'''
+
 
 
 [tool.coverage.run]

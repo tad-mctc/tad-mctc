@@ -15,3 +15,35 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
+"""
+Test hessian.
+"""
+import pytest
+import torch
+
+from tad_mctc.autograd import jac
+from tad_mctc.typing import DD, Tensor
+
+from ..conftest import DEVICE
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_jacobian(dtype: torch.dtype) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+    # Create a test input
+    A = torch.tensor([[3.0, 2.0], [2.0, 3.0]], **dd)
+    x = torch.tensor([1.0, 2.0], requires_grad=True, **dd)
+
+    def linear(A: Tensor, x: Tensor) -> Tensor:
+        """
+        A simple linear function for testing.
+        f(x) = Ax, where A is a constant matrix.
+        The Jacobian of this function is A.
+        """
+        return A @ x
+
+    # Calculate the Hessian using the `jacobian` function
+    jacobian_matrix = jac(linear, argnums=1)(A, x)
+
+    # Expected Jacobian for the quadratic function is A
+    assert pytest.approx(A) == jacobian_matrix

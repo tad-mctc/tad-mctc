@@ -26,7 +26,7 @@ import pytest
 import torch
 
 # required for generalized eigenvalue problem
-from scipy import linalg
+from scipy import linalg  # type: ignore
 
 from tad_mctc import storch
 from tad_mctc.autograd import dgradcheck
@@ -91,7 +91,7 @@ def clean_zero_padding(m: Tensor, sizes: Tensor) -> Tensor:
     return cleaned
 
 
-def test_eighb_standard_single():
+def test_eighb_standard_single() -> None:
     """eighb accuracy on a single standard eigenvalue problem."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -116,7 +116,7 @@ def test_eighb_standard_single():
         assert same_device, "Device persistence check"
 
 
-def test_eighb_standard_batch():
+def test_eighb_standard_batch() -> None:
     """eighb accuracy on a batch of standard eigenvalue problems."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -142,7 +142,7 @@ def test_eighb_standard_batch():
         assert same_device, "Device persistence check"
 
 
-def test_eighb_general_single():
+def test_eighb_general_single() -> None:
     """eighb accuracy on a single general eigenvalue problem."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -170,7 +170,7 @@ def test_eighb_general_single():
             assert same_device, "Device persistence check"
 
 
-def test_eighb_general_batch():
+def test_eighb_general_batch() -> None:
     """eighb accuracy on a batch of general eigenvalue problems."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -216,7 +216,7 @@ def test_eighb_general_batch():
 
 
 @pytest.mark.grad
-def test_eighb_broadening_grad():
+def test_eighb_broadening_grad() -> None:
     """eighb gradient stability on standard, broadened, eigenvalue problems.
 
     There is no separate test for the standard eigenvalue problem without
@@ -237,7 +237,11 @@ def test_eighb_broadening_grad():
     """
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
-    def eigen_proxy(m, target_method, size_data=None):
+    def eigen_proxy(
+        m: Tensor,
+        target_method: Literal["none", "cond", "lorn"] | None,
+        size_data: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
         m = symmetrize(m, force=True)
         if size_data is not None:
             m = clean_zero_padding(m, size_data)
@@ -250,14 +254,17 @@ def test_eighb_broadening_grad():
     a1_np = numpy_to_tensor(np.random.rand(8, 8), **dd)
     a1 = symmetrize(a1_np, force=True)
 
+    method: Literal["none", "cond", "lorn"] | None
+    broadening_methods: list[Literal["none", "cond", "lorn"] | None]
+
     broadening_methods = [None, "none", "cond", "lorn"]
     for method in broadening_methods:
         # dgradcheck detaches
         a1.requires_grad = True
 
         grad_is_safe = dgradcheck(
-            eigen_proxy,
-            (a1, method),
+            lambda a2, method_l=method: eigen_proxy(a2, target_method=method_l),
+            (a1,),
             fast_mode=FAST_MODE,
         )
         assert grad_is_safe, f"Non-degenerate single test failed on {method}"
@@ -276,19 +283,28 @@ def test_eighb_broadening_grad():
         a2.requires_grad = True
 
         grad_is_safe = dgradcheck(
-            eigen_proxy,
-            (a2, method, numpy_to_tensor(sizes, **dd)),
+            lambda a2_l, method_l=method: eigen_proxy(
+                a2_l,
+                target_method=method_l,
+                size_data=numpy_to_tensor(sizes, **dd),
+            ),
+            (a2,),
             fast_mode=FAST_MODE,
         )
         assert grad_is_safe, f"Non-degenerate batch test failed on {method}"
 
 
 @pytest.mark.grad
-def test_eighb_general_grad():
+def test_eighb_general_grad() -> None:
     """eighb gradient stability on general eigenvalue problems."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
-    def eigen_proxy(m, n, target_scheme, size_data=None):
+    def eigen_proxy(
+        m: Tensor,
+        n: Tensor,
+        target_scheme: Literal["chol", "lowd"],
+        size_data: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
         m, n = symmetrize(m, force=True), symmetrize(n, force=True)
         if size_data is not None:
             m = clean_zero_padding(m, size_data)
@@ -303,14 +319,18 @@ def test_eighb_general_grad():
     b1_np = numpy_to_tensor(np.random.rand(8), **dd)
     b1 = symmetrize(torch.eye(8, **dd) * b1_np, force=True)
 
+    scheme: Literal["chol", "lowd"]
     schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
     for scheme in schemes:
         # dgradcheck detaches!
         a1.requires_grad, b1.requires_grad = True, True
 
+        # dgradcheck only takes tensors, but: Loop variable capture of lambda
         grad_is_safe = dgradcheck(
-            eigen_proxy,
-            (a1, b1, scheme),  # type: ignore
+            lambda a1_l, b1_l, scheme_l=scheme: eigen_proxy(
+                a1_l, b1_l, target_scheme=scheme_l
+            ),
+            (a1, b1),
             fast_mode=False,
         )
         assert grad_is_safe, f"Non-degenerate single test failed on {scheme}"
@@ -334,14 +354,19 @@ def test_eighb_general_grad():
     )
 
     # sometimes randomly fails with "chol" on random GA runners
-    schemes: list[Literal["chol", "lowd"]] = ["lowd"]
+    schemes = ["lowd"]
     for scheme in schemes:
         # dgradcheck detaches!
         a2.requires_grad, b2.requires_grad = True, True
 
         grad_is_safe = dgradcheck(
-            eigen_proxy,
-            (a2, b2, scheme, numpy_to_tensor(sizes, **dd)),  # type: ignore
+            lambda a2_l, b2_l, size_data_l, scheme_l=scheme: eigen_proxy(
+                a2_l,
+                b2_l,
+                size_data=size_data_l,
+                target_scheme=scheme_l,
+            ),
+            (a2, b2, numpy_to_tensor(sizes, **dd)),
             fast_mode=False,
         )
         assert grad_is_safe, f"Non-degenerate batch test failed on {scheme}"

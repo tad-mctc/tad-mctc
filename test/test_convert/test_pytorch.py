@@ -18,6 +18,8 @@
 """
 Test PyTorch conversion tools.
 """
+from unittest.mock import patch
+
 import pytest
 
 from tad_mctc import convert
@@ -26,3 +28,10 @@ from tad_mctc import convert
 def test_fail() -> None:
     with pytest.raises(KeyError):
         convert.str_to_device("wrong")
+
+
+def test_str_to_device_no_cuda() -> None:
+    with patch("torch.cuda.is_available", return_value=False):
+        with pytest.raises(KeyError) as exc_info:
+            convert.str_to_device("cuda")
+        assert "No CUDA devices available." in str(exc_info.value)

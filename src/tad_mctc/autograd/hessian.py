@@ -67,15 +67,14 @@ def hessian(
         The parameter selected for differentiation (via `argnums`) is not a
         tensor.
     """
+    if not isinstance(inputs[argnums], Tensor):
+        raise ValueError(
+            f"The {argnums}'th input parameter must be a tensor but is of "
+            f"type '{type(inputs[argnums])}'."
+        )
 
     def _grad(*inps: tuple[Any, ...]) -> Tensor:
         e = f(*inps).sum()
-
-        if not isinstance(inps[argnums], Tensor):  # pragma: no cover
-            raise RuntimeError(
-                f"The {argnums}'th input parameter must be a tensor but is of "
-                f"type '{type(inps[argnums])}'."
-            )
 
         # catch missing gradients
         if e.grad_fn is None:
