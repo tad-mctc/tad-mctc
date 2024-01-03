@@ -33,15 +33,13 @@ from ..exceptions import DtypeError
 from .builtin import Any, NoReturn, TypedDict
 from .compat import Self
 
-
-class Molecule(TypedDict):
-    """Representation of fundamental molecular structure (atom types and postions)."""
-
-    numbers: Tensor
-    """Tensor of atomic numbers"""
-
-    positions: Tensor
-    """Tensor of 3D coordinates of shape (n, 3)"""
+__all__ = [
+    "DD",
+    "Molecule",
+    "get_default_device",
+    "get_default_dtype",
+    "TensorLike",
+]
 
 
 class DD(TypedDict):
@@ -52,6 +50,16 @@ class DD(TypedDict):
 
     dtype: torch.dtype
     """Floating point precision of a tensor."""
+
+
+class Molecule(TypedDict):
+    """Representation of fundamental molecular structure (atom types and postions)."""
+
+    numbers: Tensor
+    """Tensor of atomic numbers"""
+
+    positions: Tensor
+    """Tensor of 3D coordinates of shape (n, 3)"""
 
 
 def get_default_device() -> torch.device:

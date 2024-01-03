@@ -34,10 +34,10 @@ def test_sqrt_fail(dtype: torch.dtype) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     with pytest.raises(TypeError):
-        storch.sqrt(torch.tensor([1, 2, 3], **dd), str(0))  # type: ignore[arg-type]
+        storch.sqrt(torch.tensor([1, 2, 3], **dd), eps=str(0))  # type: ignore[arg-type]
 
     with pytest.raises(ValueError):
-        storch.sqrt(torch.tensor([-1, 2, 3], **dd), -2)
+        storch.sqrt(torch.tensor([-1, 2, 3], **dd), eps=-2)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])

@@ -16,8 +16,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Read: CHRG/UHF
-==============
+I/O Read: CHRG/UHF
+==================
 
 Reader for the `.CHRG` and `.UHF` files.
 """

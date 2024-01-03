@@ -16,10 +16,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Checks
-======
+I/O: Checks
+===========
 
-This module contains various checkers for reader/writer.
+This module contains various checkers for readers/writers.
 """
 from .molecule import *
 from .shape import *

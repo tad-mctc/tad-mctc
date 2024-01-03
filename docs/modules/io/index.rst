@@ -4,6 +4,6 @@
 
 .. toctree::
 
-   check/index
+   checks/index
    read/index
    write/index

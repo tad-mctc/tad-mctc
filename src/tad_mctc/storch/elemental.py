@@ -72,7 +72,7 @@ def divide(
     return torch.divide(x, (y + eps), **kwargs)
 
 
-def sqrt(x: Tensor, eps: Tensor | float | int | None = None) -> Tensor:
+def sqrt(x: Tensor, *, eps: Tensor | float | int | None = None) -> Tensor:
     """
     Safe square root operation.
 
