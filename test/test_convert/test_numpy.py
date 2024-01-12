@@ -140,13 +140,7 @@ def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
     from tad_mctc.autograd import jacrev
 
     x = torch.randn(3, 3, requires_grad=True)
-    y = torch.tensor(
-        [
-            [3.0, 2.0],
-            [1.0, 4.0],
-        ],
-        dtype=dtype,
-    )
+    y = torch.tensor([[3, 2], [1, 4]], dtype=dtype)
 
     npdtype = convert.numpy.torch_to_numpy_dtype_dict[dtype]
 
