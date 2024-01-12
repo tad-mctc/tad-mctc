@@ -249,7 +249,7 @@ class SymEigBroadBase(torch.autograd.Function):
         return a_bar, None, None
 
 
-class _SymEigBroad_V1(SymEigBroadBase):
+class _SymEigBroad_V1(SymEigBroadBase):  # pragma: no cover
     """
     Calculate the eigenvalues and eigenvectors of a symmetric matrix with a
     custom autograd function that defines a `forward()` that combines the
