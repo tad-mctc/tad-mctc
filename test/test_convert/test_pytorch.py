@@ -30,8 +30,31 @@ def test_fail() -> None:
         convert.str_to_device("wrong")
 
 
-def test_str_to_device_no_cuda() -> None:
+# Test case for an unknown device string
+def test_str_to_device_unknown():
+    with pytest.raises(KeyError) as exc_info:
+        convert.str_to_device("unknown_device")
+    assert "Unknown device 'unknown_device' given." in str(exc_info.value)
+
+
+# Test case for a CPU device
+def test_str_to_device_cpu():
+    device = convert.str_to_device("cpu")
+    assert device.type == "cpu"
+
+
+# Test case for attempting to use CUDA on a machine without CUDA
+def test_str_to_device_no_cuda():
     with patch("torch.cuda.is_available", return_value=False):
         with pytest.raises(KeyError) as exc_info:
             convert.str_to_device("cuda")
         assert "No CUDA devices available." in str(exc_info.value)
+
+
+# Test case for using CUDA when it's available
+def test_str_to_device_with_cuda():
+    with patch("torch.cuda.is_available", return_value=True):
+        with patch("torch.cuda.current_device", return_value=0):
+            device = convert.str_to_device("cuda")
+            assert device.type == "cuda"
+            assert device.index == 0

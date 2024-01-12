@@ -48,7 +48,7 @@ def jac(f: Callable[..., Tensor], argnums: int = 0) -> Any:  # pragma: no cover
             raise ImportError(
                 f"Failed to import required modules. {e}. {e.name} provides "
                 "an API for Jacobian calculations for older PyTorch versions."
-            )
+            ) from e
 
         def wrap(*inps: Any) -> Any:
             """

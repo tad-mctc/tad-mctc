@@ -91,6 +91,17 @@ def clean_zero_padding(m: Tensor, sizes: Tensor) -> Tensor:
     return cleaned
 
 
+def test_eighb_fail() -> None:
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    a = symmetrize(
+        numpy_to_tensor(np.random.rand(10, 10), **dd),
+        force=True,
+    )
+    with pytest.raises(ValueError):
+        storch.linalg.eighb(a, broadening_method="unknown")  # type:ignore
+
+
 def test_eighb_standard_single() -> None:
     """eighb accuracy on a single standard eigenvalue problem."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}

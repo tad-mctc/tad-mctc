@@ -20,6 +20,8 @@ Test numpy and PyTorch interconversion.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import numpy as np
 import pytest
 import torch
@@ -53,6 +55,26 @@ def test_np_to_torch_default() -> None:
 
     assert isinstance(tensor, Tensor)
     assert tensor.dtype == get_default_dtype()
+
+
+def test_np_to_torch_default_context() -> None:
+    """Test if the dtype is retained."""
+
+    @contextmanager
+    def torch_default_dtype(dtype):
+        original_dtype = get_default_dtype()
+        torch.set_default_dtype(dtype)
+        try:
+            yield
+        finally:
+            torch.set_default_dtype(original_dtype)
+
+    with torch_default_dtype(torch.float64):
+        arr = np.zeros((10, 10), dtype=np.float64)
+        tensor = convert.numpy_to_tensor(arr)
+
+        assert isinstance(tensor, Tensor)
+        assert tensor.dtype == get_default_dtype()
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
@@ -94,3 +116,42 @@ def test_torch_to_np_with_device(device_str: str) -> None:
     arr = convert.tensor_to_numpy(tensor)
 
     assert isinstance(arr, np.ndarray)
+
+
+def test_torch_to_np_with_transforms_fail() -> None:
+    from tad_mctc.autograd import jacrev
+
+    # Create a tensor with requires_grad=True
+    x = torch.randn(3, 3, requires_grad=True)
+    y = torch.randn(3, 3)
+
+    def simple_function(x: Tensor, y: Tensor) -> Tensor:
+        _ = np.array(y.tolist())  # fails!
+        return x**2
+
+    jacobian_func = jacrev(simple_function)
+
+    with pytest.raises(RuntimeError):
+        jacobian_func(x, y)
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double, torch.int64])
+def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
+    from tad_mctc.autograd import jacrev
+
+    x = torch.randn(3, 3, requires_grad=True)
+    y = torch.tensor([[3, 2], [1, 4]], dtype=dtype)
+
+    npdtype = convert.numpy.torch_to_numpy_dtype_dict[dtype]
+
+    def simple_function(x: Tensor, y: Tensor) -> Tensor:
+        t = convert.tensor_to_numpy(y, dtype=npdtype)
+        assert t.dtype == npdtype
+
+        for yi, ti in zip(y.flatten(), t.flatten()):
+            assert yi.item() == ti
+
+        return x**2
+
+    jacobian_func = jacrev(simple_function)
+    jacobian_func(x, y)

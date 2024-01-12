@@ -21,14 +21,26 @@ Typing: Builtins
 
 This module contains all used built-in type annotations.
 """
-from typing import IO, Any, Literal, NoReturn, Protocol, TypedDict, runtime_checkable
+from typing import (
+    IO,
+    Any,
+    Iterable,
+    Literal,
+    NoReturn,
+    Protocol,
+    TypedDict,
+    overload,
+    runtime_checkable,
+)
 
 __all__ = [
     "IO",
     "Any",
     "Literal",
+    "Iterable",
     "NoReturn",
     "Protocol",
     "runtime_checkable",
     "TypedDict",
+    "overload",
 ]

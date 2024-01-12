@@ -69,3 +69,65 @@ def test_size() -> None:
     # one additional column of padding
     packed = pack([mol1, mol2], size=[4])
     assert (packed == ref).all()
+
+
+def test_return_mask() -> None:
+    packed, mask = pack(
+        [
+            torch.tensor([1.0]),
+            torch.tensor([2.0, 2.0]),
+            torch.tensor([3.0, 3.0, 3.0]),
+        ],
+        return_mask=True,
+    )
+
+    ref_packed = torch.tensor(
+        [
+            [1.0, 0.0, 0.0],
+            [2.0, 2.0, 0.0],
+            [3.0, 3.0, 3.0],
+        ]
+    )
+
+    ref_mask = torch.tensor(
+        [
+            [True, False, False],
+            [True, True, False],
+            [True, True, True],
+        ]
+    )
+
+    assert (packed == ref_packed).all()
+    assert (mask == ref_mask).all()
+
+
+def test_return_mask_axis() -> None:
+    packed, mask = pack(
+        [
+            torch.tensor([1.0]),
+            torch.tensor([2.0, 2.0]),
+            torch.tensor([3.0, 3.0, 3.0]),
+        ],
+        axis=-1,
+        return_mask=True,
+    )
+
+    ref_packed = torch.tensor(
+        [
+            [1.0, 0.0, 0.0],
+            [2.0, 2.0, 0.0],
+            [3.0, 3.0, 3.0],
+        ]
+    )
+
+    ref_mask = torch.tensor(
+        [
+            [True, False, False],
+            [True, True, False],
+            [True, True, True],
+        ]
+    )
+
+    # different axis
+    assert (packed == ref_packed.T).all()
+    assert (mask == ref_mask.T).all()

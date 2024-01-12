@@ -33,7 +33,7 @@ import numpy as np
 import torch
 
 from ..convert import symmetrize
-from ..typing import Any, Literal, Tensor
+from ..typing import Any, Callable, Literal, Tensor
 
 __all__ = ["eighb"]
 
@@ -43,30 +43,40 @@ def estimate_minmax(amat: Tensor) -> tuple[Tensor, Tensor]:
     Estimate maximum and minimum eigenvalue of a matrix using the Gershgorin
     circle theorem.
 
-    Arguments:
-        amat : Tensor
-            Symmetric matrix.
+    Parameters
+    ----------
+    amat : Tensor
+        A symmetric matrix for which the maximum and minimum eigenvalues are to be estimated.
 
-    Returns:
-        Tuple[Tensor, Tensor]
-            Minimum and maximum eigenvalue.
+    Returns
+    -------
+    tuple of Tensor
+        A tuple containing two tensors. The first tensor represents the estimated
+        minimum eigenvalue, and the second tensor represents the estimated maximum
+        eigenvalue of the input matrix.
 
-    Examples:
-        >>> amat = torch.tensor([
-        ...     [[-1.1258, -0.1794,  0.1126],
-        ...      [-0.1794,  0.5988,  0.1490],
-        ...      [ 0.1126,  0.1490,  0.4681]],
-        ...     [[-0.1577,  0.6080, -0.3301],
-        ...      [ 0.6080,  1.5863,  0.9391],
-        ...      [-0.3301,  0.9391,  1.2590]],
-        ... ])
-        >>> estimate_minmax(amat)
-        (tensor([-1.4178, -1.0958]), tensor([0.9272, 3.1334]))
-        >>> evals = torch.linalg.eigh(amat)[0]
-        >>> evals.min(-1)[0], evals.max(-1)[0]
-        (tensor([-1.1543, -0.5760]), tensor([0.7007, 2.4032]))
+    Examples
+    --------
+    >>> amat = torch.tensor([
+    ...     [[-1.1258, -0.1794,  0.1126],
+    ...      [-0.1794,  0.5988,  0.1490],
+    ...      [ 0.1126,  0.1490,  0.4681]],
+    ...     [[-0.1577,  0.6080, -0.3301],
+    ...      [ 0.6080,  1.5863,  0.9391],
+    ...      [-0.3301,  0.9391,  1.2590]],
+    ... ])
+    >>> estimate_minmax(amat)
+    (tensor([-1.4178, -1.0958]), tensor([0.9272, 3.1334]))
+    >>> evals = torch.linalg.eigh(amat)[0]
+    >>> evals.min(-1)[0], evals.max(-1)[0]
+    (tensor([-1.1543, -0.5760]), tensor([0.7007, 2.4032]))
+
+    Notes
+    -----
+    This function applies the Gershgorin circle theorem to estimate the
+    minimum and maximum eigenvalues of a symmetric matrix. These estimates
+    provide bounds but may not be exact eigenvalues.
     """
-
     center = amat.diagonal(dim1=-2, dim2=-1)
     radius = torch.sum(torch.abs(amat), dim=-1) - torch.abs(center)
 
@@ -76,71 +86,67 @@ def estimate_minmax(amat: Tensor) -> tuple[Tensor, Tensor]:
     )
 
 
-class _SymEigB(torch.autograd.Function):
-    # State that this can solve for multiple systems and that the first
-    # dimension should iterate over instance of the batch.
-    r"""Solves standard eigenvalue problems for real symmetric matrices.
+class SymEigBroadBase(torch.autograd.Function):
+    r"""
+    Solves standard eigenvalue problems for real symmetric matrices,
+    suitable for solving multiple systems with batch processing where
+    the first dimension iterates over instances of the batch.
 
-    This solves standard eigenvalue problems for real symmetric matrices, and
-    can apply conditional or Lorentzian broadening to the eigenvalues during
-    the backwards pass to increase gradient stability.
+    This function can apply conditional or Lorentzian broadening to the
+    eigenvalues during the backwards pass to increase gradient stability.
 
-    Notes:
-        Results from backward passes through eigen-decomposition operations
-        tend to suffer from numerical stability [*]_  issues when operating
-        on systems with degenerate eigenvalues. Fortunately,  the stability
-        of such operations can be increased through the application of eigen
-        value broadening. However, such methods will induce small errors in
-        the returned gradients as they effectively mutate  the eigen-values
-        in the backwards pass. Thus, it is important to be aware that while
-        increasing the extent of  broadening will help to improve stability
-        it will also increase the error in the gradients.
+    Parameters
+    ----------
+    a : array_like
+        A real symmetric matrix whose eigenvalues & eigenvectors will be computed.
+    method : {'cond', 'lorn'}, optional
+        Broadening method to use. 'cond' refers to conditional broadening,
+        'lorn' to Lorentzian broadening. Default is 'cond'.
+    factor : float, optional
+        Degree of broadening (broadening factor). Default is 1E-12.
 
-        Two different broadening methods have been implemented within this
-        class. Conditional broadening as described by Seeger [MS2019]_, and
-        Lorentzian as detailed by Liao [LH2019]_. During the forward pass the
-        `torch.symeig` function is used to calculate both the eigenvalues &
-        the eigenvectors (U & :math:`\lambda` respectively). The gradient
-        is then calculated following:
+    Returns
+    -------
+    w : ndarray
+        The eigenvalues, in ascending order.
+    v : ndarray
+        The eigenvectors.
 
-        .. math:: \bar{A} = U (\bar{\Lambda} + sym(F \circ (U^t \bar{U}))) U^T
+    Notes
+    -----
+    Results from backward passes through eigen-decomposition operations
+    tend to suffer from numerical stability issues, especially when operating
+    on systems with degenerate eigenvalues. Applying eigenvalue broadening
+    increases stability but introduces small errors in the gradients. The
+    extent of broadening correlates with the stability improvement and the
+    error magnitude.
 
-        Where bar indicates a value's gradient passed in from the previous
-        layer, :math:`\Lambda` is the diagonal matrix associated with the
-        :math:`\bar{\lambda}` values,  :math:`\circ`  is the so called
-        Hadamard product, sym is the symmetrisation operator and F is:
+    Two broadening methods are implemented: Conditional broadening as
+    described by Seeger [MS2019]_, and Lorentzian as detailed by Liao [LH2019]_.
+    The forward pass uses `torch.symeig` to calculate eigenvalues and eigenvectors.
+    The gradient is calculated as:
 
-        .. math:: F_{i, j} = \frac{I_{i \ne j}}{h(\lambda_i - \lambda_j)}
+    .. math:: \bar{A} = U (\bar{\Lambda} + sym(F \circ (U^t \bar{U}))) U^T
 
-        Where, for conditional broadening, h is:
+    where :math:`\bar{\Lambda}` is the diagonal matrix of the eigenvalue gradients,
+    :math:`\circ` denotes the Hadamard product, and `sym` is the symmetrisation
+    operator. F is defined as :math:`F_{i, j} = \frac{I_{i \ne j}}{h(\lambda_i - \lambda_j)}`
+    with `h` being a function specific to the chosen broadening method.
 
-        .. math:: h(t) = max(|t|, \epsilon)sgn(t)
+    Conditional broadening applies only when necessary, limiting gradient errors
+    to systems that would otherwise yield NaNs. Lorentzian broadening affects all
+    systems regardless of necessity. Without broadening, the backward pass
+    resembles a standard eigen-solver.
 
-        and for, Lorentzian broadening:
-
-        .. math:: h(t) = \frac{t^2 + \epsilon}{t}
-
-        The advantage of conditional broadening is that it is only applied
-        when needed, thus the errors induced in the gradients will be
-        restricted to systems whose gradients would be nan's otherwise.
-        The Lorentzian method, on the other hand, will apply broadening to
-        all systems, irrespective of whether or not it is necessary. Note
-        that if the h function is a unity operator then this is identical
-        to a standard backwards pass through an eigen-solver.
-
-
-        .. [*] Where stability is defined as the propensity of a function to
-               return nan values or some raise an error.
-
-    References:
-        .. [MS2019] Seeger, M., Hetzel, A., Dai, Z., & Meissner, E. Auto-
-                    Differentiating Linear Algebra. ArXiv:1710.08717 [Cs,
-                    Stat], Aug. 2019. arXiv.org,
-                    http://arxiv.org/abs/1710.08717.
-        .. [LH2019] Liao, H.-J., Liu, J.-G., Wang, L., & Xiang, T. (2019).
-                    Differentiable Programming Tensor Networks. Physical
-                    Review X, 9(3).
-        .. [Lapack] www.netlib.org/lapack/lug/node54.html (Accessed 21/04/2023)
+    References
+    ----------
+    .. [MS2019] Seeger, M., Hetzel, A., Dai, Z., & Meissner, E. Auto-
+                Differentiating Linear Algebra. ArXiv:1710.08717 [Cs,
+                Stat], Aug. 2019. arXiv.org, http://arxiv.org/abs/1710.08717.
+    .. [LH2019] Liao, H.-J., Liu, J.-G., Wang, L., & Xiang, T. (2019).
+                Differentiable Programming Tensor Networks. Physical
+                Review X, 9(3).
+    .. [Lapack] www.netlib.org/lapack/lug/node54.html (Accessed 21/04/2023)
 
     """
 
@@ -148,79 +154,43 @@ class _SymEigB(torch.autograd.Function):
     KNOWN_METHODS = ["cond", "lorn", "none"]
 
     @staticmethod
-    def forward(
-        ctx: Any, a: Tensor, method: str = "cond", factor: float = 1e-12
-    ) -> tuple[Tensor, Tensor]:
-        """Calculate the eigenvalues and eigenvectors of a symmetric matrix.
-
-        Finds the eigenvalues and eigenvectors of a real symmetric
-        matrix using the torch.symeig function.
-
-        Arguments:
-            a: A real symmetric matrix whose eigenvalues & eigenvectors will
-                be computed.
-            method: Broadening method to used, available options are:
-
-                    - "cond" for conditional broadening.
-                    - "lorn" for Lorentzian broadening.
-
-                See class doc-string for more info on these methods.
-                [DEFAULT='cond']
-            factor: Degree of broadening (broadening factor). [Default=1E-12]
-
-        Returns:
-            w: The eigenvalues, in ascending order.
-            v: The eigenvectors.
-
-        Notes:
-            The ctx argument is auto-parsed by PyTorch & is used to pass data
-            from the .forward() method to the .backward() method. This is not
-            normally described in the docstring but has been done here to act
-            as an example.
-
-        Warnings:
-            Under no circumstances should `factor` be a torch.tensor entity.
-            The `method` and `factor` parameters MUST be passed as positional
-            arguments and NOT keyword arguments.
-
+    def backward(
+        ctx: Any,
+        w_bar: Tensor,
+        v_bar: Tensor,
+    ) -> tuple[Tensor, None, None]:  # type: ignore[override]
         """
-        # Check that the method is of a known type
-        if method not in _SymEigB.KNOWN_METHODS:
-            raise ValueError("Unknown broadening method selected.")
+        Evaluates gradients of the eigen decomposition operation.
 
-        # Compute eigen-values & vectors using torch.symeig.
-        w, v = torch.linalg.eigh(a)
+        This method evaluates the gradients of the matrix from which the
+        eigenvalues and eigenvectors were originally computed during the
+        forward pass.
 
-        # Save tensors that will be needed in the backward pass
-        ctx.save_for_backward(w, v)
+        Parameters
+        ----------
+        ctx : Any
+            Context object containing information for backward computation.
+        w_bar : Tensor
+            Gradients associated with the eigenvalues.
+        v_bar : Tensor
+            Gradients associated with the eigenvectors.
 
-        # Save the broadening factor and the selected broadening method.
-        ctx.bf, ctx.bm = factor, method
+        Returns
+        -------
+        tuple[Tensor, None, None]
+            A tuple containing the gradient of the input matrix and two None
+            placeholders for method and factor, which do not require gradients.
+            The first element (gradient of the input matrix) is of type Tensor,
+            while the other two elements are None.
 
-        # Store dtype/device to prevent dtype/device mixing
-        ctx.dtype, ctx.device = a.dtype, a.device
+        Notes
+        -----
+        This method should only be called by PyTorch's automatic differentiation
+        mechanism. The ctx parameter provides saved tensors from the forward
+        pass that are necessary for computing the gradients.
 
-        # Return the eigenvalues and eigenvectors
-        return w, v
-
-    @staticmethod
-    def backward(ctx: Any, w_bar: Tensor, v_bar: Tensor) -> tuple[Tensor, None, None]:  # type: ignore[override]
-        """Evaluates gradients of the eigen decomposition operation.
-
-        Evaluates gradients of the matrix from which the eigenvalues
-        and eigenvectors were taken.
-
-        Arguments:
-            w_bar: Gradients associated with the the eigenvalues.
-            v_bar: Gradients associated with the eigenvectors.
-
-        Returns:
-            a_bar: Gradients associated with the `a` tensor.
-
-        Notes:
-            See class doc-string for a more detailed description of this
-            method.
-
+        For a more detailed description of the gradient computation, refer to
+        the class docstring.
         """
         # Equation to variable legend
         #   w <- λ
@@ -279,29 +249,229 @@ class _SymEigB(torch.autograd.Function):
         return a_bar, None, None
 
 
-def _eig_sort_out(w: Tensor, v: Tensor, ghost: bool = True) -> tuple[Tensor, Tensor]:
-    """Move ghost eigen values/vectors to the end of the array.
+class _SymEigBroad_V1(SymEigBroadBase):  # pragma: no cover
+    """
+    Calculate the eigenvalues and eigenvectors of a symmetric matrix with a
+    custom autograd function that defines a `forward()` that combines the
+    forward compute logic with `setup_context()` function. This was the only
+    way before PyTorch 2.0.0, but is still supported.
 
-    Discuss the difference between ghosts (w=0) and auxiliaries (w=1)
+    More details can be found in the docstring of the Base class that also
+    implements the common backward logic.
+    """
 
-    Performing and eigen-decomposition operation on a zero-padded packed
-    tensor results in the emergence of ghost eigen-values/vectors. This can
-    cause issues downstream, thus they are moved to the end here which means
-    they can be easily clipped off should the user wish to do so.
+    @staticmethod
+    def forward(
+        ctx: Any, a: Tensor, method: str = "cond", factor: float = 1e-12
+    ) -> tuple[Tensor, Tensor]:
+        """
+        Calculate the eigenvalues and eigenvectors of a symmetric matrix.
 
-    Arguments:
-        w: The eigen-values.
-        v: The eigen-vectors.
-        ghost: Ghost-eigen-values are assumed to be 0 if True, else assumed to
-            be 1. If zero padded then this should be True, if zero padding is
-            turned into identity padding then False should be used. This will
-            also change the ghost eigenvalues from 1 to zero when appropriate.
-            [DEFAULT=True]
+        This function finds the eigenvalues and eigenvectors of a real symmetric
+        matrix using the torch.symeig function. It optionally applies broadening
+        to the eigenvalues during the computation.
 
-    Returns:
-        w: The eigen-values, with ghosts moved to the end.
-        v: The eigen-vectors, with ghosts moved to the end.
+        Parameters
+        ----------
+        a : Tensor
+            A real symmetric matrix whose eigenvalues and eigenvectors will be computed.
+        method : {'cond', 'lorn'}, optional
+            Broadening method to be used. The available options are:
+            - 'cond' for conditional broadening.
+            - 'lorn' for Lorentzian broadening.
+            The default is 'cond'. See class doc-string for more information on
+            these methods.
+        factor : float, optional
+            Degree of broadening (broadening factor). Default is 1E-12.
 
+        Returns
+        -------
+        w : Tensor
+            The eigenvalues of the matrix, in ascending order.
+        v : Tensor
+            The eigenvectors of the matrix.
+
+        Notes
+        -----
+        The `ctx` argument is auto-parsed by PyTorch and is used to pass data
+        from the  `.forward()` method to the `.backward()` method. This is
+        typically not described in the docstring, but is included here for
+        clarity.
+
+        Warnings
+        --------
+        The `factor` should not be a torch.tensor entity. The `method` and
+        `factor` parameters must be passed as positional arguments and not
+        keyword arguments.
+        """
+
+        # Check that the method is of a known type
+        if method not in SymEigBroadBase.KNOWN_METHODS:
+            raise ValueError("Unknown broadening method selected.")
+
+        # Compute eigen-values & vectors using torch.symeig.
+        w, v = torch.linalg.eigh(a)
+
+        # Save tensors that will be needed in the backward pass
+        ctx.save_for_backward(w, v)
+
+        # Save the broadening factor and the selected broadening method.
+        ctx.bf, ctx.bm = factor, method
+
+        # Store dtype/device to prevent dtype/device mixing
+        ctx.dtype, ctx.device = a.dtype, a.device
+
+        # Return the eigenvalues and eigenvectors
+        return w, v
+
+
+class _SymEigBroad_V2(SymEigBroadBase):
+    """
+    Calculate the eigenvalues and eigenvectors of a symmetric matrix with a
+    custom autograd function that defines a separate `forward()` and
+    `setup_context()` function (PyTorch >= 2.0.0).
+
+    More details can be found in the docstring of the Base class that also
+    implements the common backward logic.
+    """
+
+    @staticmethod
+    def forward(
+        a: Tensor, method: str = "cond", factor: float = 1e-12
+    ) -> tuple[Tensor, Tensor]:
+        """
+        Calculate the eigenvalues and eigenvectors of a symmetric matrix.
+
+        This method computes the eigenvalues and eigenvectors of a real
+        symmetric matrix using the `torch.linalg.eigh` function. It allows for
+        applying broadening methods to the eigenvalues.
+
+        Parameters
+        ----------
+        a : Tensor
+            A real symmetric matrix whose eigenvalues and eigenvectors will be
+            computed.
+        method : str, optional
+            The broadening method to be used. Available options are:
+            - 'cond' for conditional broadening.
+            - 'lorn' for Lorentzian broadening.
+            Default is 'cond'.
+        factor : float, optional
+            The degree of broadening (broadening factor). Default is 1E-12.
+
+        Returns
+        -------
+        tuple of Tensor
+            A tuple containing two tensors. The first tensor (`w`) is the
+            eigenvalues in ascending order. The second tensor (`v`) is the
+            eigenvectors of the matrix.
+
+        Notes
+        -----
+        The `ctx` argument is used internally by PyTorch to pass data from the
+        `forward` method to the `backward` method. This is not normally part of
+        the function signature in user-facing documentation.
+
+        Warnings
+        --------
+        The `factor` should not be a `torch.tensor` entity. Both `method` and
+        `factor` parameters must be passed as positional arguments, not keyword
+        arguments.
+        """
+        # Check that the method is of a known type
+        if method not in SymEigBroadBase.KNOWN_METHODS:
+            raise ValueError("Unknown broadening method selected.")
+
+        # Compute eigen-values & vectors using torch.symeig.
+        w, v = torch.linalg.eigh(a)
+
+        # Return the eigenvalues and eigenvectors
+        return w, v
+
+    @staticmethod
+    def setup_context(ctx, inputs: tuple, outputs: tuple[Tensor, Tensor]):
+        """
+        Sets up the context for backward computation in a PyTorch autograd
+        function.
+
+        This method is used to save necessary tensors and other information
+        from the forward pass to be used in the backward pass for gradient
+        computation.
+
+        Parameters
+        ----------
+        ctx : Any
+            The context object used to store information for backward
+            computation.
+        inputs : tuple
+            A tuple containing inputs to the forward method. It should include
+            the matrix `a`, the broadening method `method`, and the broadening
+            factor `factor`.
+        outputs : tuple of Tensor
+            A tuple containing the outputs from the forward pass, which are the
+            eigenvalues and eigenvectors of the matrix.
+
+        Notes
+        -----
+        This method is specific to PyTorch's autograd mechanism and is not
+        intended to be called directly by users. It is automatically invoked
+        during the forward pass of a custom autograd function.
+        """
+        a, method, factor = inputs
+        w, v = outputs
+
+        # Save tensors that will be needed in the backward pass
+        ctx.save_for_backward(w, v)
+
+        # Save the broadening factor and the selected broadening method.
+        ctx.bf, ctx.bm = factor, method
+
+        # Store dtype/device to prevent dtype/device mixing
+        ctx.dtype, ctx.device = a.dtype, a.device
+
+
+def _eig_sort_out(
+    w: Tensor,
+    v: Tensor,
+    ghost: bool = True,
+) -> tuple[Tensor, Tensor]:
+    """
+    Move ghost eigenvalues/vectors to the end of the array.
+
+    This function addresses the issue of ghost eigenvalues/vectors that emerge
+    from performing eigen-decomposition on zero-padded packed tensors. Ghosts
+    are relocated to the end of the arrays for easy removal.
+
+    Parameters
+    ----------
+    w : Tensor
+        The eigenvalues.
+    v : Tensor
+        The eigenvectors.
+    ghost : bool, optional
+        Indicator of the nature of ghost eigenvalues. If True, ghost eigenvalues
+        are assumed to be 0. If False, they are assumed to be 1. This should be
+        set to True for zero-padded tensors and False for identity-padded
+        tensors. Defaults to True. Changing this flag also adjusts ghost
+        eigenvalues from 1 to 0 when appropriate.
+
+    Returns
+    -------
+    Tensor
+        The modified eigenvalues with ghosts moved to the end.
+    Tensor
+        The modified eigenvectors with ghosts moved to the end.
+
+    Notes
+    -----
+    Ghost eigenvalues/vectors typically emerge when eigen-decomposition is
+    performed on matrices that have been zero-padded. These can interfere with
+    downstream processes. This function separates them by moving them to the
+    end of the tensor, facilitating their removal if desired.
+
+    The term 'ghost' refers to eigenvalues of 0, while 'auxiliary' eigenvalues
+    are those set to 1. The choice between treating eigenvalues as ghosts or
+    auxiliaries depends on how padding is handled in the input tensor.
     """
     val = 0 if ghost else 1
 
@@ -354,136 +524,149 @@ def eighb(
     aux: bool = True,
     **kwargs: Any,
 ) -> tuple[Tensor, Tensor]:
-    r"""Solves general & standard eigen-problems, with optional broadening.
+    r"""
+    Solves general & standard eigen-problems, with optional broadening.
 
     Solves standard and generalised eigenvalue problems of the form Az = λBz
-    for a real symmetric matrix ``a`` and can apply conditional or Lorentzian
+    for a real symmetric matrix `a` and can apply conditional or Lorentzian
     broadening to the eigenvalues during the backwards pass to increase
-    gradient stability. Multiple  matrices may be passed in batch major form,
+    gradient stability. Multiple matrices may be passed in batch major form,
     i.e. the first axis iterates over entries.
 
-    Arguments:
-        a: Real symmetric matrix whose eigen-values/vectors will be computed.
-        b: Complementary positive definite real symmetric matrix for the
-            generalised eigenvalue problem.
-        scheme: Scheme to covert generalised eigenvalue problems to standard
-            ones:
+    Parameters
+    ----------
+    a : array_like
+        Real symmetric matrix whose eigen-values/vectors will be computed.
+    b : array_like
+        Complementary positive definite real symmetric matrix for the
+        generalised eigenvalue problem.
+    scheme : str, optional
+        Scheme to convert generalised eigenvalue problems to standard ones.
+        Options are:
 
-                - "chol": Cholesky factorisation. [DEFAULT='chol']
-                - "lowd": Löwdin orthogonalisation.
+        - "chol": Cholesky factorisation. [DEFAULT='chol']
+        - "lowd": Löwdin orthogonalisation.
 
-            Has no effect on solving standard problems.
+        Has no effect on solving standard problems.
+    broadening_method : str, optional
+        Broadening method to used. Options are:
 
-        broadening_method: Broadening method to used:
+        - "cond": conditional broadening. [DEFAULT='cond']
+        - "lorn": Lorentzian broadening.
+        - None: no broadening (uses torch.symeig).
+    factor : float, optional
+        The degree of broadening (broadening factor). [Default=1E-12]
+    sort_out : bool, optional
+        If True, eigen-vector/value tensors are reordered so that
+        any "ghost" entries are moved to the end. "Ghost" are values which
+        emerge as a result of zero-padding. [DEFAULT=True]
+    aux : bool, optional
+        Converts zero-padding to identity-padding. This can improve
+        the stability of backwards propagation. [DEFAULT=True]
+    direct_inv : bool, optional
+        If True then the matrix inversion will be computed
+        directly rather than via a call to torch.solve. Only relevant to
+        the cholesky scheme. [DEFAULT=False]
 
-                - "cond": conditional broadening. [DEFAULT='cond']
-                - "lorn": Lorentzian broadening.
-                - None: no broadening (uses torch.symeig).
+    Returns
+    -------
+    w : ndarray
+        The eigenvalues, in ascending order.
+    v : ndarray
+        The eigenvectors.
 
-        factor: The degree of broadening (broadening factor). [Default=1E-12]
-        sort_out: If True; eigen-vector/value tensors are reordered so that
-            any "ghost" entries are moved to the end. "Ghost" are values which
-            emerge as a result of zero-padding. [DEFAULT=True]
-        aux: Converts zero-padding to identity-padding. This can improve
-            the stability of backwards propagation. [DEFAULT=True]
+    Notes
+    -----
+    Results from backward passes through eigen-decomposition operations
+    tend to suffer from numerical stability issues when operating
+    on systems with degenerate eigenvalues. Fortunately, the stability
+    of such operations can be increased through the application of eigen
+    value broadening. However, such methods will induce small errors in
+    the returned gradients as they effectively mutate the eigen-values
+    in the backwards pass. Thus, it is important to be aware that while
+    increasing the extent of broadening will help to improve stability
+    it will also increase the error in the gradients.
 
-    Keyword Args:
-        direct_inv (bool): If True then the matrix inversion will be computed
-            directly rather than via a call to torch.solve. Only relevant to
-            the cholesky scheme. [DEFAULT=False]
+    Two different broadening methods have been implemented within this
+    class. Conditional broadening as described by Seeger [MS2019]_, and
+    Lorentzian as detailed by Liao [LH2019]_. During the forward pass the
+    `torch.symeig` function is used to calculate both the eigenvalues &
+    the eigenvectors (U & :math:`\lambda` respectively). The gradient
+    is then calculated following:
 
-    Returns:
-        w: The eigenvalues, in ascending order.
-        v: The eigenvectors.
+    .. math:: \bar{A} = U (\bar{\Lambda} + sym(F \circ (U^t \bar{U}))) U^T
 
-    Notes:
-        Results from backward passes through eigen-decomposition operations
-        tend to suffer from numerical stability [*]_  issues when operating
-        on systems with degenerate eigenvalues. Fortunately,  the stability
-        of such operations can be increased through the application of eigen
-        value broadening. However, such methods will induce small errors in
-        the returned gradients as they effectively mutate  the eigen-values
-        in the backwards pass. Thus, it is important to be aware that while
-        increasing the extent of  broadening will help to improve stability
-        it will also increase the error in the gradients.
+    Where bar indicates a value's gradient, passed in from the previous
+    layer, :math:`\Lambda` is the diagonal matrix associated with the
+    :math:`\bar{\lambda}` values, :math:`\circ`  is the so called Hadamard
+    product, :math:`sym` is the symmetrisation operator and F is:
 
-        Two different broadening methods have been implemented within this
-        class. Conditional broadening as described by Seeger [MS2019]_, and
-        Lorentzian as detailed by Liao [LH2019]_. During the forward pass the
-        `torch.symeig` function is used to calculate both the eigenvalues &
-        the eigenvectors (U & :math:`\lambda` respectively). The gradient
-        is then calculated following:
+    .. math:: F_{i, j} = \frac{I_{i \ne j}}{h(\lambda_i - \lambda_j)}
 
-        .. math:: \bar{A} = U (\bar{\Lambda} + sym(F \circ (U^t \bar{U}))) U^T
+    Where, for conditional broadening, h is:
 
-        Where bar indicates a value's gradient, passed in from the previous
-        layer, :math:`\Lambda` is the diagonal matrix associated with the
-        :math:`\bar{\lambda}` values, :math:`\circ`  is the so called Hadamard
-        product, :math:`sym` is the symmetrisation operator and F is:
+    .. math:: h(t) = max(|t|, \epsilon)sgn(t)
 
-        .. math:: F_{i, j} = \frac{I_{i \ne j}}{h(\lambda_i - \lambda_j)}
+    and for, Lorentzian broadening:
 
-        Where, for conditional broadening, h is:
+    .. math:: h(t) = \frac{t^2 + \epsilon}{t}
 
-        .. math:: h(t) = max(|t|, \epsilon)sgn(t)
+    The advantage of conditional broadening is that it is only applied
+    when needed, thus the errors induced in the gradients will be
+    restricted to systems whose gradients would be nan's otherwise. The
+    Lorentzian method, on the other hand, will apply broadening to all
+    systems, irrespective of whether or not it is necessary. Note that if
+    the h function is a unity operator then this is identical to a
+    standard backwards pass through an eigen-solver.
 
-        and for, Lorentzian broadening:
+    Mathematical discussions regarding the Cholesky decomposition are
+    made with reference to the "Generalized Symmetric Definite
+    Eigenproblems" chapter of Lapack. [Lapack]_
 
-        .. math:: h(t) = \frac{t^2 + \epsilon}{t}
+    When operating in batch mode the zero valued padding columns and rows
+    will result in the generation of "ghost" eigen-values/vectors. These
+    are mostly harmless, but make it more difficult to extract the actual
+    eigen-values/vectors. This function will move the "ghost" entities to
+    the ends of their respective lists, making it easy to clip them out.
 
-        The advantage of conditional broadening is that it is only applied
-        when needed, thus the errors induced in the gradients will be
-        restricted to systems whose gradients would be nan's otherwise. The
-        Lorentzian method, on the other hand, will apply broadening to all
-        systems, irrespective of whether or not it is necessary. Note that if
-        the h function is a unity operator then this is identical to a
-        standard backwards pass through an eigen-solver.
+    Warnings
+    --------
+    If operating upon zero-padded packed tensors then degenerate and zero
+    valued eigen values will be encountered. This will **always** cause an
+    error during the backwards pass unless broadening is enacted.
 
-        Mathematical discussions regarding the Cholesky decomposition are
-        made with reference to the  "Generalized Symmetric Definite
-        Eigenproblems" chapter of Lapack. [Lapack]_
+    As `torch.symeig` sorts its results prior to returning them, it is
+    likely that any "ghost" eigen-values/vectors, which result from zero-
+    padded packing, will be located in the middle of the returned arrays.
+    This makes down-stream processing more challenging. Thus, the sort_out
+    option is enabled by default. This results in the "ghost" values being
+    moved to the end. **However**, this method identifies any entry with a
+    zero-valued eigenvalue and an eigenvector which can be interpreted as
+    a column of an identity matrix as a ghost.
 
-        When operating in batch mode the zero valued padding columns and rows
-        will result in the generation of "ghost" eigen-values/vectors. These
-        are mostly harmless, but make it more difficult to extract the actual
-        eigen-values/vectors. This function will move the "ghost" entities to
-        the ends of their respective lists, making it easy to clip them out.
-
-        .. [*] Where stability is defined as the propensity of a function to
-               return nan values or some raise an error.
-
-    Warnings:
-        If operating upon zero-padded packed tensors then degenerate and zero
-        valued eigen values will be encountered. This will **always** cause an
-        error during the backwards pass unless broadening is enacted.
-
-        As ``torch.symeig`` sorts its results prior to returning them, it is
-        likely that any "ghost" eigen-values/vectors, which result from zero-
-        padded packing, will be located in the middle of the returned arrays.
-        This makes down-stream processing more challenging. Thus, the sort_out
-        option is enabled by default. This results in the "ghost" values being
-        moved to the end. **However**, this method identifies any entry with a
-        zero-valued eigenvalue and an eigenvector which can be interpreted as
-        a column of an identity matrix as a ghost.
-
-    References:
-        .. [MS2019] Seeger, M., Hetzel, A., Dai, Z., & Meissner, E. Auto-
-                    Differentiating Linear Algebra. ArXiv:1710.08717 [Cs,
-                    Stat], Aug. 2019. arXiv.org,
-                    http://arxiv.org/abs/1710.08717.
-        .. [LH2019] Liao, H.-J., Liu, J.-G., Wang, L., & Xiang, T. (2019).
-                    Differentiable Programming Tensor Networks. Physical
-                    Review X, 9(3).
-        .. [Lapack] www.netlib.org/lapack/lug/node54.html (Accessed 21/04/2023)
-
+    References
+    ----------
+    .. [MS2019] Seeger, M., Hetzel, A., Dai, Z., & Meissner, E. Auto-
+                Differentiating Linear Algebra. ArXiv:1710.08717 [Cs,
+                Stat], Aug. 2019. arXiv.org,
+                http://arxiv.org/abs/1710.08717.
+    .. [LH2019] Liao, H.-J., Liu, J.-G., Wang, L., & Xiang, T. (2019).
+                Differentiable Programming Tensor Networks. Physical
+                Review X, 9(3).
+    .. [Lapack] www.netlib.org/lapack/lug/node54.html (Accessed 21/04/2023)
     """
     mask = None  # satisfy type checker
     v: Tensor
     w: Tensor
 
+    if torch.__version__ < (2, 0, 0):  # pragma: no cover # type: ignore
+        _SymEigB = _SymEigBroad_V1
+    else:
+        _SymEigB = _SymEigBroad_V2
+
     # Initial setup to make function calls easier to deal with
     # If smearing use _SymEigB otherwise use torch.linalg.eigh
-    func = _SymEigB.apply if broadening_method else torch.linalg.eigh
+    func: Callable = _SymEigB.apply if broadening_method else torch.linalg.eigh
     # Set up for the arguments
     args = (broadening_method, factor) if broadening_method else ()
 
@@ -578,7 +761,11 @@ def eighb(
     # If sort_out is enabled, nullify the "ghost" eigen-values
     if sort_out:
         if aux and mask is not None:
-            w = torch.where(~mask, w, w.new_tensor(0))
+            w = torch.where(
+                ~mask,
+                w,
+                torch.tensor(0, device=w.device, dtype=w.dtype),
+            )
         else:
             w, v = _eig_sort_out(w, v, not aux)
 
