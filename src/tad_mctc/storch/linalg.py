@@ -659,7 +659,7 @@ def eighb(
     v: Tensor
     w: Tensor
 
-    if torch.__version__ < (2, 0, 0):  # type:ignore
+    if torch.__version__ < (2, 0, 0):  # pragma: no cover # type: ignore
         _SymEigB = _SymEigBroad_V1
     else:
         _SymEigB = _SymEigBroad_V2
