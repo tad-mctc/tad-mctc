@@ -155,3 +155,7 @@ def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
 
     jacobian_func = jacrev(simple_function)
     jacobian_func(x, y)
+
+    # requires multiple unwraps in tensor_to_numpy conversion
+    jacobian_func = jacrev(jacrev(simple_function))
+    jacobian_func(x.detach().clone().requires_grad_(), y)

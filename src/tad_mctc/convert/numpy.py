@@ -105,20 +105,22 @@ def tensor_to_numpy(x: Tensor, dtype: DTypeLike | None = None) -> NDArray[Any]:
     if dtype is None:
         dtype = torch_to_numpy_dtype_dict.get(x.dtype, np.dtype(np.float64))
 
+    xdtype = torch_to_numpy_dtype_dict.get(x.dtype)
     x = x.detach().cpu()
 
     # pylint: disable=protected-access
     # see: https://github.com/pytorch/pytorch/issues/91810
     if torch._C._functorch.is_gradtrackingtensor(x):
-        x = torch._C._functorch.get_unwrapped(x)
+        while torch._C._functorch.is_functorch_wrapped_tensor(x) is True:
+            x = torch._C._functorch.get_unwrapped(x)
 
         if torch.__version__ < (2, 0, 0):  # pragma: no cover # type: ignore
-            interpreted_list = np.array(x.storage().tolist(), dtype=dtype)
+            interpreted = np.array(x.storage().tolist(), dtype=dtype)
         else:
             storage_bytes = bytes(x.untyped_storage())  # type: ignore
-            interpreted_list = np.frombuffer(storage_bytes, dtype=dtype)
+            interpreted = np.frombuffer(storage_bytes, dtype=xdtype).astype(dtype)
 
-        return interpreted_list.reshape(x.shape)
+        return interpreted.reshape(x.shape)
 
     _x: NDArray[Any] = x.numpy()
     return _x.astype(dtype)
