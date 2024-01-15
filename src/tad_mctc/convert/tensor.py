@@ -19,9 +19,9 @@
 Conversion: Array/Tensor
 ========================
 
-This module contains function for conversions of PyTorch tensors. This 
+This module contains function for conversions of PyTorch tensors. This
 includes, for example, reshaping.
-Conversion into tensors from other data types (integer, float, etc.) is not 
+Conversion into tensors from other data types (integer, float, etc.) is not
 provided by this module.
 """
 from __future__ import annotations
