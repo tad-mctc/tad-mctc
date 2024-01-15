@@ -24,22 +24,25 @@ import pytest
 import torch
 
 from tad_mctc.convert import reshape_fortran, symmetrize
+from tad_mctc.typing import DD
+
+from ..conftest import DEVICE
 
 
 def test_reshape_fortran_1d() -> None:
-    x = torch.tensor([1, 2, 3, 4, 5, 6])
+    x = torch.tensor([1, 2, 3, 4, 5, 6], device=DEVICE)
     reshaped = reshape_fortran(x, (3, 2))
 
     # check the shape
     assert reshaped.shape == torch.Size((3, 2))
 
     # check values for correctness
-    expected_values = torch.tensor([[1, 4], [2, 5], [3, 6]])
+    expected_values = torch.tensor([[1, 4], [2, 5], [3, 6]], device=DEVICE)
     assert torch.equal(reshaped, expected_values)
 
 
 def test_reshape_fortran_2d() -> None:
-    x = torch.tensor([[1, 2], [3, 4], [5, 6]])
+    x = torch.tensor([[1, 2], [3, 4], [5, 6]], device=DEVICE)
 
     new_shape = (2, 3)
     reshaped = reshape_fortran(x, new_shape)
@@ -48,12 +51,12 @@ def test_reshape_fortran_2d() -> None:
     assert reshaped.shape == torch.Size(new_shape)
 
     # check values to ensure column-major order
-    expected_values = torch.tensor([[1, 5, 4], [3, 2, 6]])
+    expected_values = torch.tensor([[1, 5, 4], [3, 2, 6]], device=DEVICE)
     assert torch.equal(reshaped, expected_values)
 
 
 def test_reshape_fortran_scalar() -> None:
-    x = torch.tensor(5)
+    x = torch.tensor(5, device=DEVICE)
     assert len(x.shape) == 0
 
     # scalar tensor can only be reshaping to a 1-element shape
@@ -64,13 +67,16 @@ def test_reshape_fortran_scalar() -> None:
     assert reshaped.shape == torch.Size(new_shape)
 
     # check the values (all equal to the scalar value)
-    expected_values = torch.full(new_shape, 5)
+    expected_values = torch.full(new_shape, 5, device=DEVICE)
     assert torch.equal(reshaped, expected_values)
 
 
-def test_symmetrize_fail() -> None:
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_symmetrize_fail(dtype: torch.dtype) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
     with pytest.raises(RuntimeError):
-        symmetrize(torch.tensor([1, 2, 3]))
+        symmetrize(torch.tensor([1, 2, 3], device=DEVICE))
 
     with pytest.raises(RuntimeError):
         mat = torch.tensor(
@@ -78,18 +84,23 @@ def test_symmetrize_fail() -> None:
                 [1.0, 2.0, 3.0],
                 [2.0, 2.0, 2.0],
                 [4.0, 3.0, 3.0],
-            ]
+            ],
+            device=DEVICE,
         )
         symmetrize(mat)
 
 
-def test_symmetrize_success() -> None:
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_symmetrize_success(dtype: torch.dtype) -> None:  #
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
     mat = torch.tensor(
         [
             [1.0, 2.0, 3.0],
             [2.0, 2.0, 2.0],
             [3.0, 2.0, 3.0],
-        ]
+        ],
+        **dd,
     )
 
     sym = symmetrize(mat)

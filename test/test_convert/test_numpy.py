@@ -27,7 +27,9 @@ import pytest
 import torch
 
 from tad_mctc import convert
-from tad_mctc.typing import Tensor, get_default_dtype
+from tad_mctc.typing import DD, Tensor, get_default_dtype
+
+from ..conftest import DEVICE
 
 
 def test_np_to_torch_float32() -> None:
@@ -121,9 +123,11 @@ def test_torch_to_np_with_device(device_str: str) -> None:
 def test_torch_to_np_with_transforms_fail() -> None:
     from tad_mctc.autograd import jacrev
 
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
     # Create a tensor with requires_grad=True
-    x = torch.randn(3, 3, requires_grad=True)
-    y = torch.randn(3, 3)
+    x = torch.tensor([3, 3], **dd, requires_grad=True)
+    y = torch.tensor([[3, 2], [1, 4]], dtype=torch.double)
 
     def simple_function(x: Tensor, y: Tensor) -> Tensor:
         _ = np.array(y.tolist())  # fails!
@@ -139,8 +143,10 @@ def test_torch_to_np_with_transforms_fail() -> None:
 def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
     from tad_mctc.autograd import jacrev
 
-    x = torch.randn(3, 3, requires_grad=True)
-    y = torch.tensor([[3, 2], [1, 4]], dtype=dtype)
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    x = torch.tensor([3, 3], **dd, requires_grad=True)
+    y = torch.tensor([[3, 2], [1, 4]], **dd)
 
     npdtype = convert.numpy.torch_to_numpy_dtype_dict[dtype]
 
@@ -155,3 +161,7 @@ def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
 
     jacobian_func = jacrev(simple_function)
     jacobian_func(x, y)
+
+    # requires multiple unwraps in tensor_to_numpy conversion
+    jacobian_func = jacrev(jacrev(simple_function))
+    jacobian_func(x.detach().clone().requires_grad_(), y)

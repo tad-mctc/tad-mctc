@@ -22,16 +22,18 @@ import torch
 
 from tad_mctc import convert
 
+from ..conftest import DEVICE
+
 
 def test_symbol_to_number() -> None:
     symbols = ["H", "He", "C", "C", "Eu"]
-    numbers = torch.tensor([1, 2, 6, 6, 63])
+    numbers = torch.tensor([1, 2, 6, 6, 63], device=DEVICE)
 
     assert (convert.symbol_to_number(symbols) == numbers).all()
 
 
 def test_number_to_symbol() -> None:
     symbols = ["H", "He", "C", "C", "Eu"]
-    numbers = torch.tensor([1, 2, 6, 6, 63])
+    numbers = torch.tensor([1, 2, 6, 6, 63], device=DEVICE)
 
     assert convert.number_to_symbol(numbers) == symbols
