@@ -23,8 +23,9 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tad_mctc.typing import DD
 from tad_mctc.convert import reshape_fortran, symmetrize
+from tad_mctc.typing import DD
+
 from ..conftest import DEVICE
 
 
