@@ -91,7 +91,7 @@ def test_symmetrize_fail(dtype: torch.dtype) -> None:
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
-def test_symmetrize_success(dtype: torch.dtype) -> None:  #
+def test_symmetrize_success(dtype: torch.dtype) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     mat = torch.tensor(

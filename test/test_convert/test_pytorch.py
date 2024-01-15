@@ -21,6 +21,7 @@ Test PyTorch conversion tools.
 from unittest.mock import patch
 
 import pytest
+import torch
 
 from tad_mctc import convert
 
@@ -58,3 +59,90 @@ def test_str_to_device_with_cuda():
             device = convert.str_to_device("cuda")
             assert device.type == "cuda"
             assert device.index == 0
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_any_to_tensor_with_tensor(dtype: torch.dtype):
+    ref = torch.tensor([1, 2, 3], dtype=dtype)
+    result = convert.any_to_tensor(ref, dtype=dtype)
+
+    assert torch.is_tensor(result)
+    assert result.dtype == dtype
+    assert pytest.approx(ref) == result
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_any_to_tensor_with_list(dtype: torch.dtype):
+    result = convert.any_to_tensor([1, 2, 3], dtype=dtype)
+    ref = torch.tensor([1, 2, 3], dtype=dtype)
+
+    assert torch.is_tensor(result)
+    assert result.dtype == dtype
+    assert pytest.approx(ref) == result
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_any_to_tensor_with_list_2(dtype: torch.dtype):
+    result = convert.any_to_tensor([1, 2.5, False], dtype=dtype)
+    assert torch.is_tensor(result)
+    assert result.dtype == dtype
+    assert torch.allclose(result, torch.tensor([1, 2.5, 0], dtype=dtype))
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_any_to_tensor_with_float(dtype: torch.dtype):
+    result = convert.any_to_tensor(3.14, dtype=dtype)
+    assert torch.is_tensor(result)
+    assert result.dtype == dtype
+    assert pytest.approx(3.14) == result.item()
+
+
+@pytest.mark.parametrize("dtype", [torch.int64, torch.double])
+def test_any_to_tensor_with_int(dtype: torch.dtype):
+    result = convert.any_to_tensor(42, dtype=dtype)
+    assert torch.is_tensor(result)
+    assert result.dtype == dtype
+    assert pytest.approx(42.0) == result.item()
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_any_to_tensor_with_bool(dtype: torch.dtype):
+    result = convert.any_to_tensor(True, dtype=dtype)
+    assert torch.is_tensor(result)
+    assert result.dtype == dtype
+
+    # For bool, it should be True, else 1
+    assert result.item() == 1 if dtype != torch.bool else True
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_any_to_tensor_with_string(dtype: torch.dtype):
+    result = convert.any_to_tensor("2.718", dtype=dtype)
+    assert torch.is_tensor(result)
+    assert result.dtype == dtype
+    assert pytest.approx(2.718) == result.item()
+
+
+def test_any_to_tensor_with_invalid_string():
+    with pytest.raises(ValueError) as exc_info:
+        convert.any_to_tensor("not_a_number")
+
+        err_msg = "Cannot convert string 'not_a_number' to float"
+        assert err_msg in str(exc_info.value)
+
+
+def test_any_to_tensor_with_incompatible_type():
+    with pytest.raises(TypeError) as exc_info:
+        convert.any_to_tensor({"key": "value"})
+
+        err_msg = "Tensor-incompatible type"
+        assert err_msg in str(exc_info.value)
+
+
+@pytest.mark.parametrize("invalid", [[1, "2"], [None, 1], [{"key": "value"}]])
+def test_any_to_tensor_with_invalid_list(invalid):
+    with pytest.raises(ValueError) as exc_info:
+        convert.any_to_tensor(invalid)
+
+        err_msg = "List items must be float, int, or bool types."
+        assert err_msg in str(exc_info.value)
