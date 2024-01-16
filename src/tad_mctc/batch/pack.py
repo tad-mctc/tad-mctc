@@ -32,10 +32,10 @@ __all__ = ["pack"]
 
 
 @overload
-def pack(
+def pack(  # type: ignore[misc]
     tensors: TensorOrTensors,
     axis: int = 0,
-    value: Any = 0,
+    value: int | float = 0,
     size: Size | None = None,
     return_mask: Literal[False] = False,
 ) -> Tensor:
@@ -46,7 +46,7 @@ def pack(
 def pack(
     tensors: TensorOrTensors,
     axis: int = 0,
-    value: Any = 0,
+    value: int | float = 0,
     size: Size | None = None,
     return_mask: Literal[True] = True,
 ) -> tuple[Tensor, Tensor]:

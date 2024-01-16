@@ -182,7 +182,11 @@ def unpack(
     if tensor.ndim == 1:
         # Split tensor into non-padded and padded parts
         non_padded, padded = torch.split(
-            tensor, [torch.sum(tensor != value), torch.sum(tensor == value)]
+            tensor,
+            [
+                int(torch.sum(tensor != value).item()),
+                int(torch.sum(tensor == value).item()),
+            ],
         )
         return (non_padded,) if non_padded.nelement() > 0 else (padded,)
 
