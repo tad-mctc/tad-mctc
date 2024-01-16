@@ -27,7 +27,7 @@ import pytest
 import torch
 
 from tad_mctc import convert
-from tad_mctc.typing import DD, Tensor, get_default_dtype, Generator
+from tad_mctc.typing import DD, Generator, Tensor, get_default_dtype
 
 from ..conftest import DEVICE
 
