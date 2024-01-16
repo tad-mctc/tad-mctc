@@ -154,11 +154,11 @@ class SymEigBroadBase(torch.autograd.Function):
     KNOWN_METHODS = ["cond", "lorn", "none"]
 
     @staticmethod
-    def backward(
+    def backward(  # type: ignore[override]
         ctx: Any,
         w_bar: Tensor,
         v_bar: Tensor,
-    ) -> tuple[Tensor, None, None]:  # type: ignore[override]
+    ) -> tuple[Tensor, None, None]:
         """
         Evaluates gradients of the eigen decomposition operation.
 
@@ -261,8 +261,11 @@ class _SymEigBroad_V1(SymEigBroadBase):  # pragma: no cover
     """
 
     @staticmethod
-    def forward(
-        ctx: Any, a: Tensor, method: str = "cond", factor: float = 1e-12
+    def forward(  # type: ignore[override]
+        ctx: Any,
+        a: Tensor,
+        method: str = "cond",
+        factor: float = 1e-12,
     ) -> tuple[Tensor, Tensor]:
         """
         Calculate the eigenvalues and eigenvectors of a symmetric matrix.
@@ -336,8 +339,10 @@ class _SymEigBroad_V2(SymEigBroadBase):
     """
 
     @staticmethod
-    def forward(
-        a: Tensor, method: str = "cond", factor: float = 1e-12
+    def forward(  # type: ignore[override]
+        a: Tensor,
+        method: str = "cond",
+        factor: float = 1e-12,
     ) -> tuple[Tensor, Tensor]:
         """
         Calculate the eigenvalues and eigenvectors of a symmetric matrix.
@@ -389,7 +394,9 @@ class _SymEigBroad_V2(SymEigBroadBase):
         return w, v
 
     @staticmethod
-    def setup_context(ctx, inputs: tuple, outputs: tuple[Tensor, Tensor]):
+    def setup_context(
+        ctx: Any, inputs: tuple[Any, ...], outputs: tuple[Tensor, Tensor]
+    ) -> None:
         """
         Sets up the context for backward computation in a PyTorch autograd
         function.
@@ -417,7 +424,10 @@ class _SymEigBroad_V2(SymEigBroadBase):
         intended to be called directly by users. It is automatically invoked
         during the forward pass of a custom autograd function.
         """
-        a, method, factor = inputs
+        a: Tensor = inputs[0]
+        method: str = inputs[1]
+        factor: float = inputs[2]
+
         w, v = outputs
 
         # Save tensors that will be needed in the backward pass
@@ -659,14 +669,14 @@ def eighb(
     v: Tensor
     w: Tensor
 
-    if torch.__version__ < (2, 0, 0):  # pragma: no cover # type: ignore
+    if torch.__version__ < (2, 0, 0):  # type: ignore[operator] # pragma: no cover
         _SymEigB = _SymEigBroad_V1
     else:
-        _SymEigB = _SymEigBroad_V2
+        _SymEigB = _SymEigBroad_V2  # type: ignore[assignment]
 
     # Initial setup to make function calls easier to deal with
     # If smearing use _SymEigB otherwise use torch.linalg.eigh
-    func: Callable = _SymEigB.apply if broadening_method else torch.linalg.eigh
+    func: Callable = _SymEigB.apply if broadening_method else torch.linalg.eigh  # type: ignore[type-arg]
     # Set up for the arguments
     args = (broadening_method, factor) if broadening_method else ()
 

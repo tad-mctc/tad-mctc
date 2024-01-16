@@ -27,7 +27,7 @@ import pytest
 import torch
 
 from tad_mctc import convert
-from tad_mctc.typing import DD, Tensor, get_default_dtype
+from tad_mctc.typing import DD, Generator, Tensor, get_default_dtype
 
 from ..conftest import DEVICE
 
@@ -63,7 +63,7 @@ def test_np_to_torch_default_context() -> None:
     """Test if the dtype is retained."""
 
     @contextmanager
-    def torch_default_dtype(dtype):
+    def torch_default_dtype(dtype: torch.dtype) -> Generator[None, None, None]:
         original_dtype = get_default_dtype()
         torch.set_default_dtype(dtype)
         try:
