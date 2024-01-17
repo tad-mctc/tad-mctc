@@ -21,7 +21,7 @@ Test the checks for the numbers and positions given to the reader and writer.
 import pytest
 import torch
 
-from tad_mctc.exceptions import MoleculeError
+from tad_mctc.exceptions import MoleculeError, MoleculeWarning
 from tad_mctc.io import checks
 
 natoms = 4
@@ -57,6 +57,18 @@ def test_content() -> None:
     numbers_small = torch.tensor([1, 0])
     with pytest.raises(MoleculeError):
         checks.content_checks(numbers_small, positions)
+
+
+def test_deflatable() -> None:
+    positions = torch.tensor([[0.0, 0.0, 1.5], [0.0, 0.0, 0.0]])
+
+    with pytest.warns(MoleculeWarning):
+        checks.deflatable_check(positions, raise_padding_warning=True)
+
+
+def test_deflatable_skip_warning() -> None:
+    positions = torch.tensor([[0.0, 0.0, 1.5], [0.0, 0.0, 0.0]])
+    assert checks.deflatable_check(positions, raise_padding_warning=False)
 
 
 def test_shape_valid() -> None:
