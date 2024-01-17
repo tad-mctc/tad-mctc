@@ -35,6 +35,7 @@ from .compat import Self
 
 __all__ = [
     "DD",
+    "MockTensor",
     "Molecule",
     "get_default_device",
     "get_default_dtype",
@@ -84,6 +85,24 @@ def get_default_dtype() -> torch.dtype:
         PyTorch `dtype` type.
     """
     return torch.tensor(1.0).dtype
+
+
+class MockTensor(Tensor):
+    """
+    Custom Tensor class with overridable device property.
+
+    This can be used for testing different devices on systems, which only have
+    a single device or no CUDA support.
+    """
+
+    @property
+    def device(self) -> Any:
+        """Overridable device property."""
+        return self._device
+
+    @device.setter
+    def device(self, value: Any) -> None:
+        self._device = value
 
 
 class TensorLike:
