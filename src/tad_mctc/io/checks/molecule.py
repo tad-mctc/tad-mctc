@@ -37,6 +37,7 @@ The behavior of this check is best controlled through keyword arguments of the
 respective readers. The available keyword arguments are:
 - padding_value (`float | int`, default: 0): Value for padding used in check
 - raise_padding_exception (`bool`, default: False): Raise an exception (or just a warning)
+- raise_padding_warning (`bool`, default: True): Raise a warning
 - shift_for_last (`bool`, default: False): Automatically shift all positions by a constant if a clash is detected
 - shift_value (`float | int`, default: 1.0): Constant for shift.
 
@@ -183,9 +184,10 @@ def deflatable_check(positions: Tensor, fileobj: IO[Any], **kwargs: Any) -> bool
             positions += kwargs.pop("shift_value", 1.0)
             return True
 
-        # issue warning
-        from warnings import warn
+        if kwargs.pop("raise_padding_warning", True):
+            # issue warning
+            from warnings import warn
 
-        warn(msg, MoleculeWarning)
+            warn(msg, MoleculeWarning)
 
     return True
