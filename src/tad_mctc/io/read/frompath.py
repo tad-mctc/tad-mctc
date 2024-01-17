@@ -57,6 +57,7 @@ class FileReaderFunction(Protocol):
         self,
         filepath: PathLike,
         mode: str = "r",
+        encoding: str = "utf-8",
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> Tensor | tuple[Tensor, Tensor]:
@@ -82,6 +83,7 @@ def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
     def read_from_path(
         filepath: PathLike,
         mode: str = "r",
+        encoding: str = "utf-8",
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
         **kwargs: Any,
@@ -95,6 +97,8 @@ def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
             Path of file containing the structure.
         mode : str, optional
             Mode in which the file is opened. Defaults to `"r"`.
+        encoding : str, optional
+            Encoding for file. Defaults to `"utf-8"`.
         device : torch.device | None, optional
             Device to store the tensor on. Defaults to `None`.
         dtype : torch.dtype | None, optional
@@ -142,6 +146,7 @@ class FileReaderFunctionTensor(Protocol):
         self,
         filepath: PathLike,
         mode: str = "r",
+        encoding: str = "utf-8",
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> Tensor:
@@ -174,6 +179,7 @@ def create_path_reader_dotfiles(
     def read_from_path(
         filepath: PathLike,
         mode: str = "r",
+        encoding: str = "utf-8",
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> Tensor:
@@ -186,6 +192,8 @@ def create_path_reader_dotfiles(
             Path of file containing the structure.
         mode : str, optional
             Mode in which the file is opened. Defaults to `"r"`.
+        encoding : str, optional
+            Encoding for file. Defaults to `"utf-8"`.
         device : torch.device | None, optional
             Device to store the tensor on. Defaults to `None`.
         dtype : torch.dtype | None, optional
@@ -202,10 +210,17 @@ def create_path_reader_dotfiles(
         if not path.exists():
             return torch.tensor(DEFAULT_VALUE, device=device, dtype=dtype)
 
+        if not path.is_dir():
+            path = path.parent
+
         if path.name not in (".CHRG", ".UHF"):
             path = path / name
 
-        with open(path, mode=mode, encoding="utf-8") as fileobj:
+        # Check if the file NOW exists
+        if not path.exists():
+            return torch.tensor(DEFAULT_VALUE, device=device, dtype=dtype)
+
+        with open(path, mode=mode, encoding=encoding) as fileobj:
             return reader_function(fileobj, device, dtype)
 
     return read_from_path
