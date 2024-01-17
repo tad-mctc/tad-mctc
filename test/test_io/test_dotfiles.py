@@ -94,3 +94,40 @@ def test_read_chrg_default(dtype: torch.dtype, name: str) -> None:
 
         assert chrg.dtype == dtype
         assert pytest.approx(torch.tensor(0, **dd)) == chrg
+
+
+@pytest.mark.parametrize("dtype", [torch.long, torch.float, torch.double])
+@pytest.mark.parametrize("name", [".CHRG", ".UHF"])
+def test_read_chrg_default_2(dtype: torch.dtype, name: str) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = Path(tmpdirname)
+
+        if name == ".CHRG":
+            chrg = read.read_chrg_from_path(filepath, **dd)
+        else:
+            chrg = read.read_spin_from_path(filepath, **dd)
+
+        assert chrg.dtype == dtype
+        assert pytest.approx(torch.tensor(0, **dd)) == chrg
+
+
+@pytest.mark.parametrize("dtype", [torch.long, torch.float, torch.double])
+@pytest.mark.parametrize("name", [".CHRG", ".UHF"])
+def test_read_chrg_default_3(dtype: torch.dtype, name: str) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = Path(tmpdirname) / "mol.xyz"
+        with open(filepath, mode="w", encoding="utf-8") as f:
+            f.write("test")
+
+        # also works by just giving the parent directory
+        if name == ".CHRG":
+            chrg = read.read_chrg_from_path(filepath, **dd)
+        else:
+            chrg = read.read_spin_from_path(filepath, **dd)
+
+        assert chrg.dtype == dtype
+        assert pytest.approx(torch.tensor(0, **dd)) == chrg

@@ -206,17 +206,15 @@ def create_path_reader_dotfiles(
         """
         path = Path(filepath)
 
-        # Check if the file exists
-        if not path.exists():
-            return torch.tensor(DEFAULT_VALUE, device=device, dtype=dtype)
+        # possibly coordinate file given -> search dotfile in same directory
+        if path.is_file():
+            if path.name not in (".CHRG", ".UHF"):
+                path = path.parent / name
 
-        if not path.is_dir():
-            path = path.parent
-
-        if path.name not in (".CHRG", ".UHF"):
+        if path.is_dir():
             path = path / name
 
-        # Check if the file NOW exists
+        # Check if the file now exists
         if not path.exists():
             return torch.tensor(DEFAULT_VALUE, device=device, dtype=dtype)
 

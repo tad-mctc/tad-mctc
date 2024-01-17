@@ -137,7 +137,9 @@ def content_checks(numbers: Tensor, positions: Tensor) -> bool:
     return True
 
 
-def deflatable_check(positions: Tensor, fileobj: IO[Any], **kwargs: Any) -> bool:
+def deflatable_check(
+    positions: Tensor, fileobj: IO[Any] | None = None, **kwargs: Any
+) -> bool:
     """
     Check for the last coordinate being at the origin as this might clash with
     padding.
@@ -149,7 +151,7 @@ def deflatable_check(positions: Tensor, fileobj: IO[Any], **kwargs: Any) -> bool
     ----------
     positions : Tensor
         A 2D tensor of shape (n_atoms, 3) containing atomic positions.
-    fileobj : IO[Any]
+    fileobj : IO[Any] | None, optional
         The file-like object from which is read (only for printing).
 
     Returns
@@ -184,8 +186,8 @@ def deflatable_check(positions: Tensor, fileobj: IO[Any], **kwargs: Any) -> bool
             positions += kwargs.pop("shift_value", 1.0)
             return True
 
+        # issue warning
         if kwargs.pop("raise_padding_warning", True):
-            # issue warning
             from warnings import warn
 
             warn(msg, MoleculeWarning)
