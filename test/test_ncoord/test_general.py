@@ -43,8 +43,7 @@ class CNFunction(Protocol):
         cutoff: Tensor | None = None,
         kcn: float = 7.5,
         **kwargs: Any,
-    ) -> Tensor:
-        ...
+    ) -> Tensor: ...
 
 
 @pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq])

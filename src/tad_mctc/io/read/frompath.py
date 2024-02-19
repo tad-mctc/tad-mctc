@@ -47,8 +47,7 @@ class ReaderFunction(Protocol):
         fileobj: IO[Any],
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> Tensor | tuple[Tensor, Tensor]:
-        ...
+    ) -> Tensor | tuple[Tensor, Tensor]: ...
 
 
 @runtime_checkable
@@ -60,8 +59,7 @@ class FileReaderFunction(Protocol):
         encoding: str = "utf-8",
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> Tensor | tuple[Tensor, Tensor]:
-        ...
+    ) -> Tensor | tuple[Tensor, Tensor]: ...
 
 
 def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
@@ -136,8 +134,7 @@ class ReaderFunctionTensor(Protocol):
         fileobj: IO[Any],
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> Tensor:
-        ...
+    ) -> Tensor: ...
 
 
 @runtime_checkable
@@ -149,8 +146,7 @@ class FileReaderFunctionTensor(Protocol):
         encoding: str = "utf-8",
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> Tensor:
-        ...
+    ) -> Tensor: ...
 
 
 def create_path_reader_dotfiles(
