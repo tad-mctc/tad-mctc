@@ -21,7 +21,7 @@ Test hessian.
 import pytest
 import torch
 
-from tad_mctc.autograd import jac
+from tad_mctc.autograd import jacrev
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
@@ -43,7 +43,7 @@ def test_jacobian(dtype: torch.dtype) -> None:
         return A @ x
 
     # Calculate the Hessian using the `jacobian` function
-    jacobian_matrix = jac(linear, argnums=1)(A, x)
+    jacobian_matrix = jacrev(linear, argnums=1)(A, x)
 
     # Expected Jacobian for the quadratic function is A
     assert pytest.approx(A) == jacobian_matrix

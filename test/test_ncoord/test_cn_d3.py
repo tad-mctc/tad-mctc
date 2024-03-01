@@ -23,7 +23,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tad_mctc.autograd import jac
+from tad_mctc.autograd import jacrev
 from tad_mctc.batch import pack
 from tad_mctc.convert import reshape_fortran, tensor_to_numpy
 from tad_mctc.data import radii
@@ -103,8 +103,8 @@ def test_jacobian(dtype: torch.dtype, name: str) -> None:
     # variable to be differentiated
     positions.requires_grad_(True)
 
-    fjac = jac(get_cn, argnums=1)
-    jacobian: Tensor = fjac(numbers, positions)
+    fjac = jacrev(get_cn, argnums=1)
+    jacobian: Tensor = fjac(numbers, positions)  # type: ignore
     jac_np = tensor_to_numpy(jacobian)
 
     assert pytest.approx(ref.cpu(), abs=tol * 10.5) == jac_np
