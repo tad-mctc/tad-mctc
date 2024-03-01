@@ -151,7 +151,7 @@ class SymEigBroadBase(torch.autograd.Function):
     """
 
     # Note that 'none' is included only for testing purposes
-    KNOWN_METHODS = ["cond", "lorn", "none"]
+    KNOWN_METHODS = ["cond", "lorn", "none", None]
 
     @staticmethod
     def backward(  # type: ignore[override]
@@ -310,7 +310,7 @@ class _SymEigBroad_V1(SymEigBroadBase):  # pragma: no cover
 
         # Check that the method is of a known type
         if method not in SymEigBroadBase.KNOWN_METHODS:
-            raise ValueError("Unknown broadening method selected.")
+            raise ValueError(f"Unknown broadening method '{method}' selected.")
 
         # Compute eigen-values & vectors using torch.symeig.
         w, v = torch.linalg.eigh(a)
@@ -385,7 +385,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
         """
         # Check that the method is of a known type
         if method not in SymEigBroadBase.KNOWN_METHODS:
-            raise ValueError("Unknown broadening method selected.")
+            raise ValueError(f"Unknown broadening method '{method}' selected.")
 
         # Compute eigen-values & vectors using torch.symeig.
         w, v = torch.linalg.eigh(a)
@@ -528,10 +528,11 @@ def eighb(
     a: Tensor,
     b: Tensor | None = None,
     scheme: Literal["chol", "lowd"] = "chol",
-    broadening_method: Literal["cond", "lorn", "none"] = "cond",
+    broadening_method: Literal["cond", "lorn"] | None = "cond",
     factor: float = 1e-12,
     sort_out: bool = True,
     aux: bool = True,
+    is_posdef: bool = False,
     **kwargs: Any,
 ) -> tuple[Tensor, Tensor]:
     r"""
@@ -563,7 +564,7 @@ def eighb(
 
         - "cond": conditional broadening. [DEFAULT='cond']
         - "lorn": Lorentzian broadening.
-        - None: no broadening (uses torch.symeig).
+        - None: no broadening (uses `torch.linalg.eigh`).
     factor : float, optional
         The degree of broadening (broadening factor). [Default=1E-12]
     sort_out : bool, optional
@@ -676,9 +677,10 @@ def eighb(
 
     # Initial setup to make function calls easier to deal with
     # If smearing use _SymEigB otherwise use torch.linalg.eigh
-    func: Callable = _SymEigB.apply if broadening_method else torch.linalg.eigh  # type: ignore[type-arg]
+    func: Callable = _SymEigB.apply if broadening_method is not None else torch.linalg.eigh  # type: ignore[type-arg]
+
     # Set up for the arguments
-    args = (broadening_method, factor) if broadening_method else ()
+    args = (broadening_method, factor) if broadening_method is not None else ()
 
     if aux:
         is_zero = torch.eq(a, 0)
@@ -698,12 +700,13 @@ def eighb(
         # encountered in the Löwdin scheme. To ensure positive definiteness
         # the diagonals of padding columns/rows are therefore set to 1.
 
-        # Create a mask which is True wherever a column/row pair is 0-valued
-        is_zero = torch.eq(b, 0)
-        mask = torch.all(is_zero, dim=-1) & torch.all(is_zero, dim=-2)
+        if is_posdef is False:
+            # Create a mask which is True wherever a column/row pair is 0-valued
+            is_zero = torch.eq(b, 0)
+            mask = torch.all(is_zero, dim=-1) & torch.all(is_zero, dim=-2)
 
-        # Set the diagonals at these locations to 1
-        b = b + torch.diag_embed(mask.type(a.dtype))
+            # Set the diagonals at these locations to 1
+            b = b + torch.diag_embed(mask.type(a.dtype))
 
         # For Cholesky decomposition scheme
         if scheme == "chol":

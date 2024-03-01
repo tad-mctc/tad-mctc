@@ -24,7 +24,7 @@ includes:
 - Jacobians
 - Hessians
 """
+from .compat import *
 from .gradcheck import *
 from .hessian import *
 from .internals import *
-from .jac import *

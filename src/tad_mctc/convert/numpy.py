@@ -27,6 +27,7 @@ import numpy as np
 import torch
 from numpy.typing import DTypeLike, NDArray
 
+from ..__version__ import __tversion__
 from ..typing import Any, Tensor, get_default_dtype
 
 __all__ = ["numpy_to_tensor", "tensor_to_numpy"]
@@ -110,17 +111,18 @@ def tensor_to_numpy(x: Tensor, dtype: DTypeLike | None = None) -> NDArray[Any]:
 
     # pylint: disable=protected-access
     # see: https://github.com/pytorch/pytorch/issues/91810
-    if torch._C._functorch.is_gradtrackingtensor(x):
-        while torch._C._functorch.is_functorch_wrapped_tensor(x) is True:
-            x = torch._C._functorch.get_unwrapped(x)
+    if __tversion__ >= (2, 0, 0):
+        if torch._C._functorch.is_gradtrackingtensor(x):
+            while torch._C._functorch.is_functorch_wrapped_tensor(x) is True:
+                x = torch._C._functorch.get_unwrapped(x)
 
-        if torch.__version__ < (2, 0, 0):  # type: ignore[operator] # pragma: no cover
-            interpreted = np.array(x.storage().tolist(), dtype=dtype)
-        else:
-            storage_bytes = bytes(x.untyped_storage())  # type: ignore
-            interpreted = np.frombuffer(storage_bytes, dtype=xdtype).astype(dtype)
+            if __tversion__ < (2, 0, 0):  # type: ignore[operator] # pragma: no cover
+                interpreted = np.array(x.storage().tolist(), dtype=dtype)
+            else:
+                storage_bytes = bytes(x.untyped_storage())  # type: ignore
+                interpreted = np.frombuffer(storage_bytes, dtype=xdtype).astype(dtype)
 
-        return interpreted.reshape(x.shape)
+            return interpreted.reshape(x.shape)
 
     _x: NDArray[Any] = x.numpy()
     return _x.astype(dtype)
