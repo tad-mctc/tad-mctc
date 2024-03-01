@@ -39,8 +39,7 @@ class WriterFunction(Protocol):
         numbers: Tensor,
         positions: Tensor,
         **kwargs: Any,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 @runtime_checkable
@@ -54,8 +53,7 @@ class FileWriterFunction(Protocol):
         fmt: str = "%22.15f",
         overwrite: bool = False,
         **kwargs: Any,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 def create_path_writer(writer_function: WriterFunction) -> FileWriterFunction:
