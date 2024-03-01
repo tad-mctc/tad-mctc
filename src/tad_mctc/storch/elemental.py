@@ -76,13 +76,11 @@ def reciprocal(
     x: Tensor, *, eps: Tensor | float | int | None = None, **kwargs: Any
 ) -> Tensor:
     """
-    Safe divide operation.
+    Safe reciprocal operation.
 
     Parameters
     ----------
     x : Tensor
-        Input tensor (nominator).
-    y : Tensor
         Input tensor (denominator).
     eps : Tensor | float | int | None, optional
         Value added to the denominator. Defaults to `None`, which resolves to
@@ -91,7 +89,7 @@ def reciprocal(
     Returns
     -------
     Tensor
-        Square root of the input tensor.
+        Reciprocal of the input tensor.
 
     Raises
     ------
