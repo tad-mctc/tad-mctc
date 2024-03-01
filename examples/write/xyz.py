@@ -1,8 +1,8 @@
 # SPDX-Identifier: CC0-1.0
 from pathlib import Path
 
-from tad_mctc.io import write
 from tad_mctc.data.molecules import mols
+from tad_mctc.io import write
 
 mol = mols["H2O"]
 numbers = mol["numbers"]
