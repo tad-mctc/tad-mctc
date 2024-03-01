@@ -20,6 +20,7 @@ Test numpy and PyTorch interconversion.
 """
 from __future__ import annotations
 
+import importlib
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -170,14 +171,20 @@ def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
 
 def test_torch_to_np_below_2_0_0():
     with patch("tad_mctc._version.__tversion__", new=(1, 9, 0)):
+        # reload cached module to ensure that version is reloaded
+        importlib.reload(convert.numpy)
+
         tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
         result = convert.tensor_to_numpy(tensor)
 
-        assert isinstance(result, np.ndarray)
+        assert isinstance(result, np.ndarray), "Result is not an ndarray"
 
 
 def test_torch_to_np_above_2_0_0():
     with patch("tad_mctc._version.__tversion__", new=(2, 0, 0)):
+        # reload cached module to ensure that version is reloaded
+        importlib.reload(convert.numpy)
+
         with patch(
             "torch._C._functorch.is_gradtrackingtensor", return_value=False
         ) as mock_is_gradtrackingtensor:

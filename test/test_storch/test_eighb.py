@@ -209,12 +209,16 @@ def test_eighb_general_batch() -> None:
             ]
         )
 
+        is_zero = torch.eq(b_batch, 0)
+        mask = torch.all(is_zero, dim=-1) & torch.all(is_zero, dim=-2)
+        b_batch = b_batch + torch.diag_embed(mask.type(b_batch.dtype))
+
         aux_settings = [True, False]
         schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
         for scheme in schemes:
             for aux in aux_settings:
                 (w_calc, _) = storch.linalg.eighb(
-                    a_batch, b_batch, scheme=scheme, aux=aux
+                    a_batch, b_batch, scheme=scheme, aux=aux, is_posdef=True
                 )
 
                 mae_w = torch.max(torch.abs(w_calc - w_ref))
@@ -250,7 +254,7 @@ def test_eighb_broadening_grad() -> None:
 
     def eigen_proxy(
         m: Tensor,
-        target_method: Literal["none", "cond", "lorn"] | None,
+        target_method: Literal["cond", "lorn"] | None,
         size_data: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
         m = symmetrize(m, force=True)
@@ -265,10 +269,10 @@ def test_eighb_broadening_grad() -> None:
     a1_np = numpy_to_tensor(np.random.rand(8, 8), **dd)
     a1 = symmetrize(a1_np, force=True)
 
-    method: Literal["none", "cond", "lorn"] | None
-    broadening_methods: list[Literal["none", "cond", "lorn"] | None]
+    method: Literal["cond", "lorn"] | None
+    broadening_methods: list[Literal["cond", "lorn"] | None]
 
-    broadening_methods = [None, "none", "cond", "lorn"]
+    broadening_methods = [None, "cond", "lorn"]
     for method in broadening_methods:
         # dgradcheck detaches
         a1.requires_grad = True
