@@ -175,10 +175,8 @@ def test_torch_to_np_below_2_0_0():
     torch_version = tad_mctc._version.__tversion__
 
     with patch("tad_mctc._version.__tversion__", new=(1, 9, 0)):
-        # reload cached module to ensure that version is reloaded
+        # reload cached module to ensure that patched version is used
         importlib.reload(convert.numpy)
-
-        print(tad_mctc._version.__tversion__)
 
         tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
         result = convert.tensor_to_numpy(tensor)
@@ -196,7 +194,7 @@ def test_torch_to_np_above_2_0_0():
     torch_version = tad_mctc._version.__tversion__
 
     with patch("tad_mctc._version.__tversion__", new=(2, 0, 0)):
-        # reload cached module to ensure that version is reloaded
+        # reload cached module to ensure that patched version is used
         importlib.reload(convert.numpy)
 
         with patch(
@@ -205,12 +203,12 @@ def test_torch_to_np_above_2_0_0():
             tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
             result = convert.tensor_to_numpy(tensor)
 
-            assert isinstance(result, np.ndarray)
+            assert isinstance(result, np.ndarray), "Result is not an ndarray"
 
             # Check that `mock_is_gradtrackingtensor` was called once
             assert mock_is_gradtrackingtensor.call_count == 1
 
-            # Check that 1st call to `mock_is_gradtrackingtensor` had correct args
+            # Check that 1st call had correct args
             called_tensor = mock_is_gradtrackingtensor.call_args[0][0]
             assert torch.equal(called_tensor, tensor)
 
