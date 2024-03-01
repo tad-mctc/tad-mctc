@@ -21,6 +21,7 @@ Test numpy and PyTorch interconversion.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -165,3 +166,29 @@ def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
     # requires multiple unwraps in tensor_to_numpy conversion
     jacobian_func = jacrev(jacrev(simple_function))
     jacobian_func(x.detach().clone().requires_grad_(), y)
+
+
+def test_torch_to_np_below_2_0_0():
+    with patch("tad_mctc._version.__tversion__", new=(1, 9, 0)):
+        tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
+        result = convert.tensor_to_numpy(tensor)
+
+        assert isinstance(result, np.ndarray)
+
+
+def test_torch_to_np_above_2_0_0():
+    with patch("tad_mctc._version.__tversion__", new=(2, 0, 0)):
+        with patch(
+            "torch._C._functorch.is_gradtrackingtensor", return_value=False
+        ) as mock_is_gradtrackingtensor:
+            tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
+            result = convert.tensor_to_numpy(tensor)
+
+            assert isinstance(result, np.ndarray)
+
+            # Check that `mock_is_gradtrackingtensor` was called once
+            assert mock_is_gradtrackingtensor.call_count == 1
+
+            # Check that 1st call to `mock_is_gradtrackingtensor` had correct args
+            called_tensor = mock_is_gradtrackingtensor.call_args[0][0]
+            assert torch.equal(called_tensor, tensor)

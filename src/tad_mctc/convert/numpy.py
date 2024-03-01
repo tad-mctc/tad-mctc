@@ -27,7 +27,7 @@ import numpy as np
 import torch
 from numpy.typing import DTypeLike, NDArray
 
-from ..__version__ import __tversion__
+from .._version import __tversion__
 from ..typing import Any, Tensor, get_default_dtype
 
 __all__ = ["numpy_to_tensor", "tensor_to_numpy"]
