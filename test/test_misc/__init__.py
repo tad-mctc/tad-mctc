@@ -15,7 +15,3 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
-"""
-Module containing the version string.
-"""
-__version__ = "0.0.5"

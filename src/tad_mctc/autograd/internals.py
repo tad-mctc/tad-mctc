@@ -35,6 +35,6 @@ if torch.__version__ < (2, 0, 0):  # type: ignore[operator]
     try:
         from functorch import jacrev  # type: ignore[import-error]
     except ModuleNotFoundError:
-        jacrev = None
+        from .compat import jacrev_compat as jacrev
 else:
     from torch.func import jacrev  # type: ignore[import-error]

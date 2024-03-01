@@ -21,7 +21,8 @@ Test hessian.
 import pytest
 import torch
 
-from tad_mctc.autograd import jacrev
+from tad_mctc.autograd.compat import jacrev_compat as jacrev
+from tad_mctc.convert import tensor_to_numpy
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
@@ -47,3 +48,28 @@ def test_jacobian(dtype: torch.dtype) -> None:
 
     # Expected Jacobian for the quadratic function is A
     assert pytest.approx(A) == jacobian_matrix
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_argument_propagation(dtype: torch.dtype) -> None:
+    dd = {"device": DEVICE, "dtype": dtype}
+
+    def two_arg_func(x: Tensor, y: Tensor) -> Tensor:
+        return x * y
+
+    x = torch.tensor([1.0, 2.0], requires_grad=True, **dd)
+    y = torch.tensor([3.0, 4.0], requires_grad=True, **dd)
+
+    f_jac = jacrev(two_arg_func, argnums=1)
+    jacobian_matrix = f_jac(x, y)
+    expected = tensor_to_numpy(torch.diag(x))
+    assert pytest.approx(expected) == jacobian_matrix
+
+
+def test_non_tensor_input_error() -> None:
+    def simple_func(x):
+        return x**2
+
+    f_jac = jacrev(simple_func)
+    with pytest.raises(RuntimeError):
+        f_jac("not a tensor")

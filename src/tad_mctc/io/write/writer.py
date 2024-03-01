@@ -52,6 +52,7 @@ class FileWriterFunction(Protocol):
         positions: Tensor,
         mode: str = "w",
         fmt: str = "%22.15f",
+        overwrite: bool = False,
         **kwargs: Any,
     ) -> None:
         ...
@@ -79,14 +80,18 @@ def create_path_writer(writer_function: WriterFunction) -> FileWriterFunction:
         positions: Tensor,
         mode: str = "w",
         fmt: str = "%22.15f",
+        overwrite: bool = False,
         **kwargs: Any,
     ) -> None:
         path = Path(filepath)
 
         # Check if the file already exists
         if mode.strip() == "w":
-            if path.exists():
-                raise FileExistsError(f"The file '{filepath}' already exists.")
+            if path.exists() and overwrite is False:
+                raise FileExistsError(
+                    f"The file '{filepath}' already exists. If you want to "
+                    "overwrite it, set `overwrite=True`."
+                )
 
         with open(path, mode=mode, encoding="utf-8") as fileobj:
             writer_function(fileobj, numbers, positions, fmt=fmt, **kwargs)

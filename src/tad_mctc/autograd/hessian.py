@@ -30,7 +30,7 @@ from __future__ import annotations
 import torch
 
 from ..typing import Any, Callable, Tensor
-from .jac import jac
+from .internals import jacrev
 
 __all__ = ["hessian"]
 
@@ -40,6 +40,7 @@ def hessian(
     inputs: tuple[Any, ...],
     argnums: int,
     is_batched: bool = False,
+    **kwargs: Any,
 ) -> Tensor:
     """
     Wrapper for Hessian. The Hessian is the Jacobian of the gradient.
@@ -74,6 +75,7 @@ def hessian(
         )
 
     def _grad(*inps: tuple[Any, ...]) -> Tensor:
+        print(inps)
         e = f(*inps).sum()
 
         # catch missing gradients
@@ -87,7 +89,7 @@ def hessian(
         )
         return g
 
-    _jac = jac(_grad, argnums=argnums)
+    _jac = jacrev(_grad, argnums=argnums, **kwargs)
 
     if is_batched:
         raise NotImplementedError("Batched Hessian not available.")

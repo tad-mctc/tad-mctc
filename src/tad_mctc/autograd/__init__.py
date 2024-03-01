@@ -27,4 +27,3 @@ includes:
 from .gradcheck import *
 from .hessian import *
 from .internals import *
-from .jac import *

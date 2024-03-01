@@ -28,7 +28,7 @@ import torch
 from ..typing import Any, Tensor
 from .utils import get_eps
 
-__all__ = ["divide", "sqrt"]
+__all__ = ["divide", "reciprocal", "sqrt"]
 
 
 def divide(
@@ -70,6 +70,46 @@ def divide(
         )
 
     return torch.divide(x, (y + eps), **kwargs)
+
+
+def reciprocal(
+    x: Tensor, *, eps: Tensor | float | int | None = None, **kwargs: Any
+) -> Tensor:
+    """
+    Safe reciprocal operation.
+
+    Parameters
+    ----------
+    x : Tensor
+        Input tensor (denominator).
+    eps : Tensor | float | int | None, optional
+        Value added to the denominator. Defaults to `None`, which resolves to
+        `torch.finfo(x.dtype).eps`.
+
+    Returns
+    -------
+    Tensor
+        Reciprocal of the input tensor.
+
+    Raises
+    ------
+    TypeError
+        Value for addition to denominator has wrong type.
+    """
+    if eps is None:
+        eps = get_eps(x)
+    elif isinstance(eps, (float, int)):
+        eps = torch.tensor(eps, device=x.device, dtype=x.dtype)
+    elif isinstance(eps, Tensor):
+        eps = eps.to(device=x.device, dtype=x.dtype)
+    else:
+        raise TypeError(
+            "Value for clamping must be None (default), Tensor, float, or int, "
+            f"but {type(eps)} was given."
+        )
+
+    one = torch.tensor(1.0, device=x.device, dtype=x.dtype)
+    return torch.divide(one, x + eps, **kwargs)
 
 
 def sqrt(x: Tensor, *, eps: Tensor | float | int | None = None) -> Tensor:

@@ -59,6 +59,9 @@ def test_sqrt(dtype: torch.dtype) -> None:
     assert (torch.isnan(out) == False).all()
 
 
+###############################################################################
+
+
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_divide_fail(dtype: torch.dtype) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
@@ -86,4 +89,35 @@ def test_divide(dtype: torch.dtype) -> None:
     assert (torch.isnan(out) == False).all()
 
     out = storch.divide(x, y, eps=torch.tensor(torch.finfo(dtype).eps))
+    assert (torch.isnan(out) == False).all()
+
+
+###############################################################################
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_reciprocal_fail(dtype: torch.dtype) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+    x = torch.tensor([1, 2, 3], **dd)
+
+    with pytest.raises(TypeError):
+        storch.reciprocal(x, eps="0")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_reciprocal(dtype: torch.dtype) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
+    x = torch.tensor([-1, 2, 3], **dd)
+
+    out = storch.reciprocal(x)
+    assert (torch.isnan(out) == False).all()
+
+    out = storch.reciprocal(x, eps=0.1)
+    assert (torch.isnan(out) == False).all()
+
+    out = storch.reciprocal(x, eps=0)
+    assert (torch.isnan(out) == False).all()
+
+    out = storch.reciprocal(x, eps=torch.tensor(torch.finfo(dtype).eps))
     assert (torch.isnan(out) == False).all()
