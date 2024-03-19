@@ -84,7 +84,6 @@ def jacrev_compat(
         # `jacobian` only takes tensors, requiring another wrapper that
         # passes the non-tensor arguments to the function `f`
         def _f(arg: Tensor) -> Tensor:
-            print(*(*before, arg, *after))
             return f(*(*before, arg, *after))
 
         return jacobian(_f, inputs=diffarg, **kwargs)  # type: ignore # pylint: disable=used-before-assignment
