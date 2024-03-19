@@ -75,7 +75,6 @@ def hessian(
         )
 
     def _grad(*inps: tuple[Any, ...]) -> Tensor:
-        print(inps)
         e = f(*inps).sum()
 
         # catch missing gradients
