@@ -16,37 +16,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Typing: Builtins
-================
+Math
+====
 
-This module contains all used built-in type annotations.
+This module provides mathematical utilities and functions.
 """
-from typing import (
-    IO,
-    Any,
-    Callable,
-    Iterable,
-    Iterator,
-    Literal,
-    NoReturn,
-    Protocol,
-    TypedDict,
-    TypeVar,
-    overload,
-    runtime_checkable,
-)
 
-__all__ = [
-    "IO",
-    "Any",
-    "Callable",
-    "Iterable",
-    "Iterator",
-    "Literal",
-    "NoReturn",
-    "Protocol",
-    "TypedDict",
-    "TypeVar",
-    "overload",
-    "runtime_checkable",
-]
+from .einsum import *
