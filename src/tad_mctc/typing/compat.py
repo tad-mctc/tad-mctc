@@ -30,6 +30,8 @@ from pathlib import Path
 import torch
 from torch import Tensor
 
+from .builtin import Any, TypeVar
+
 __all__ = [
     "Callable",
     "CountingFunction",
@@ -44,6 +46,7 @@ __all__ = [
     "TensorOrTensors",
     "TypeGuard",
     "override",
+    "_wraps",
 ]
 
 
@@ -114,3 +117,31 @@ else:
         f"'tad_mctc' requires at least Python 3.8 (Python {vinfo.major}."
         f"{vinfo.minor}.{vinfo.micro} found)."
     )
+
+
+T = TypeVar("T")
+
+
+def _wraps(
+    wrapped: Callable,
+    namestr: str | None = None,
+    docstr: str | None = None,
+    **kwargs: Any,
+) -> Callable[[T], T]:
+    def wrapper(fun: T) -> T:
+        try:
+            name = getattr(wrapped, "__name__", "<unnamed function>")
+            doc = getattr(wrapped, "__doc__", "") or ""
+            fun.__dict__.update(getattr(wrapped, "__dict__", {}))
+            fun.__annotations__ = getattr(wrapped, "__annotations__", {})
+            fun.__name__ = name if namestr is None else namestr.format(fun=name)  # type: ignore
+            fun.__module__ = getattr(wrapped, "__module__", "<unknown module>")
+            fun.__doc__ = (
+                doc if docstr is None else docstr.format(fun=name, doc=doc, **kwargs)
+            )
+            fun.__qualname__ = getattr(wrapped, "__qualname__", fun.__name__)  # type: ignore
+            fun.__wrapped__ = wrapped  # type: ignore
+        finally:
+            return fun
+
+    return wrapper
