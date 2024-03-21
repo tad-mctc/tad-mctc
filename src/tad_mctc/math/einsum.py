@@ -26,8 +26,8 @@ package. If `opt_einsum` is not installed, it falls back to the `torch.einsum`.
 from __future__ import annotations
 
 import torch
-from ..typing import Any, Tensor, _wraps
 
+from ..typing import Any, Tensor, _wraps
 
 __all__ = [
     "einsum",
@@ -39,10 +39,12 @@ __all__ = [
 try:
     from functools import partial
 
-    from opt_einsum import contract
+    from opt_einsum import contract  # type: ignore[import]
 
     @_wraps(contract)
-    def _torch_einsum(*args: Any, optimize: Any = "greedy") -> Tensor:
+    def _torch_einsum(
+        *args: Any, optimize: Any = "greedy"
+    ) -> Tensor:  # pragma: no cover
         f = partial(contract, backend="torch", optimize=optimize)
         return f(*args)  # type: ignore
 
@@ -64,7 +66,7 @@ try:
 
         return _torch_einsum(*args, optimize=optimize)
 
-except ImportError:
+except ImportError:  # pragma: no cover
 
     @_wraps(torch.einsum)
     def einsum(*args: Any, optimize: Any = None) -> Tensor:
