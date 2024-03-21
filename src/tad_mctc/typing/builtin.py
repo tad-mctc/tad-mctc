@@ -24,6 +24,7 @@ This module contains all used built-in type annotations.
 from typing import (
     IO,
     Any,
+    Callable,
     Iterable,
     Iterator,
     Literal,
@@ -38,13 +39,42 @@ from typing import (
 __all__ = [
     "IO",
     "Any",
-    "Literal",
+    "Callable",
     "Iterable",
     "Iterator",
+    "Literal",
     "NoReturn",
     "Protocol",
     "TypedDict",
     "TypeVar",
     "overload",
     "runtime_checkable",
+    "_wraps",
 ]
+
+T = TypeVar("T")
+
+
+def _wraps(
+    wrapped: Callable,
+    namestr: str | None = None,
+    docstr: str | None = None,
+    **kwargs: Any,
+) -> Callable[[T], T]:
+    def wrapper(fun: T) -> T:
+        try:
+            name = getattr(wrapped, "__name__", "<unnamed function>")
+            doc = getattr(wrapped, "__doc__", "") or ""
+            fun.__dict__.update(getattr(wrapped, "__dict__", {}))
+            fun.__annotations__ = getattr(wrapped, "__annotations__", {})
+            fun.__name__ = name if namestr is None else namestr.format(fun=name)
+            fun.__module__ = getattr(wrapped, "__module__", "<unknown module>")
+            fun.__doc__ = (
+                doc if docstr is None else docstr.format(fun=name, doc=doc, **kwargs)
+            )
+            fun.__qualname__ = getattr(wrapped, "__qualname__", fun.__name__)
+            fun.__wrapped__ = wrapped
+        finally:
+            return fun
+
+    return wrapper

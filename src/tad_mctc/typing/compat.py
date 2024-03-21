@@ -31,20 +31,27 @@ import torch
 from torch import Tensor
 
 __all__ = [
-    "Tensor",
-    "Self",
-    "TypeGuard",
     "Callable",
-    "Generator",
-    "Sequence",
-    "PathLike",
-    "Sliceable",
-    "Size",
-    "TensorOrTensors",
-    "DampingFunction",
     "CountingFunction",
+    "DampingFunction",
+    "Generator",
+    "PathLike",
+    "Self",
+    "Sequence",
+    "Size",
+    "Sliceable",
+    "Tensor",
+    "TensorOrTensors",
+    "TypeGuard",
+    "override",
 ]
 
+
+# Python 3.12
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    from typing_extensions import override
 
 # Python 3.11
 if sys.version_info >= (3, 11):
