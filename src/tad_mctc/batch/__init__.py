@@ -21,6 +21,7 @@ Batch Utility
 
 Functions for dealing with batched calculations.
 """
+from .agnostic import *
 from .mask import *
 from .pack import *
 from .unpack import *
