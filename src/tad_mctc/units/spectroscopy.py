@@ -19,7 +19,7 @@
 Units: Spectroscopy
 ===================
 
-This module contains conversions for units usd in spectroscopy.
+This module contains conversions for units used in spectroscopy.
 """
 from __future__ import annotations
 
@@ -33,10 +33,14 @@ __all__ = [
     "RCM2AU",
     "DEBYE2AU",
     "AU2DEBYE",
+    # IR
     "AU2KMMOL",
     "KMMOL2AU",
     "AU2DAAAMU",
     "DAAAMU2AU",
+    # Raman
+    "AU2AA4AMU",
+    "AA4AMU2AU",
 ]
 
 
@@ -79,3 +83,11 @@ adjusting for mass and the standard reporting units of IR intensity.
 
 KMMOL2AU = 1.0 / AU2KMMOL
 """Conversion factor for IR intensity from km/mol to atomic units."""
+
+# RAMAN
+
+AU2AA4AMU = AU2AA**4 / AU2AMU
+"""Conversion for Raman intensity from atomic units to Angstrom^4/amu."""
+
+AA4AMU2AU = 1.0 / AU2AA4AMU
+"""Conversion for Raman intensity from Angstrom^4/amu to atomic units."""

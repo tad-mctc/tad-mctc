@@ -54,6 +54,27 @@ def mass_center(masses: Tensor, positions: Tensor) -> Tensor:
     return einsum("...z,...zx,...->...x", masses, positions, s)
 
 
+def positions_rel_com(masses: Tensor, positions: Tensor) -> Tensor:
+    """
+    Calculate positions relative to the center of mass.
+
+    Parameters
+    ----------
+    masses : Tensor
+        Atomic masses for all atoms in the system (shape: `(..., nat)`).
+    positions : Tensor
+        Cartesian coordinates of all atoms (shape: `(..., nat, 3)`).
+
+    Returns
+    -------
+    Tensor
+        Cartesian coordinates relative to center of mass (shape:
+        `(..., nat, 3)`).
+    """
+    com = mass_center(masses, positions)
+    return positions - com.unsqueeze(-2)
+
+
 def inertia_moment(
     masses: Tensor,
     positions: Tensor,
@@ -82,8 +103,7 @@ def inertia_moment(
         Inertia tensor of shape `(..., 3, 3)`.
     """
     if pos_already_com is False:
-        com = mass_center(masses, positions)
-        positions = positions - com.unsqueeze(-2)
+        positions = positions_rel_com(masses, positions)
 
     im = einsum("...m,...mx,...my->...xy", masses, positions, positions)
 
@@ -95,6 +115,8 @@ def inertia_moment(
 
 
 # TODO: Check against reference values
+# https://github.com/psi4/psi4/blob/3c2be0144a850eaad3b428ceabc58ff38a163fde/psi4/src/psi4/libmints/molecule.cc#L1353
+# https://github.com/pyscf/pyscf/blob/master/pyscf/hessian/thermo.py#L111
 def rot_consts(masses: Tensor, positions: Tensor) -> Tensor:  # pragma: no cover
     r"""
     Calculate the rotational constants from the inertia tensor.
