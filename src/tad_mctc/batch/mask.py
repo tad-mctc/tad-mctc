@@ -68,20 +68,21 @@ def real_pairs(numbers: Tensor, mask_diagonal: bool = True) -> Tensor:
     """
     real = real_atoms(numbers)
     mask = real.unsqueeze(-2) * real.unsqueeze(-1)
+
     if mask_diagonal is True:
         mask *= ~torch.diag_embed(torch.ones_like(real))
     return mask
 
 
 def real_triples(
-    numbers: torch.Tensor, mask_diagonal: bool = True, mask_self: bool = True
+    numbers: Tensor, mask_diagonal: bool = True, mask_self: bool = True
 ) -> Tensor:
     """
     Create a mask for triples from atomic numbers. Padding value is zero.
 
     Parameters
     ----------
-    numbers : torch.Tensor
+    numbers : Tensor
         Atomic numbers for all atoms.
     mask_diagonal : bool, optional
         Flag for also masking the diagonal, i.e., all pairs with the same
