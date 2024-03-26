@@ -43,6 +43,7 @@ def jacrev_compat(
     """
 
     try:
+        # pylint: disable=import-outside-toplevel
         from torch.autograd.functional import jacobian  # type: ignore[import-error]
     except ImportError as e:
         raise ImportError(

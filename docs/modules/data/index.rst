@@ -5,6 +5,7 @@
 .. toctree::
 
    en
+   getters
    mass
    molecules
    pse
