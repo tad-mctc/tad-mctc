@@ -57,7 +57,6 @@ def bond_angles(numbers: Tensor, positions: Tensor) -> Tensor:
 
     # masking utility to avoid NaN's
     zero = torch.tensor(0.0, **dd)
-    eps = torch.tensor(torch.finfo(positions.dtype).eps, **dd)
     mask = real_triples(numbers, mask_diagonal=True, mask_self=True)
 
     # Expanding dimensions to compute vectors for all combinations
