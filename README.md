@@ -17,8 +17,8 @@
       <a href="https://pypi.org/project/tad-mctc/">
         <img src="https://img.shields.io/pypi/v/tad-mctc?color=orange" alt="PyPI"/>
       </a>
-      <a href="https://www.gnu.org/licenses/lgpl-3.0">
-        <img src="https://img.shields.io/badge/License-LGPL_v3-orange.svg" alt="LGPL-3.0"/>
+      <a href="http://www.apache.org/licenses/LICENSE-2.0">
+        <img src="https://img.shields.io/badge/License-Apache%202.0-orange.svg" alt="Apache-2.0"/>
       </a>
     </td>
   </tr>
