@@ -4,5 +4,6 @@
 
 .. toctree::
 
+   bond
    geometry
    property
