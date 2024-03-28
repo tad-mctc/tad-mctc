@@ -36,16 +36,16 @@ def atomic_numbers():
 
 @pytest.fixture
 def mock_mass_tensor():
-    return torch.tensor([1.0, 4.0, 7.0], dtype=torch.float)
+    return torch.tensor([1.0, 4.0, 7.0, 10.0], dtype=torch.float)
 
 
 @pytest.fixture
 def mock_zeff_tensor():
-    return torch.tensor([1, 2, 3], dtype=torch.int)
+    return torch.tensor([1, 2, 3, 4], dtype=torch.int)
 
 
 def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
-    with patch("tad_mctc.mass.ATOMIC", new=mock_mass_tensor):
+    with patch("tad_mctc.data.mass.ATOMIC", new=mock_mass_tensor):
         # Test in atomic units
         masses = get_atomic_masses(atomic_numbers)
         ref = mock_mass_tensor[atomic_numbers] * GMOL2AU
@@ -58,12 +58,12 @@ def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
 
 
 def test_get_zvalence(atomic_numbers, mock_zeff_tensor):
-    with patch("tad_mctc.zeff.ZVALENCE", new=mock_zeff_tensor):
+    with patch("tad_mctc.data.zeff.ZVALENCE", new=mock_zeff_tensor):
         ref = mock_zeff_tensor[atomic_numbers]
         assert pytest.approx(ref) == get_zvalence(atomic_numbers)
 
 
 def test_get_ecore(atomic_numbers, mock_zeff_tensor):
-    with patch("tad_mctc.zeff.ECORE", new=mock_zeff_tensor):
+    with patch("tad_mctc.data.zeff.ECORE", new=mock_zeff_tensor):
         ref = mock_zeff_tensor[atomic_numbers]
         assert pytest.approx(ref) == get_ecore(atomic_numbers)
