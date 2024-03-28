@@ -20,14 +20,12 @@ Test getters for atomic data.
 """
 from __future__ import annotations
 
-import pytest
-import torch
-
-import pytest
-import torch
 from unittest.mock import patch
 
-from tad_mctc.data.getters import get_atomic_masses, get_zvalence, get_ecore
+import pytest
+import torch
+
+from tad_mctc.data.getters import get_atomic_masses, get_ecore, get_zvalence
 from tad_mctc.units import GMOL2AU
 
 

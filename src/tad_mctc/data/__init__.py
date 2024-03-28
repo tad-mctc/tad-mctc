@@ -30,8 +30,8 @@ Note that the first element of all tensors is a dummy to allow indexing by the
 atomic numbers.
 """
 from .en import *
+from .getters import *
 from .mass import *
 from .pse import *
 from .radii import *
 from .zeff import *
-from .getters import *

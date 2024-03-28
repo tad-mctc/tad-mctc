@@ -19,7 +19,7 @@
 Data: Getter Functions
 ======================
 
-This module only contains some convenience functions for collecting constants 
+This module only contains some convenience functions for collecting constants
 for a given set of atomic numbers.
 """
 
@@ -28,8 +28,8 @@ from __future__ import annotations
 import torch
 
 from ..typing import Tensor
-from . import mass, zeff
 from ..units import GMOL2AU
+from . import mass, zeff
 
 __all__ = ["get_atomic_masses", "get_ecore", "get_zvalence"]
 
