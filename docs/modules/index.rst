@@ -12,6 +12,8 @@ The following modules are contained with `tad_mctc`.
    convert/index
    data/index
    io/index
+   math/index
+   molecule/index
    ncoord/index
    storch/index
    typing/index

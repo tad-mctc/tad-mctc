@@ -16,22 +16,11 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with tad-mctc. If not, see <https://www.gnu.org/licenses/>.
 """
-Data
-====
+Molecule
+========
 
-This module contains various arrays with atomic data:
- - Pauling electronegativities
- - masses
- - covalent radii
- - effective nuclear charges
- - periodic table
-
-Note that the first element of all tensors is a dummy to allow indexing by the
-atomic numbers.
+Collection of utility functions for calculations related to a molecule.
 """
-from .en import *
-from .getters import *
-from .mass import *
-from .pse import *
-from .radii import *
-from .zeff import *
+
+from .geometry import *
+from .property import *

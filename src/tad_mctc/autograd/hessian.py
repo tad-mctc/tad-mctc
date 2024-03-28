@@ -30,7 +30,7 @@ from __future__ import annotations
 import torch
 
 from ..typing import Any, Callable, Tensor
-from .internals import jacrev
+from .compat import jacrev_compat as jacrev
 
 __all__ = ["hessian"]
 

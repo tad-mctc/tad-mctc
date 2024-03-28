@@ -28,16 +28,18 @@ from .length import AA2AU
 
 # fmt: off
 __all__ = [
-    "AU2JOULE", "JOULE2AU",
-    "CAL2JOULE", "JOULE2CAL",
-    "KCAL2JOULE", "JOULE2KCAL",
-    "AU2KCAL", "KCAL2AU",
-    "EV2JOULE", "JOULE2EV",
-    "EV2AU", "AU2EV",
-    "K2JOULE", "K2AU",
     "AU2COULOMB", "COULOMB2AU",
-    "VOLT2AU", "AU2VOLT",
-    "VAA2AU", "AU2VAA",
+    "AU2EV", "EV2AU",
+    "AU2JOULE", "JOULE2AU",
+    "AU2KCAL", "KCAL2AU",
+    "AU2KELVIN", "KELVIN2AU",
+    "AU2VAA", "VAA2AU",
+    "AU2VOLT", "VOLT2AU",
+    #
+    "JOULE2CAL", "CAL2JOULE",
+    "JOULE2KCAL", "KCAL2JOULE",
+    "JOULE2EV", "EV2JOULE",
+    "JOULE2KELVIN", "KELVIN2JOULE",
 ]
 # fmt: on
 
@@ -88,19 +90,29 @@ JOULE2EV = 1.0 / EV2JOULE
 """Factor for conversion from Joule to electron volts."""
 
 EV2AU = EV2JOULE * JOULE2AU
-"""Factor for conversion from eletronvolt to atomic units."""
+"""
+Factor for conversion from eletronvolt to atomic units.
+(electron volt-hartree relationship)
+"""
 
 AU2EV = 1.0 / EV2AU
 """Factor for conversion from atomic units to eletronvolt."""
 
 
-K2JOULE = CODATA.kb
+KELVIN2JOULE = CODATA.kb
 """
 Factor for conversion from Kelvin to Joule.
 This equals the Boltzmann constant.
 """
 
-K2AU = 3.166808578545117e-06
+JOULE2KELVIN = 1.0 / KELVIN2JOULE
+"""Factor for conversion from Joule to Kelvin."""
+
+
+KELVIN2AU = get_constant("kelvin-hartree relationship")
+"""Factor for conversion from Kelvin to atomic units."""
+
+AU2KELVIN = get_constant("hartree-kelvin relationship")
 """Factor for conversion from Kelvin to atomic units."""
 
 
@@ -113,7 +125,7 @@ This equals the elementary charge.
 COULOMB2AU = 1.0 / AU2COULOMB
 """Factor for conversion from Coulomb to atomic units."""
 
-VOLT2AU = JOULE2AU * COULOMB2AU
+VOLT2AU = JOULE2AU / COULOMB2AU
 """Factor for conversion from V = J/C to atomic units."""
 
 AU2VOLT = 1.0 / VOLT2AU

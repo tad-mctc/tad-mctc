@@ -19,16 +19,29 @@
 Units: Spectroscopy
 ===================
 
-This module contains conversions for units usd in spectroscopy.
+This module contains conversions for units used in spectroscopy.
 """
 from __future__ import annotations
 
 from .codata import CODATA
 from .energy import AU2JOULE, COULOMB2AU
-from .length import AA2AU, METER2AU
+from .length import AU2AA, METER2AU
 from .mass import AU2AMU
 
-__all__ = ["AU2RCM", "RCM2AU", "DEBYE2AU", "AU2DEBYE", "AU2KMMOL", "KMMOL2AU"]
+__all__ = [
+    "AU2RCM",
+    "RCM2AU",
+    "DEBYE2AU",
+    "AU2DEBYE",
+    # IR
+    "AU2KMMOL",
+    "KMMOL2AU",
+    "AU2DAAAMU",
+    "DAAAMU2AU",
+    # Raman
+    "AU2AA4AMU",
+    "AA4AMU2AU",
+]
 
 
 AU2RCM = AU2JOULE / (CODATA.h * CODATA.c) * 1e-2
@@ -53,8 +66,15 @@ Conversion from Debye (unit of electric dipole moment) to atomic units.
 AU2DEBYE = 1.0 / DEBYE2AU
 """Conversion from atomic units to Debye."""
 
+# IR
 
-AU2KMMOL = (DEBYE2AU / AA2AU) ** 2 / AU2AMU * 42.256
+AU2DAAAMU = (AU2DEBYE / AU2AA) ** 2 / AU2AMU
+"""Conversion for IR intensity from atomic units to Debye^2/Angstrom^2/amu."""
+
+DAAAMU2AU = 1.0 / AU2DAAAMU
+"""Conversion for IR intensity from Debye^2/Angstrom^2/amu to atomic units."""
+
+AU2KMMOL = AU2DAAAMU * 42.256
 """
 Conversion factor for IR intensity from atomic units to km/mol. This involves
 converting the square of the dipole moment from Debye to atomic units, and
@@ -63,3 +83,11 @@ adjusting for mass and the standard reporting units of IR intensity.
 
 KMMOL2AU = 1.0 / AU2KMMOL
 """Conversion factor for IR intensity from km/mol to atomic units."""
+
+# RAMAN
+
+AU2AA4AMU = AU2AA**4 / AU2AMU
+"""Conversion for Raman intensity from atomic units to Angstrom^4/amu."""
+
+AA4AMU2AU = 1.0 / AU2AA4AMU
+"""Conversion for Raman intensity from Angstrom^4/amu to atomic units."""

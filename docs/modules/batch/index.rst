@@ -4,5 +4,7 @@
 
 .. toctree::
 
+   agnostic
    mask
    pack
+   unpack
