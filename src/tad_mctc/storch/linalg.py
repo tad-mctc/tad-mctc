@@ -31,6 +31,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
+from .._version import __tversion__
 from ..convert import symmetrize
 from ..typing import Any, Callable, Literal, Tensor
 
@@ -101,7 +102,7 @@ class SymEigBroadBase(torch.autograd.Function):
     method : {'cond', 'lorn'}, optional
         Broadening method to use. 'cond' refers to conditional broadening,
         'lorn' to Lorentzian broadening. Default is 'cond'.
-    factor : float, optional
+    factor : Tensor | float, optional
         Degree of broadening (broadening factor). Default is 1E-12.
 
     Returns
@@ -228,7 +229,8 @@ class SymEigBroadBase(torch.autograd.Function):
             deltas = deltas / (deltas**2 + bf)
         elif bm == "none":  # <- Debugging only
             deltas = 1 / deltas
-        else:  # <- Should be impossible to get here
+        else:  # pragma: no cover
+            # Should be impossible to get here
             raise ValueError(f"Unknown broadening method {bm}")
 
         # Construct F matrix where F_ij = v_bar_j - v_bar_i; construction is
@@ -264,7 +266,7 @@ class _SymEigBroad_V1(SymEigBroadBase):  # pragma: no cover
         ctx: Any,
         a: Tensor,
         method: str = "cond",
-        factor: float = 1e-12,
+        factor: Tensor | float = 1e-12,
     ) -> tuple[Tensor, Tensor]:
         """
         Calculate the eigenvalues and eigenvectors of a symmetric matrix.
@@ -311,7 +313,7 @@ class _SymEigBroad_V1(SymEigBroadBase):  # pragma: no cover
         if method not in SymEigBroadBase.KNOWN_METHODS:
             raise ValueError(f"Unknown broadening method '{method}' selected.")
 
-        # Compute eigen-values & vectors using torch.symeig.
+        # Compute eigen-values & vectors
         w, v = torch.linalg.eigh(a)
 
         # Save tensors that will be needed in the backward pass
@@ -341,7 +343,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
     def forward(  # type: ignore[override]
         a: Tensor,
         method: str = "cond",
-        factor: float = 1e-12,
+        factor: Tensor | float = 1e-12,
     ) -> tuple[Tensor, Tensor]:
         """
         Calculate the eigenvalues and eigenvectors of a symmetric matrix.
@@ -386,7 +388,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
         if method not in SymEigBroadBase.KNOWN_METHODS:
             raise ValueError(f"Unknown broadening method '{method}' selected.")
 
-        # Compute eigen-values & vectors using torch.symeig.
+        # Compute eigen-values & vectors
         w, v = torch.linalg.eigh(a)
 
         # Return the eigenvalues and eigenvectors
@@ -425,7 +427,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
         """
         a: Tensor = inputs[0]
         method: str = inputs[1]
-        factor: float = inputs[2]
+        factor: Tensor | float = inputs[2]
 
         w, v = outputs
 
@@ -528,7 +530,7 @@ def eighb(
     b: Tensor | None = None,
     scheme: Literal["chol", "lowd"] = "chol",
     broadening_method: Literal["cond", "lorn"] | None = "cond",
-    factor: float = 1e-12,
+    factor: Tensor | float = 1e-12,
     sort_out: bool = True,
     aux: bool = True,
     is_posdef: bool = False,
@@ -669,7 +671,7 @@ def eighb(
     v: Tensor
     w: Tensor
 
-    if torch.__version__ < (2, 0, 0):  # type: ignore[operator] # pragma: no cover
+    if __tversion__ < (2, 0, 0):  # type: ignore[operator] # pragma: no cover
         _SymEigB = _SymEigBroad_V1
     else:
         _SymEigB = _SymEigBroad_V2  # type: ignore[assignment]
@@ -714,6 +716,7 @@ def eighb(
 
             # Compute the inverse of L:
             if kwargs.get("direct_inv", False):
+                print("Direct inversion")
                 # Via the direct method if specifically requested
                 l_inv = torch.inverse(l)
             else:

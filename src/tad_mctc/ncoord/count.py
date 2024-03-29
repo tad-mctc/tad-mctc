@@ -101,7 +101,8 @@ def gfn2_count(
     r_shift: Tensor | float | int = defaults.R_SHIFT,
 ) -> Tensor:
     """
-    Exponential counting function for coordination number contributions as used in GFN2-xTB.
+    Exponential counting function for coordination number contributions as used
+    in GFN2-xTB.
 
     Parameters
     ----------

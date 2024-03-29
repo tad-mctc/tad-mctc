@@ -30,10 +30,20 @@ from scipy import linalg  # type: ignore
 from tad_mctc import storch
 from tad_mctc.autograd import dgradcheck
 from tad_mctc.batch import pack
-from tad_mctc.convert import numpy_to_tensor, symmetrize, tensor_to_numpy
+from tad_mctc.convert import numpy_to_tensor, symmetrizef, tensor_to_numpy
 from tad_mctc.typing import DD, Literal, Tensor
 
 from ..conftest import DEVICE, FAST_MODE
+
+
+def _rng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
+    s = (size,) if isinstance(size, int) else size
+    n = np.random.rand(*s)
+    return numpy_to_tensor(n, **dd)  # type: ignore[arg-type]
+
+
+def _symrng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
+    return symmetrizef(_rng(size, dd))
 
 
 def clean_zero_padding(m: Tensor, sizes: Tensor) -> Tensor:
@@ -93,12 +103,12 @@ def clean_zero_padding(m: Tensor, sizes: Tensor) -> Tensor:
 def test_eighb_fail() -> None:
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
-    a = symmetrize(
-        numpy_to_tensor(np.random.rand(10, 10), **dd),
-        force=True,
-    )
+    a = symmetrizef(numpy_to_tensor(np.random.rand(10, 10), **dd))
     with pytest.raises(ValueError):
         storch.linalg.eighb(a, broadening_method="unknown")  # type:ignore
+
+    with pytest.raises(ValueError):
+        storch.linalg.eighb(a, b=a, scheme="unknown")  # type:ignore
 
 
 def test_eighb_standard_single() -> None:
@@ -106,14 +116,12 @@ def test_eighb_standard_single() -> None:
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
     for _ in range(10):
-        a = symmetrize(
-            numpy_to_tensor(np.random.rand(10, 10), **dd),
-            force=True,
-        )
+        a = _symrng((10, 10), dd)
 
         w_ref = linalg.eigh(tensor_to_numpy(a))[0]
 
-        w_calc, v_calc = storch.linalg.eighb(a)
+        factor = torch.tensor(1e-12, **dd)
+        w_calc, v_calc = storch.linalg.eighb(a, factor=factor, aux=False)
 
         mae_w = torch.max(torch.abs(w_calc.cpu() - w_ref))
         mae_v = torch.max(torch.abs((v_calc @ v_calc.T).fill_diagonal_(0)))
@@ -132,10 +140,7 @@ def test_eighb_standard_batch() -> None:
 
     for _ in range(10):
         sizes = np.random.randint(2, 10, (11,))
-        a = [
-            symmetrize(numpy_to_tensor(np.random.rand(s, s), **dd), force=True)
-            for s in sizes
-        ]
+        a = [_symrng((s, s), dd) for s in sizes]
         a_batch = pack(a)
 
         w_ref = pack(
@@ -152,22 +157,22 @@ def test_eighb_standard_batch() -> None:
         assert same_device, "Device persistence check"
 
 
-def test_eighb_general_single() -> None:
+@pytest.mark.parametrize("direct_inverse", [True, False])
+def test_eighb_general_single(direct_inverse: bool) -> None:
     """eighb accuracy on a single general eigenvalue problem."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
     for _ in range(10):
-        a_np = numpy_to_tensor(np.random.rand(10, 10), **dd)
-        a = symmetrize(a_np, force=True)
-
-        b_np = numpy_to_tensor(np.random.rand(10), **dd)
-        b = symmetrize(torch.eye(10, **dd) * b_np, force=True)
+        a = _symrng((10, 10), dd)
+        b = symmetrizef(torch.eye(10, **dd) * _rng((10,), dd))
 
         w_ref = linalg.eigh(tensor_to_numpy(a), tensor_to_numpy(b))[0]
 
         schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
         for scheme in schemes:
-            w_calc, v_calc = storch.linalg.eighb(a, b, scheme=scheme)
+            w_calc, v_calc = storch.linalg.eighb(
+                a, b, scheme=scheme, direct_inv=direct_inverse
+            )
 
             mae_w = torch.max(torch.abs(w_calc.cpu() - w_ref))
             mae_v = torch.max(torch.abs((v_calc @ v_calc.T).fill_diagonal_(0)))
@@ -186,17 +191,8 @@ def test_eighb_general_batch() -> None:
 
     for _ in range(10):
         sizes = np.random.randint(2, 10, (11,))
-        a = [
-            symmetrize(numpy_to_tensor(np.random.rand(s, s), **dd), force=True)
-            for s in sizes
-        ]
-        b = [
-            symmetrize(
-                torch.eye(s, **dd) * numpy_to_tensor(np.random.rand(s), **dd),
-                force=True,
-            )
-            for s in sizes
-        ]
+        a = [_symrng((s, s), dd) for s in sizes]
+        b = [symmetrizef(torch.eye(s, **dd) * _rng((s,), dd)) for s in sizes]
         a_batch, b_batch = pack(a), pack(b)
 
         w_ref = pack(
@@ -256,7 +252,7 @@ def test_eighb_broadening_grad() -> None:
         target_method: Literal["cond", "lorn"] | None,
         size_data: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        m = symmetrize(m, force=True)
+        m = symmetrizef(m)
         if size_data is not None:
             m = clean_zero_padding(m, size_data)
         if target_method is None:
@@ -265,8 +261,7 @@ def test_eighb_broadening_grad() -> None:
             return storch.linalg.eighb(m, broadening_method=target_method)
 
     # Generate a single standard eigenvalue test instance
-    a1_np = numpy_to_tensor(np.random.rand(8, 8), **dd)
-    a1 = symmetrize(a1_np, force=True)
+    a1 = _symrng((8, 8), dd)
 
     method: Literal["cond", "lorn"] | None
     broadening_methods: list[Literal["cond", "lorn"] | None]
@@ -277,7 +272,10 @@ def test_eighb_broadening_grad() -> None:
         a1.requires_grad = True
 
         grad_is_safe = dgradcheck(
-            lambda a2, method_l=method: eigen_proxy(a2, target_method=method_l),
+            lambda a2, method_l=method: eigen_proxy(
+                a2,
+                target_method=method_l,  # type: ignore[arg-type]
+            ),
             (a1,),
             fast_mode=FAST_MODE,
         )
@@ -285,12 +283,7 @@ def test_eighb_broadening_grad() -> None:
 
     # Generate a batch of standard eigenvalue test instances
     sizes = np.random.randint(3, 8, (5,))
-    a2 = pack(
-        [
-            symmetrize(numpy_to_tensor(np.random.rand(s, s), **dd), force=True)
-            for s in sizes
-        ]
-    )
+    a2 = pack([_symrng((s, s), dd) for s in sizes])
 
     for method in broadening_methods[2:]:
         # dgradcheck detaches!
@@ -299,7 +292,7 @@ def test_eighb_broadening_grad() -> None:
         grad_is_safe = dgradcheck(
             lambda a2_l, method_l=method: eigen_proxy(
                 a2_l,
-                target_method=method_l,
+                target_method=method_l,  # type: ignore[arg-type]
                 size_data=numpy_to_tensor(sizes, **dd),
             ),
             (a2,),
@@ -319,19 +312,17 @@ def test_eighb_general_grad() -> None:
         target_scheme: Literal["chol", "lowd"],
         size_data: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
-        m, n = symmetrize(m, force=True), symmetrize(n, force=True)
+        m, n = symmetrizef(m), symmetrizef(n)
         if size_data is not None:
             m = clean_zero_padding(m, size_data)
             n = clean_zero_padding(n, size_data)
 
-        return storch.linalg.eighb(m, n, scheme=target_scheme)
+        factor = torch.tensor(1e-12, **dd)
+        return storch.linalg.eighb(m, n, scheme=target_scheme, factor=factor)
 
     # Generate a single generalised eigenvalue test instance
-    a1_np = numpy_to_tensor(np.random.rand(8, 8), **dd)
-    a1 = symmetrize(a1_np, force=True)
-
-    b1_np = numpy_to_tensor(np.random.rand(8), **dd)
-    b1 = symmetrize(torch.eye(8, **dd) * b1_np, force=True)
+    a1 = _symrng((8, 8), dd)
+    b1 = symmetrizef(torch.eye(8, **dd) * _rng((8,), dd), force=True)
 
     scheme: Literal["chol", "lowd"]
     schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
@@ -342,7 +333,9 @@ def test_eighb_general_grad() -> None:
         # dgradcheck only takes tensors, but: Loop variable capture of lambda
         grad_is_safe = dgradcheck(
             lambda a1_l, b1_l, scheme_l=scheme: eigen_proxy(
-                a1_l, b1_l, target_scheme=scheme_l
+                a1_l,
+                b1_l,
+                target_scheme=scheme_l,  # type: ignore[arg-type]
             ),
             (a1, b1),
             fast_mode=False,
@@ -351,21 +344,8 @@ def test_eighb_general_grad() -> None:
 
     # Generate a batch of generalised eigenvalue test instances
     sizes = np.random.randint(3, 8, (5,))
-    a2 = pack(
-        [
-            symmetrize(numpy_to_tensor(np.random.rand(s, s), **dd), force=True)
-            for s in sizes
-        ]
-    )
-    b2 = pack(
-        [
-            symmetrize(
-                torch.eye(int(s), **dd) * numpy_to_tensor(np.random.rand(int(s)), **dd),
-                force=True,
-            )
-            for s in sizes
-        ]
-    )
+    a2 = pack([_symrng((s, s), dd) for s in sizes])
+    b2 = pack([symmetrizef(torch.eye(s, **dd) * _rng((s,), dd)) for s in sizes])
 
     # sometimes randomly fails with "chol" on random GA runners
     schemes = ["lowd"]
@@ -378,7 +358,7 @@ def test_eighb_general_grad() -> None:
                 a2_l,
                 b2_l,
                 size_data=size_data_l,
-                target_scheme=scheme_l,
+                target_scheme=scheme_l,  # type: ignore[arg-type]
             ),
             (a2, b2, numpy_to_tensor(sizes, **dd)),
             fast_mode=False,
