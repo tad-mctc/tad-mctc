@@ -4,6 +4,7 @@
 
 .. toctree::
 
+   batched
    gradcheck
    hessian
    internals

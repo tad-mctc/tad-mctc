@@ -10,6 +10,8 @@ from __future__ import annotations
 from ..typing import Callable, Tensor
 from .internals import jacrev, vmap
 
+__all__ = ["bjacrev"]
+
 
 def bjacrev(
     func: Callable[..., Tensor], argnums: int = 0, **kwargs
