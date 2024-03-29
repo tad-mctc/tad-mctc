@@ -1,4 +1,4 @@
-# This file is part of tad-multicharge.
+# This file is part of tad-mctc.
 #
 # SPDX-Identifier: Apache-2.0
 # Copyright (C) 2024 Grimme Group
