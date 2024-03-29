@@ -86,5 +86,5 @@ def test_read_tblite_engrad(dtype: torch.dtype, file: str) -> None:
         **dd
     )
 
-    assert pytest.approx(ref_e) == energies
-    assert pytest.approx(ref_g) == gradients
+    assert pytest.approx(ref_e.cpu()) == energies.cpu()
+    assert pytest.approx(ref_g.cpu()) == gradients.cpu()

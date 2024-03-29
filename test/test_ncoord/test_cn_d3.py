@@ -15,19 +15,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test calculation of DFT-D4 coordination number.
+Test calculation of DFT-D3 coordination number.
 """
 from __future__ import annotations
 
 import pytest
 import torch
 
-from tad_mctc.autograd import jacrev
 from tad_mctc.batch import pack
-from tad_mctc.convert import reshape_fortran, tensor_to_numpy
 from tad_mctc.data import radii
 from tad_mctc.ncoord import cn_d3 as get_cn
-from tad_mctc.typing import DD, Tensor
+from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
 from .samples import samples
@@ -80,53 +78,3 @@ def test_batch(dtype: torch.dtype, name1: str, name2: str) -> None:
 
     cn = get_cn(numbers, positions)
     assert pytest.approx(ref.cpu()) == cn.cpu()
-
-
-@pytest.mark.grad
-@pytest.mark.parametrize("dtype", [torch.double])
-@pytest.mark.parametrize("name", ["SiH4", "MB16_43_01"])
-def test_jacobian(dtype: torch.dtype, name: str) -> None:
-    dd: DD = {"device": DEVICE, "dtype": dtype}
-    tol = 1e-7
-
-    sample = samples[name]
-    numbers = sample["numbers"].to(DEVICE)
-    positions = sample["positions"].to(**dd)
-
-    ref = sample["dcn3dr"].to(**dd)
-    ref = reshape_fortran(ref, (3, *2 * (numbers.shape[0],)))
-    ref = torch.einsum("xij->jix", ref)
-
-    numgrad = calc_numgrad(numbers, positions)
-
-    # variable to be differentiated
-    pos = positions.clone().requires_grad_(True)
-
-    fjac = jacrev(get_cn, argnums=1)
-    jacobian: Tensor = fjac(numbers, pos)  # type: ignore
-    jac_np = tensor_to_numpy(jacobian)
-
-    assert pytest.approx(ref.cpu(), abs=tol * 10.5) == jac_np
-    assert pytest.approx(ref.cpu(), abs=tol * 10) == numgrad.cpu()
-    assert pytest.approx(numgrad.cpu(), abs=tol) == jac_np
-
-
-def calc_numgrad(numbers: Tensor, positions: Tensor) -> Tensor:
-    n_atoms = positions.shape[0]
-    gradient = torch.zeros(
-        (n_atoms, n_atoms, 3), device=positions.device, dtype=positions.dtype
-    )
-    step = 1.0e-6
-
-    for i in range(n_atoms):
-        for j in range(3):
-            positions[i, j] += step
-            cnr = get_cn(numbers, positions)
-
-            positions[i, j] -= 2 * step
-            cnl = get_cn(numbers, positions)
-
-            positions[i, j] += step
-            gradient[:, i, j] = 0.5 * (cnr - cnl) / step
-
-    return gradient

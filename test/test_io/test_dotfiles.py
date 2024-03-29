@@ -75,7 +75,7 @@ def test_read_chrg(dtype: torch.dtype, name: str) -> None:
             chrg = read.read_spin_from_path(Path(tmpdirname), **dd)
 
         assert chrg.dtype == dtype
-        assert pytest.approx(torch.tensor(1, **dd)) == chrg
+        assert pytest.approx(1) == chrg.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.long, torch.float, torch.double])
@@ -92,7 +92,7 @@ def test_read_chrg_default(dtype: torch.dtype, name: str) -> None:
             chrg = read.read_spin_from_path(filepath, **dd)
 
         assert chrg.dtype == dtype
-        assert pytest.approx(torch.tensor(0, **dd)) == chrg
+        assert pytest.approx(0) == chrg.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.long, torch.float, torch.double])
@@ -109,7 +109,7 @@ def test_read_chrg_default_2(dtype: torch.dtype, name: str) -> None:
             chrg = read.read_spin_from_path(filepath, **dd)
 
         assert chrg.dtype == dtype
-        assert pytest.approx(torch.tensor(0, **dd)) == chrg
+        assert pytest.approx(0) == chrg.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.long, torch.float, torch.double])
@@ -129,4 +129,4 @@ def test_read_chrg_default_3(dtype: torch.dtype, name: str) -> None:
             chrg = read.read_spin_from_path(filepath, **dd)
 
         assert chrg.dtype == dtype
-        assert pytest.approx(torch.tensor(0, **dd)) == chrg
+        assert pytest.approx(0) == chrg.cpu()

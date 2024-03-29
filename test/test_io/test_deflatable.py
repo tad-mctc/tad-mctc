@@ -61,7 +61,7 @@ def test_read_atom() -> None:
     ref_positions = torch.tensor([[1.0, 1.0, 1.0]])
 
     assert (ref_numbers == numbers).all()
-    assert pytest.approx(ref_positions) == positions
+    assert pytest.approx(ref_positions.cpu()) == positions.cpu()
 
 
 def test_read_atom2() -> None:
@@ -75,7 +75,7 @@ def test_read_atom2() -> None:
     ref_positions = torch.tensor([[0.3, 0.3, 0.3]]) * AA2AU
 
     assert (ref_numbers == numbers).all()
-    assert pytest.approx(ref_positions) == positions
+    assert pytest.approx(ref_positions.cpu()) == positions.cpu()
 
 
 def test_read_fail_last_zero() -> None:

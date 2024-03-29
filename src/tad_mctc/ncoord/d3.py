@@ -29,9 +29,9 @@ from ..batch import real_pairs
 from ..data import radii
 from ..typing import DD, Any, CountingFunction, Tensor
 from . import defaults
-from .count import exp_count
+from .count import dexp_count, exp_count
 
-__all__ = ["cn_d3"]
+__all__ = ["cn_d3", "cn_d3_gradient"]
 
 
 def cn_d3(
@@ -108,3 +108,82 @@ def cn_d3(
     )
 
     return torch.sum(cf, dim=-1)
+
+
+def cn_d3_gradient(
+    numbers: Tensor,
+    positions: Tensor,
+    *,
+    dcounting_function: CountingFunction = dexp_count,
+    rcov: Tensor | None = None,
+    cutoff: Tensor | None = None,
+    kcn: float = defaults.KCN_D3,
+    **kwargs: Any,
+) -> Tensor:
+    """
+    Compute the derivative of the fractional coordination number with respect
+    to atomic positions.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers for all atoms in the system.
+    positions : Tensor
+        Atomic positions of molecular structure.
+    dcounting_function : CountingFunction
+        Derivative of the counting function.
+    rcov : Tensor | None, optional
+        Covalent radii for each species. Defaults to `None`.
+    cutoff : Tensor | None, optional
+        Real-space cutoff. Defaults to `None`.
+    kwargs : dict[str, Any]
+        Pass-through arguments for counting function.
+
+    Returns
+    -------
+    Tensor
+        Coordination numbers for all atoms.
+
+    Raises
+    ------
+    ValueError
+        If shape mismatch between `numbers`, `positions` and `rcov` is detected.
+    """
+    dd: DD = {"device": positions.device, "dtype": positions.dtype}
+
+    if cutoff is None:
+        cutoff = torch.tensor(defaults.CUTOFF_D3, **dd)
+
+    if rcov is None:
+        rcov = radii.COV_D3.to(**dd)[numbers]
+    else:
+        rcov = rcov.to(**dd)
+
+    if numbers.shape != rcov.shape:
+        raise ValueError(
+            f"Shape of covalent radii {rcov.shape} is not consistent with "
+            f"({numbers.shape})."
+        )
+    if numbers.shape != positions.shape[:-1]:
+        raise ValueError(
+            f"Shape of positions ({positions.shape[:-1]}) is not consistent "
+            f"with atomic numbers ({numbers.shape})."
+        )
+
+    eps = torch.tensor(torch.finfo(positions.dtype).eps, **dd)
+
+    mask = real_pairs(numbers, mask_diagonal=True)
+    distances = torch.where(mask, storch.cdist(positions, positions, p=2), eps)
+
+    rc = rcov.unsqueeze(-2) + rcov.unsqueeze(-1)
+    dcf = torch.where(
+        mask * (distances <= cutoff),
+        dcounting_function(distances, rc, kcn, **kwargs),
+        torch.tensor(0.0, **dd),
+    )
+
+    # (..., nat, nat, 3)
+    rij = positions.unsqueeze(-3) - positions.unsqueeze(-2)
+
+    # (..., nat, nat, 1) * (..., nat, nat, 3)
+    return (dcf / distances).unsqueeze(-1) * rij  # "...ij,...ijx->...ijx"

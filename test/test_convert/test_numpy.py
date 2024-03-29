@@ -209,7 +209,7 @@ def test_torch_to_np_above_2_0_0():
 
             # Check that 1st call had correct args
             called_tensor = mock_is_gradtrackingtensor.call_args[0][0]
-            assert torch.equal(called_tensor, tensor)
+            assert torch.equal(called_tensor.cpu(), tensor.cpu())
 
     # reload for actual version
     importlib.reload(convert.numpy)

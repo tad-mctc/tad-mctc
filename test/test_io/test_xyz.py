@@ -88,7 +88,7 @@ def test_write_and_read(dtype: torch.dtype, name: str) -> None:
 
     # Check if the read data matches the written data
     assert (read_numbers == numbers).all()
-    assert pytest.approx(positions) == read_positions
+    assert pytest.approx(positions.cpu()) == read_positions.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -123,4 +123,4 @@ def test_write_and_read_batch(dtype: torch.dtype, name1: str, name2: str) -> Non
 
     # Check if the read data matches the written data
     assert (read_numbers == numbers_batch).all()
-    assert pytest.approx(positions_batch) == read_positions
+    assert pytest.approx(positions_batch.cpu()) == read_positions.cpu()

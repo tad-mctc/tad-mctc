@@ -25,11 +25,13 @@ provided by this module.
 """
 from __future__ import annotations
 
+from functools import partial
+
 import torch
 
 from ..typing import Size, Tensor
 
-__all__ = ["reshape_fortran", "symmetrize"]
+__all__ = ["reshape_fortran", "symmetrize", "symmetrizef"]
 
 
 def reshape_fortran(x: Tensor, shape: Size) -> Tensor:
@@ -75,19 +77,25 @@ def symmetrize(x: Tensor, force: bool = False) -> Tensor:
     RuntimeError
         If the tensor is not symmetric within the threshold.
     """
-    try:
-        atol = torch.finfo(x.dtype).eps * 10
-    except TypeError:
-        atol = 1e-5
-
     if x.ndim < 2:
         raise RuntimeError("Only matrices and batches thereof allowed.")
 
-    if force is False:
-        if not torch.allclose(x, x.mT, atol=atol):
-            raise RuntimeError(
-                f"Matrix appears to be not symmetric (atol={atol:.3e}, "
-                f"dtype={x.dtype})."
-            )
+    if force is True:
+        return (x + x.mT) / 2.0
 
-    return (x + x.mT) / 2
+    try:
+        atol = torch.finfo(x.dtype).eps * 10
+    except TypeError:  # pragma: no cover
+        atol = 1e-5
+
+    if not torch.allclose(x, x.mT, atol=atol):
+        raise RuntimeError(
+            f"Matrix appears to be not symmetric (atol={atol:.3e}, "
+            f"dtype={x.dtype})."
+        )
+
+    return (x + x.mT) / 2.0
+
+
+symmetrizef = partial(symmetrize, force=True)
+"""Force symmetrization of a tensor."""

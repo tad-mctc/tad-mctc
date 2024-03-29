@@ -48,7 +48,7 @@ def test_bond_length(dtype: torch.dtype) -> None:
     )
 
     bond_length = guess_bond_length(numbers, cn)
-    assert pytest.approx(ref, abs=1e-4) == bond_length
+    assert pytest.approx(ref.cpu(), abs=1e-4) == bond_length.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -100,7 +100,7 @@ def test_bo_single(dtype: torch.dtype) -> None:
     )
 
     bo = guess_bond_order(numbers, positions, cn)
-    assert pytest.approx(ref, abs=1e-4) == bo
+    assert pytest.approx(ref.cpu(), abs=1e-4) == bo.cpu()
 
     ref_mask = bo > 0.3
     assert (mask == ref_mask).all()
@@ -173,4 +173,4 @@ def test_bo_batch(dtype: torch.dtype) -> None:
     )
 
     bond_order = guess_bond_order(numbers, positions, cn)
-    assert pytest.approx(ref, abs=1e-4) == bond_order
+    assert pytest.approx(ref.cpu(), abs=1e-4) == bond_order.cpu()

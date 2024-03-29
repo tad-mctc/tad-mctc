@@ -25,15 +25,18 @@ autograd functions, which we definitely require. Additionally, `functorch`
 imposes the implementation of a `forward` **and** `setup_context` method, i.e.,
 the traditional way of using `forward` with the `ctx` argument does not work.
 """
+from __future__ import annotations
+
 import torch
 
-__all__ = ["jacrev"]
+__all__ = ["jacrev", "vmap"]
 
 
 if torch.__version__ < (2, 0, 0):  # type: ignore[operator]
     try:
-        from functorch import jacrev  # type: ignore[import-error]
+        from functorch import jacrev, vmap  # type: ignore[import-error]
     except ModuleNotFoundError:
         from .compat import jacrev_compat as jacrev
+        from .compat import vmap_compat as vmap
 else:
-    from torch.func import jacrev  # type: ignore[import-error]
+    from torch.func import jacrev, vmap  # type: ignore[import-error]

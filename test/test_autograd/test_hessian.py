@@ -45,7 +45,7 @@ def test_hessian(dtype: torch.dtype) -> None:
     hessian_matrix = hessian(quadratic, (A, x), argnums=1)
 
     # Expected Hessian for the quadratic function is 2A
-    assert pytest.approx(2 * A) == hessian_matrix
+    assert pytest.approx(2 * A.cpu()) == hessian_matrix.cpu()
 
 
 def test_hessian_runtime_error() -> None:
@@ -69,4 +69,4 @@ def test_hessian_missing_gradients() -> None:
 
     # Expecting a zero matrix of shape [2, 2] as the function is constant
     expected_hessian = torch.zeros((2, 2), dtype=x.dtype, device=x.device)
-    assert pytest.approx(expected_hessian) == hessian_matrix
+    assert pytest.approx(expected_hessian.cpu()) == hessian_matrix.cpu()

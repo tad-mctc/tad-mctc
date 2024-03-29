@@ -22,6 +22,8 @@ Utilities for calculating Jacobians via autograd.
 """
 from __future__ import annotations
 
+import torch
+
 from ..typing import Any, Callable, Tensor
 
 __all__ = ["jacrev_compat"]
@@ -89,3 +91,50 @@ def jacrev_compat(
         return jacobian(_f, inputs=diffarg, **kwargs)  # type: ignore # pylint: disable=used-before-assignment
 
     return wrap
+
+
+def vmap_compat(
+    func: Callable[..., Tensor],
+    in_dims: int = 0,
+    out_dims: int = 0,
+) -> Callable[..., Tensor]:
+    """
+    Simple vmap implementation.
+
+    Parameters
+    ----------
+    func : Callable[..., Tensor]
+        The function to be vectorized.
+    in_dims : int, optional
+        Index of input dimension to be vectorized over. Defaults to 0.
+    out_dims : int, optional
+        Index of output dimension to be vectorized over. Defaults to 0.
+
+    Returns
+    -------
+    Callable[..., Tensor]
+        Vectorized function.
+    """
+    from warnings import warn
+
+    warn(
+        "Using a simple manual vmap implementation. Consider upgrading PyTorch "
+        "(functorch) for better performance and more features.",
+        DeprecationWarning,
+    )
+
+    def manual_vmap(*args, **kwargs):
+        # some sanity checks
+        assert isinstance(in_dims, int), "Input dimensions must be integer."
+        assert isinstance(out_dims, int), "Output dimensions must be integer."
+        assert len(args) > 0, "At least one argument is required."
+        assert isinstance(args[0], Tensor), "First argument must be a tensor."
+
+        outputs = []
+        for i in range(args[0].size(in_dims)):
+            nonbatched_args = [a[i] for a in args]
+            outputs.append(func(*nonbatched_args, **kwargs))
+
+        return torch.stack(outputs, dim=out_dims)
+
+    return manual_vmap

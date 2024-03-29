@@ -48,21 +48,21 @@ def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
         # Test in atomic units
         masses = get_atomic_masses(atomic_numbers)
         ref = mock_mass_tensor[atomic_numbers] * GMOL2AU
-        assert pytest.approx(ref) == masses
+        assert pytest.approx(ref.cpu()) == masses.cpu()
 
         # Test without atomic units
         masses2 = get_atomic_masses(atomic_numbers, atomic_units=False)
         ref2 = mock_mass_tensor[atomic_numbers]
-        assert pytest.approx(ref2) == masses2
+        assert pytest.approx(ref2.cpu()) == masses2.cpu()
 
 
 def test_get_zvalence(atomic_numbers, mock_zeff_tensor):
     with patch("tad_mctc.data.zeff.ZVALENCE", new=mock_zeff_tensor):
         ref = mock_zeff_tensor[atomic_numbers]
-        assert pytest.approx(ref) == get_zvalence(atomic_numbers)
+        assert pytest.approx(ref.cpu()) == get_zvalence(atomic_numbers).cpu()
 
 
 def test_get_ecore(atomic_numbers, mock_zeff_tensor):
     with patch("tad_mctc.data.zeff.ECORE", new=mock_zeff_tensor):
         ref = mock_zeff_tensor[atomic_numbers]
-        assert pytest.approx(ref) == get_ecore(atomic_numbers)
+        assert pytest.approx(ref.cpu()) == get_ecore(atomic_numbers).cpu()

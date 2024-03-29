@@ -71,4 +71,4 @@ def test_types(dtype: torch.dtype, file: str) -> None:
     numbers, positions = read.read_from_path(p, ftype=ftype, **dd)
 
     assert (ref_numbers == numbers).all()
-    assert pytest.approx(ref_positions) == positions
+    assert pytest.approx(ref_positions.cpu()) == positions.cpu()

@@ -80,7 +80,17 @@ def test_all(dtype: torch.dtype) -> None:
     Use numpy for generating random tensors and convert the array to a tensor.
     """
     dd: DD = {"device": DEVICE, "dtype": dtype}
-    tol = 1e-6 if dtype == torch.float else 1e-14
+
+    if "cuda" in str(DEVICE) and dtype == torch.float:
+        tol = 1e-6
+    elif "cuda" in str(DEVICE) and dtype == torch.double:
+        tol = 1e-7
+    elif DEVICE is None and dtype == torch.float:
+        tol = 1e-6
+    elif DEVICE is None and dtype == torch.double:
+        tol = 1e-14
+    else:
+        raise RuntimeError("Unknown device or dtype.")
 
     x = numpy_to_tensor(np.random.randn(2, 3, 4), **dd)
 

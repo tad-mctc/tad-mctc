@@ -22,46 +22,63 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tad_mctc.ncoord import cn_d3, cn_d4, cn_eeq, erf_count, exp_count, gfn2_count
-from tad_mctc.typing import Any, CountingFunction, Protocol, Tensor
+from tad_mctc.ncoord import (
+    cn_d3,
+    cn_d3_gradient,
+    cn_d4,
+    cn_eeq,
+    derf_count,
+    dexp_count,
+    dgfn2_count,
+    erf_count,
+    exp_count,
+    gfn2_count,
+)
+from tad_mctc.typing import DD, CountingFunction
 
-
-class CNFunction(Protocol):
-    """
-    Type annotation for coordination number function.
-    """
-
-    def __call__(
-        self,
-        numbers: Tensor,
-        positions: Tensor,
-        *,
-        counting_function: CountingFunction = erf_count,
-        rcov: Tensor | None = None,
-        en: Tensor | None = None,
-        cutoff: Tensor | None = None,
-        kcn: float = 7.5,
-        **kwargs: Any,
-    ) -> Tensor: ...
+from ..conftest import DEVICE
+from .utils import CNFunction, CNGradFunction
 
 
 @pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq])
-@pytest.mark.parametrize("counting_function", [erf_count, exp_count, gfn2_count])
-def test_fail(function: CNFunction, counting_function: CountingFunction) -> None:
-    numbers = torch.tensor([1, 1])
-    positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+@pytest.mark.parametrize("cfunc", [erf_count, exp_count, gfn2_count])
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_fail(
+    function: CNFunction, cfunc: CountingFunction, dtype: torch.dtype
+) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
+    numbers = torch.tensor([1, 1], device=DEVICE)
+    positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]], **dd)
 
     # rcov wrong shape
     with pytest.raises(ValueError):
-        rcov = torch.tensor([1.0])
-        function(
-            numbers,
-            positions,
-            counting_function=counting_function,
-            rcov=rcov,
-        )
+        rcov = torch.tensor([1.0], **dd)
+        function(numbers, positions, counting_function=cfunc, rcov=rcov)
 
     # wrong numbers
     with pytest.raises(ValueError):
-        numbers = torch.tensor([1])
-        function(numbers, positions, counting_function=counting_function)
+        numbers = torch.tensor([1], device=DEVICE)
+        function(numbers, positions, counting_function=cfunc)
+
+
+@pytest.mark.parametrize("function", [cn_d3_gradient])
+@pytest.mark.parametrize("cfunc", [derf_count, dexp_count, dgfn2_count])
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_grad_fail(
+    function: CNGradFunction, cfunc: CountingFunction, dtype: torch.dtype
+) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
+    numbers = torch.tensor([1, 1], device=DEVICE)
+    positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]], **dd)
+
+    # rcov wrong shape
+    with pytest.raises(ValueError):
+        rcov = torch.tensor([1.0], **dd)
+        function(numbers, positions, counting_function=cfunc, rcov=rcov)
+
+    # wrong numbers
+    with pytest.raises(ValueError):
+        numbers = torch.tensor([1], device=DEVICE)
+        function(numbers, positions, counting_function=cfunc)

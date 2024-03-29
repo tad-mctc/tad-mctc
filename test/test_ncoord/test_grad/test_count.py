@@ -35,7 +35,7 @@ from tad_mctc.ncoord import (
 )
 from tad_mctc.typing import DD, CountingFunction
 
-from ..conftest import DEVICE
+from ...conftest import DEVICE
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -47,7 +47,7 @@ from ..conftest import DEVICE
         (gfn2_count, dgfn2_count),
     ],
 )
-def test_count(
+def test_single(
     dtype: torch.dtype, function: tuple[CountingFunction, CountingFunction]
 ) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
