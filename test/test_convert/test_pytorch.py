@@ -70,7 +70,7 @@ def test_any_to_tensor_with_tensor(dtype: torch.dtype) -> None:
 
     assert torch.is_tensor(result)
     assert result.dtype == dtype
-    assert pytest.approx(ref) == result
+    assert pytest.approx(ref.cpu()) == result.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -80,7 +80,7 @@ def test_any_to_tensor_with_list(dtype: torch.dtype) -> None:
 
     assert torch.is_tensor(result)
     assert result.dtype == dtype
-    assert pytest.approx(ref) == result
+    assert pytest.approx(ref.cpu()) == result.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -90,7 +90,7 @@ def test_any_to_tensor_with_list_2(dtype: torch.dtype) -> None:
 
     assert torch.is_tensor(result)
     assert result.dtype == dtype
-    assert pytest.approx(ref) == result
+    assert pytest.approx(ref.cpu()) == result.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -98,7 +98,7 @@ def test_any_to_tensor_with_float(dtype: torch.dtype) -> None:
     result = convert.any_to_tensor(3.14, dtype=dtype)
     assert torch.is_tensor(result)
     assert result.dtype == dtype
-    assert pytest.approx(3.14) == result.item()
+    assert pytest.approx(3.14) == result.cpu().item()
 
 
 @pytest.mark.parametrize("dtype", [torch.int64, torch.double])
@@ -106,7 +106,7 @@ def test_any_to_tensor_with_int(dtype: torch.dtype) -> None:
     result = convert.any_to_tensor(42, dtype=dtype)
     assert torch.is_tensor(result)
     assert result.dtype == dtype
-    assert pytest.approx(42.0) == result.item()
+    assert pytest.approx(42.0) == result.cpu().item()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -124,7 +124,7 @@ def test_any_to_tensor_with_string(dtype: torch.dtype) -> None:
     result = convert.any_to_tensor("2.718", dtype=dtype)
     assert torch.is_tensor(result)
     assert result.dtype == dtype
-    assert pytest.approx(2.718) == result.item()
+    assert pytest.approx(2.718) == result.cpu().item()
 
 
 def test_any_to_tensor_with_invalid_string() -> None:

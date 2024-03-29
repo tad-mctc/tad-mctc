@@ -67,5 +67,5 @@ def test_read_engrad(dtype: torch.dtype, file: str) -> None:
         **dd
     )
 
-    assert pytest.approx(ref_e) == e
-    assert pytest.approx(ref_g) == g
+    assert pytest.approx(ref_e.cpu()) == e.cpu()
+    assert pytest.approx(ref_g.cpu()) == g.cpu()

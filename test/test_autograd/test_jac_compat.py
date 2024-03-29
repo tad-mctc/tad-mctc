@@ -43,10 +43,10 @@ def test_jacobian(dtype: torch.dtype) -> None:
         return A @ x
 
     # Calculate the Hessian using the `jacobian` function
-    jacobian_matrix = jacrev(linear, argnums=1)(A, x)
+    jacobian = jacrev(linear, argnums=1)(A, x)
 
     # Expected Jacobian for the quadratic function is A
-    assert pytest.approx(A) == jacobian_matrix
+    assert pytest.approx(A.cpu()) == jacobian.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -60,9 +60,9 @@ def test_argument_propagation(dtype: torch.dtype) -> None:
     y = torch.tensor([3.0, 4.0], requires_grad=True, **dd)
 
     f_jac = jacrev(two_arg_func, argnums=1)
-    jacobian_matrix = f_jac(x, y)
+    jacobian: Tensor = f_jac(x, y)
     expected = tensor_to_numpy(torch.diag(x))
-    assert pytest.approx(expected) == jacobian_matrix
+    assert pytest.approx(expected) == jacobian.cpu()
 
 
 def test_non_tensor_input_error() -> None:

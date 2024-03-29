@@ -60,7 +60,7 @@ def test_bjacrev(dtype: torch.dtype) -> None:
     jacobian_matrix = f(A, x)
 
     # Expected Jacobian for the quadratic function is A
-    assert pytest.approx(A) == jacobian_matrix.cpu()
+    assert pytest.approx(A.cpu()) == jacobian_matrix.cpu()
 
 
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
@@ -88,4 +88,4 @@ def test_vmap_compat(dtype: torch.dtype) -> None:
     jacobian_matrix = f(A, x)
 
     # Expected Jacobian for the quadratic function is A
-    assert pytest.approx(A) == jacobian_matrix.cpu()
+    assert pytest.approx(A.cpu()) == jacobian_matrix.cpu()

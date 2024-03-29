@@ -44,7 +44,9 @@ def test_single(dtype: torch.dtype, name: str):
 
     bond_order = bond.guess_bond_order(numbers, positions, cn)
     assert bond_order.dtype == dtype
-    assert pytest.approx(ref, abs=1.0e3) == bond_order[bond_order > 0.3]
+
+    mask = bond_order[bond_order > 0.3]
+    assert pytest.approx(ref.cpu(), abs=1e-3) == mask.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -60,7 +62,9 @@ def test_ghost(dtype: torch.dtype):
 
     bond_order = bond.guess_bond_order(numbers, positions, cn)
     assert bond_order.dtype == dtype
-    assert pytest.approx(ref, abs=1.0e3) == bond_order[bond_order > 0.3]
+
+    mask = bond_order[bond_order > 0.3]
+    assert pytest.approx(ref.cpu(), abs=1e-3) == mask.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -98,4 +102,6 @@ def test_batch(dtype: torch.dtype):
 
     bond_order = bond.guess_bond_order(numbers, positions, cn)
     assert bond_order.dtype == dtype
-    assert pytest.approx(ref, abs=1.0e3) == bond_order[bond_order > 0.3]
+
+    mask = bond_order[bond_order > 0.3]
+    assert pytest.approx(ref.cpu(), abs=1e-3) == mask.cpu()

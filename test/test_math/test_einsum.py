@@ -38,17 +38,17 @@ def test_optimization_flags():
     equation = "ij,jk->ik"
 
     ref = torch.einsum(equation, *operands)
-    assert pytest.approx(ref) == math.einsum(equation, *operands)
+    assert pytest.approx(ref.cpu()) == math.einsum(equation, *operands).cpu()
 
     e_auto = math.einsum(equation, *operands, optimize="auto")
-    assert pytest.approx(ref) == e_auto
+    assert pytest.approx(ref.cpu()) == e_auto.cpu()
 
     e_greedy = math.einsum_greedy(equation, *operands)
-    assert pytest.approx(ref) == e_greedy
+    assert pytest.approx(ref.cpu()) == e_greedy.cpu()
     e_greedy_2 = math.einsum(equation, *operands, optimize="greedy")
-    assert pytest.approx(ref) == e_greedy_2
+    assert pytest.approx(ref.cpu()) == e_greedy_2.cpu()
 
     e_optimal = math.einsum_optimal(equation, *operands)
-    assert pytest.approx(ref) == e_optimal
+    assert pytest.approx(ref.cpu()) == e_optimal.cpu()
     e_optimal_2 = math.einsum(equation, *operands, optimize="optimal")
-    assert pytest.approx(ref) == e_optimal_2
+    assert pytest.approx(ref.cpu()) == e_optimal_2.cpu()

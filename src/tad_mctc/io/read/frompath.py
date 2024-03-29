@@ -117,7 +117,7 @@ def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
         if not path.exists():
             raise FileNotFoundError(f"The file '{path}' does not exist.")
 
-        with open(path, mode=mode, encoding="utf-8") as fileobj:
+        with open(path, mode=mode, encoding=encoding) as fileobj:
             return reader_function(fileobj, device, dtype, **kwargs)
 
     return read_from_path

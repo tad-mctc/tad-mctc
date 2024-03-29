@@ -78,7 +78,7 @@ def test_single(
 
     pos = positions.detach().clone().requires_grad_(True)
     jac: Tensor = jacrev(wrapper)(pos)  # type: ignore
-    assert pytest.approx(numdr, abs=tol) == tensor_to_numpy(jac)
+    assert pytest.approx(numdr.cpu(), abs=tol) == tensor_to_numpy(jac)
 
 
 @pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq])
@@ -126,4 +126,4 @@ def test_batch(
 
     pos = positions.detach().clone().requires_grad_(True)
     jac: Tensor = bjacrev(wrapper, argnums=1)(numbers, pos)  # type: ignore
-    assert pytest.approx(numdr, abs=tol) == tensor_to_numpy(jac)
+    assert pytest.approx(numdr.cpu(), abs=tol) == tensor_to_numpy(jac)

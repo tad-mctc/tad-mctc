@@ -109,7 +109,7 @@ def test_write_and_read(dtype: torch.dtype, name: str, extra: bool) -> None:
 
     # Check if the read data matches the written data
     assert (read_numbers == numbers).all()
-    assert pytest.approx(positions) == read_positions
+    assert pytest.approx(positions.cpu()) == read_positions.cpu()
 
 
 def prepend_to_file(file_path: PathLike, text_to_prepend: str) -> None:
@@ -145,6 +145,7 @@ def test_read_turbomole_energy(dtype: torch.dtype, file: str) -> None:
 
     p = Path(__file__).parent.resolve() / "output" / file
     e = read.read_turbomole_energy_from_path(p, **dd)
+    assert isinstance(e, torch.Tensor)
 
     ref = torch.tensor(-291.856093690170, **dd)
-    assert pytest.approx(ref) == e
+    assert pytest.approx(ref.cpu()) == e.cpu()

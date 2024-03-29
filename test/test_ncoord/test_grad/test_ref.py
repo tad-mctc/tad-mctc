@@ -55,9 +55,9 @@ def test_single(dtype: torch.dtype, name: str) -> None:
     numdr = torch.where(mask, numdr, numdr.new_tensor(0.0))
     ref = torch.where(mask, ref, ref.new_tensor(0.0))
 
-    assert pytest.approx(dcndr, abs=tol) == numdr
-    assert pytest.approx(dcndr, abs=tol) == ref
-    assert pytest.approx(numdr, abs=tol) == ref
+    assert pytest.approx(dcndr.cpu(), abs=tol) == numdr.cpu()
+    assert pytest.approx(dcndr.cpu(), abs=tol) == ref.cpu()
+    assert pytest.approx(numdr.cpu(), abs=tol) == ref.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -101,6 +101,6 @@ def test_batch(dtype: torch.dtype, name1: str, name2: str) -> None:
     numdr = torch.where(mask, numdr, numdr.new_tensor(0.0))
     ref = torch.where(mask, ref, ref.new_tensor(0.0))
 
-    assert pytest.approx(dcndr, abs=tol) == numdr
-    assert pytest.approx(dcndr, abs=tol) == ref
-    assert pytest.approx(numdr, abs=tol) == ref
+    assert pytest.approx(dcndr.cpu(), abs=tol) == numdr.cpu()
+    assert pytest.approx(dcndr.cpu(), abs=tol) == ref.cpu()
+    assert pytest.approx(numdr.cpu(), abs=tol) == ref.cpu()

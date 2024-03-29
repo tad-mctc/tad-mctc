@@ -50,14 +50,14 @@ def test_single(dtype: torch.dtype) -> None:
     )
 
     im = inertia_moment(masses, positions)
-    assert pytest.approx(ref, abs=1e-1) == im
+    assert pytest.approx(ref.cpu(), abs=1e-1) == im.cpu()
 
     # precompute center of mass
     com = mass_center(masses, positions)
     pos = positions - com
 
     im = inertia_moment(masses, pos, pos_already_com=True)
-    assert pytest.approx(ref, abs=1e-1) == im
+    assert pytest.approx(ref.cpu(), abs=1e-1) == im.cpu()
 
     # no centering w.r.t. principal axes
     im = inertia_moment(masses, pos, center_pa=False)
@@ -70,7 +70,7 @@ def test_single(dtype: torch.dtype) -> None:
         **dd,
     )
 
-    assert pytest.approx(ref, abs=1e-1) == im
+    assert pytest.approx(ref.cpu(), abs=1e-1) == im.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -118,11 +118,11 @@ def test_batch(dtype: torch.dtype) -> None:
     )
 
     im = inertia_moment(masses, positions)
-    assert pytest.approx(ref, abs=1e-1) == im
+    assert pytest.approx(ref.cpu(), abs=1e-1) == im.cpu()
 
     # precompute center of mass
     com = mass_center(masses, positions)
     pos = positions - com.unsqueeze(-2)
 
     im = inertia_moment(masses, pos, pos_already_com=True)
-    assert pytest.approx(ref, abs=1e-1) == im
+    assert pytest.approx(ref.cpu(), abs=1e-1) == im.cpu()

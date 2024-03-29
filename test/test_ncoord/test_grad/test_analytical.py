@@ -80,7 +80,7 @@ def test_single(
     mask = real_pairs(numbers, mask_diagonal=True).unsqueeze(-1)
     numdr = torch.where(mask, numdr, numdr.new_tensor(0.0))
 
-    assert pytest.approx(dcndr, abs=tol) == numdr
+    assert pytest.approx(dcndr.cpu(), abs=tol) == numdr.cpu()
 
 
 @pytest.mark.parametrize(
@@ -132,4 +132,4 @@ def test_batch(
     mask = real_pairs(numbers, mask_diagonal=True).unsqueeze(-1)
     numdr = torch.where(mask, numdr, numdr.new_tensor(0.0))
 
-    assert pytest.approx(dcndr, abs=tol) == numdr
+    assert pytest.approx(dcndr.cpu(), abs=tol) == numdr.cpu()

@@ -76,4 +76,4 @@ def test_read(dtype: torch.dtype) -> None:
 
     # Check if the read data matches the written data
     assert (numbers == read_numbers).all()
-    assert pytest.approx(positions) == read_positions
+    assert pytest.approx(positions.cpu()) == read_positions.cpu()

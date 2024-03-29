@@ -42,7 +42,8 @@ def test_jacobian(dtype: torch.dtype) -> None:
         """
         return A @ x
 
-    jacobian_matrix = jacrev(linear, argnums=1)(A, x)
+    f = jacrev(linear, argnums=1)
+    jacobian: Tensor = f(A, x)  # type: ignore
 
     # Expected Jacobian for the quadratic function is A
-    assert pytest.approx(A) == jacobian_matrix
+    assert pytest.approx(A.cpu()) == jacobian.cpu()
