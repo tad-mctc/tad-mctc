@@ -28,9 +28,10 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         torch-version: ["1.11.0", "1.12.1", "1.13.1", "2.0.1", "2.1.2", "2.2.2"]
-        # PyTorch now fully supports Python =<3.11
-        # see: https://github.com/pytorch/pytorch/issues/86566
         exclude:
+          # PyTorch now fully supports Python=<3.11
+          # see: https://github.com/pytorch/pytorch/issues/86566
+          #
           # PyTorch does not support Python 3.12 (all platforms)
           # see: https://github.com/pytorch/pytorch/issues/110436
           - os: ubuntu-latest
@@ -44,8 +45,11 @@ jobs:
             torch-version: "1.11.0"
           - python-version: "3.11"
             torch-version: "1.12.1"
-          # On macOS, 1.13.x is also not supported for Python>=3.10
+          # On macOS and Windows, 1.13.x is also not supported for Python>=3.10
           - os: macos-latest
+            python-version: "3.11"
+            torch-version: "1.13.1"
+          - os: windows-latest
             python-version: "3.11"
             torch-version: "1.13.1"
 
@@ -80,6 +84,9 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
-        if: matrix.python-version == '3.11' && matrix.torch-version == '2.2.2' && matrix.os == 'ubuntu-latest'
+        if: >
+          matrix.python-version == '3.11' &&
+          matrix.torch-version == '2.2.2' &&
+          matrix.os == 'ubuntu-latest'
         with:
           files: ./coverage.xml # optional
