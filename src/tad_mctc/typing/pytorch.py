@@ -38,6 +38,7 @@ __all__ = [
     "Molecule",
     "get_default_device",
     "get_default_dtype",
+    "Tensor",
     "TensorLike",
 ]
 

@@ -28,6 +28,7 @@ import pytest
 import torch
 
 from tad_mctc import convert
+from tad_mctc._version import __tversion__
 from tad_mctc.typing import DD, Generator, Tensor, get_default_dtype
 
 from ..conftest import DEVICE
@@ -121,6 +122,7 @@ def test_torch_to_np_with_device(device_str: str) -> None:
     assert isinstance(arr, np.ndarray)
 
 
+@pytest.mark.skipif(__tversion__ < (1, 13, 0), reason="Requires torch>=1.13.0")
 def test_torch_to_np_with_transforms_fail() -> None:
     from tad_mctc.autograd import jacrev
 
@@ -168,7 +170,7 @@ def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
     jacobian_func(x.detach().clone().requires_grad_(), y)
 
 
-def test_torch_to_np_below_2_0_0():
+def test_torch_to_np_below_1_13_0():
     import tad_mctc._version
 
     torch_version = tad_mctc._version.__tversion__
@@ -187,7 +189,8 @@ def test_torch_to_np_below_2_0_0():
     assert torch_version == tad_mctc._version.__tversion__
 
 
-def test_torch_to_np_above_2_0_0():
+@pytest.mark.skipif(__tversion__ < (1, 13, 0), reason="Requires torch>=1.13.0")
+def test_torch_to_np_above_1_13_0():
     import tad_mctc._version
 
     torch_version = tad_mctc._version.__tversion__

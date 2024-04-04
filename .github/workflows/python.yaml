@@ -25,21 +25,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # torch-version: ["1.11.0", "1.12.1", "1.13.0"]
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        torch-version: ["1.11.0", "1.12.1", "1.13.0", "2.0.1", "2.1.2", "2.2.2"]
         # PyTorch now fully supports Python =<3.11
         # see: https://github.com/pytorch/pytorch/issues/86566
-        #
-        # PyTorch does not support Python 3.12 (all platforms)
-        # see: https://github.com/pytorch/pytorch/issues/110436
         exclude:
+          # PyTorch does not support Python 3.12 (all platforms)
+          # see: https://github.com/pytorch/pytorch/issues/110436
           - os: ubuntu-latest
             python-version: "3.12"
           - os: macos-latest
             python-version: "3.12"
           - os: windows-latest
             python-version: "3.12"
+          # PyTorch<1.13.0 does only support Python=<3.10
+          - python-version: "3.11"
+            torch-version: "1.11.0"
+          - python-version: "3.11"
+            torch-version: "1.12.1"
 
     runs-on: ${{ matrix.os }}
 
@@ -60,18 +64,14 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           python3 -m pip install tox
-        # pip install torch==${{ matrix.torch-version }}+cpu -f https://download.pytorch.org/whl/torch_stable.html
-        # pip install pytest pytest-cov codecov
 
-      # - name: Unittests with pytest
-      #   run: pytest -svv --cov=./src --cov-report=term-missing
-
-      # with '-e py' tox runs the python version of the current environment
       - name: Unittests with tox
-        run: tox -e py
+        run: |
+          TOXENV=py${{ matrix.python-version }}-torch${{ matrix.torch-version // '.' }}
+          tox -e $TOXENV
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
-        if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
+        if: matrix.python-version == '3.11' && matrix.torch-version == '2.2.2' && matrix.os == 'ubuntu-latest'
         with:
           files: ./coverage.xml # optional
