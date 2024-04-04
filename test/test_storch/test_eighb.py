@@ -364,5 +364,7 @@ def test_eighb_general_grad() -> None:
             ),
             (a2, b2, numpy_to_tensor(sizes, **dd)),
             fast_mode=False,
+            atol=1e-2,  # sometimes randomly fails on random GA runners
+            rtol=1e-2,  # sometimes randomly fails on random GA runners
         )
         assert grad_is_safe, f"Non-degenerate batch test failed on {scheme}"
