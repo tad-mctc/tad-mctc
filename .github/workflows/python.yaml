@@ -65,10 +65,11 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install tox
 
+      - name: Determine TOXENV
+        run: echo "TOXENV=py${{ matrix.python-version }}-torch${{ matrix.torch-version }}" | sed 's/\./ /g' | awk '{print $1$2$3}' >> $GITHUB_ENV
+
       - name: Unittests with tox
-        run: |
-          TOXENV=py${{ matrix.python-version }}-torch${{ matrix.torch-version // '.' }}
-          tox -e $TOXENV
+        run: tox -e $TOXENV
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
