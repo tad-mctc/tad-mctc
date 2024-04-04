@@ -66,7 +66,7 @@ jobs:
           python3 -m pip install tox
 
       - name: Determine TOXENV
-        run: echo "TOXENV=py${{ matrix.python-version }}-torch${{ matrix.torch-version }}" | sed 's/\./ /g' | awk '{print $1$2$3}' >> $GITHUB_ENV
+        run: echo "TOXENV=py${{ matrix.python-version }}-torch$(echo ${{ matrix.torch-version }} | tr -d '.')" >> $GITHUB_ENV
 
       - name: Unittests with tox
         run: tox -e $TOXENV
