@@ -69,7 +69,7 @@ jobs:
         run: echo "TOXENV=py$(echo ${{ matrix.python-version }} | tr -d '.')-torch$(echo ${{ matrix.torch-version }} | tr -d '.')" >> $GITHUB_ENV
 
       - name: Print TOXENV
-        run: echo "TOXENV is set to '$TOXENV'."
+        run: echo "TOXENV is set to '${{ env.TOXENV }}'."
 
       - name: Unittests with tox
         run: tox -e ${{ env.TOXENV }}
