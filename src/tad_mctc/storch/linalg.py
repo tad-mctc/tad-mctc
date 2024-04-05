@@ -716,7 +716,6 @@ def eighb(
 
             # Compute the inverse of L:
             if kwargs.get("direct_inv", False):
-                print("Direct inversion")
                 # Via the direct method if specifically requested
                 l_inv = torch.inverse(l)
             else:

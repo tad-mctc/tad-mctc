@@ -122,7 +122,7 @@ def test_torch_to_np_with_device(device_str: str) -> None:
     assert isinstance(arr, np.ndarray)
 
 
-@pytest.mark.skipif(__tversion__ < (1, 13, 0), reason="Requires torch>=1.13.0")
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_torch_to_np_with_transforms_fail() -> None:
     from tad_mctc.autograd import jacrev
 

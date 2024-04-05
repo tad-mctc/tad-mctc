@@ -35,6 +35,10 @@ def jacrev_compat(
     """
     Wrapper for Jacobian calcluation.
 
+    .. warning::
+
+        The compatibility wrapper sets `create_graph=True` by default.
+
     Parameters
     ----------
     f : Callable[[Any], Tensor]
@@ -52,7 +56,7 @@ def jacrev_compat(
             "an API for Jacobian calculations for older PyTorch versions."
         ) from e
 
-    def wrap(*inps: Any) -> Any:
+    def jacrev_compat_wrap(*inps: Any) -> Any:
         """
         Wrapper to imitate the calling signature of functorch's `jacrev`
         with `torch.autograd.functional.jacobian`.
@@ -88,9 +92,12 @@ def jacrev_compat(
         def _f(arg: Tensor) -> Tensor:
             return f(*(*before, arg, *after))
 
-        return jacobian(_f, inputs=diffarg, **kwargs)  # type: ignore # pylint: disable=used-before-assignment
+        create_graph = kwargs.pop("create_graph", True)
 
-    return wrap
+        # pylint: disable=used-before-assignment
+        return jacobian(_f, inputs=diffarg, create_graph=create_graph, **kwargs)
+
+    return jacrev_compat_wrap
 
 
 def vmap_compat(
@@ -115,6 +122,7 @@ def vmap_compat(
     Callable[..., Tensor]
         Vectorized function.
     """
+    # pylint: disable=import-outside-toplevel
     from warnings import warn
 
     warn(
@@ -124,7 +132,7 @@ def vmap_compat(
     )
 
     def manual_vmap(*args, **kwargs):
-        # some sanity checks
+        # some sanity checks, non-exhaustive
         assert isinstance(in_dims, int), "Input dimensions must be integer."
         assert isinstance(out_dims, int), "Output dimensions must be integer."
         assert len(args) > 0, "At least one argument is required."

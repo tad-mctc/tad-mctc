@@ -24,19 +24,34 @@ Important! Before PyTorch 2.0.0, `functorch` does not work together with custom
 autograd functions, which we definitely require. Additionally, `functorch`
 imposes the implementation of a `forward` **and** `setup_context` method, i.e.,
 the traditional way of using `forward` with the `ctx` argument does not work.
+
+Note
+----
+`functorch` is shipped with PyTorch 1.13.0 and later. Earlier versions require
+a separate installation.
 """
 from __future__ import annotations
 
-import torch
+from .._version import __tversion__
 
-__all__ = ["jacrev", "vmap"]
+__all__ = ["jacrev", "fjacrev", "vmap", "fvmap"]
 
 
-if torch.__version__ < (2, 0, 0):  # type: ignore[operator]
+if __tversion__ < (2, 0, 0):
+    # We always use the compatiblity functions even if `functorch` is available,
+    # because `functorch` does not work with custom autograd functions.
+    from .compat import jacrev_compat as jacrev
+    from .compat import vmap_compat as vmap
+
     try:
-        from functorch import jacrev, vmap  # type: ignore[import-error]
+        from functorch import jacrev as fjacrev  # type: ignore[import-error]
+        from functorch import vmap as fvmap  # type: ignore[import-error]
     except ModuleNotFoundError:
-        from .compat import jacrev_compat as jacrev
-        from .compat import vmap_compat as vmap
+        fjacrev = None
+        fvmap = None
 else:
-    from torch.func import jacrev, vmap  # type: ignore[import-error]
+    from torch.func import jacrev as jacrev  # type: ignore[import-error]
+    from torch.func import vmap  # type: ignore[import-error]
+
+    fjacrev = jacrev
+    fvmap = vmap
