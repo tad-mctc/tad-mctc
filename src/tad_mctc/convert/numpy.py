@@ -108,8 +108,6 @@ def tensor_to_numpy(x: Tensor, dtype: DTypeLike | None = None) -> NDArray[Any]:
     xdtype = torch_to_numpy_dtype_dict.get(x.dtype)
     x = x.detach().cpu()
 
-    print(x)
-
     # pylint: disable=protected-access
     # see: https://github.com/pytorch/pytorch/issues/91810
     if __tversion__ >= (1, 13, 0):
