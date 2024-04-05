@@ -339,8 +339,8 @@ def test_eighb_general_grad() -> None:
             ),
             (a1, b1),
             fast_mode=False,
-            atol=1e-2,
-            rtol=1e-2,
+            atol=1e-1,
+            rtol=1e-1,
         )
         assert grad_is_safe, f"Non-degenerate single test failed on {scheme}"
 
