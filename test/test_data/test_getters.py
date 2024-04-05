@@ -30,7 +30,7 @@ from tad_mctc.units import GMOL2AU
 
 @pytest.fixture
 def atomic_numbers():
-    return torch.tensor([1, 2, 3], dtype=torch.int)
+    return torch.tensor([1, 2, 3], dtype=torch.long)
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def mock_mass_tensor():
 
 @pytest.fixture
 def mock_zeff_tensor():
-    return torch.tensor([1, 2, 3, 4], dtype=torch.int)
+    return torch.tensor([1, 2, 3, 4], dtype=torch.long)
 
 
 def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):

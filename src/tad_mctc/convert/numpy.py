@@ -110,7 +110,7 @@ def tensor_to_numpy(x: Tensor, dtype: DTypeLike | None = None) -> NDArray[Any]:
 
     # pylint: disable=protected-access
     # see: https://github.com/pytorch/pytorch/issues/91810
-    if __tversion__ >= (2, 0, 0):
+    if __tversion__ >= (1, 13, 0):
         if torch._C._functorch.is_gradtrackingtensor(x):
             while torch._C._functorch.is_functorch_wrapped_tensor(x) is True:
                 x = torch._C._functorch.get_unwrapped(x)
