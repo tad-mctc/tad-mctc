@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test hessian.
+Test compatibility function for Jacobian.
 """
 import pytest
 import torch
@@ -46,7 +46,7 @@ def test_jacobian(dtype: torch.dtype) -> None:
     jacobian = jacrev(linear, argnums=1)(A, x)
 
     # Expected Jacobian for the quadratic function is A
-    assert pytest.approx(A.cpu()) == jacobian.cpu()
+    assert pytest.approx(A.cpu()) == tensor_to_numpy(jacobian)
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -59,10 +59,11 @@ def test_argument_propagation(dtype: torch.dtype) -> None:
     x = torch.tensor([1.0, 2.0], requires_grad=True, **dd)
     y = torch.tensor([3.0, 4.0], requires_grad=True, **dd)
 
+    # remember: `create_graph=True` is default in `jacrev_compat`
     f_jac = jacrev(two_arg_func, argnums=1)
     jacobian: Tensor = f_jac(x, y)
     expected = tensor_to_numpy(torch.diag(x))
-    assert pytest.approx(expected) == jacobian.cpu()
+    assert pytest.approx(expected) == tensor_to_numpy(jacobian)
 
 
 def test_non_tensor_input_error() -> None:

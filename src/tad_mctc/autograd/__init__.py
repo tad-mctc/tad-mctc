@@ -27,3 +27,4 @@ from .batched import *
 from .gradcheck import *
 from .hessian import *
 from .internals import *
+from .nonfunctorch import *

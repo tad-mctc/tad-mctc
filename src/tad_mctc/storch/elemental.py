@@ -35,6 +35,7 @@ def divide(
 ) -> Tensor:
     """
     Safe divide operation.
+    Only adds a small value to the denominator where it is zero.
 
     Parameters
     ----------
@@ -68,7 +69,8 @@ def divide(
             f"but {type(eps)} was given."
         )
 
-    return torch.divide(x, (y + eps), **kwargs)
+    y_safe = torch.where(y == 0, torch.full_like(y, eps), y)
+    return torch.divide(x, y_safe, **kwargs)
 
 
 def reciprocal(
