@@ -24,6 +24,11 @@ Important! Before PyTorch 2.0.0, `functorch` does not work together with custom
 autograd functions, which we definitely require. Additionally, `functorch`
 imposes the implementation of a `forward` **and** `setup_context` method, i.e.,
 the traditional way of using `forward` with the `ctx` argument does not work.
+
+Note
+----
+`functorch` is shipped with PyTorch 1.13.0 and later. Earlier versions require
+a separate installation.
 """
 from __future__ import annotations
 

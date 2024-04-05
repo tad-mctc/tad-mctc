@@ -19,7 +19,7 @@ Autograd Utility: Loop-based Jacobian
 =====================================
 
 These derivative functions do not use `functorch`, but construct the Jacobian
-row-by-row. This is slower than `functorch`.
+row-by-row. This is slower than using `functorch`.
 """
 from __future__ import annotations
 

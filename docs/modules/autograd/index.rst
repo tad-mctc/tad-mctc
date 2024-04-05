@@ -9,3 +9,4 @@
    hessian
    internals
    jac
+   nonfunctorch
