@@ -18,12 +18,13 @@
 Test non-functorch versions of Jacobian.
 """
 from __future__ import annotations
+
 import pytest
 import torch
 
 from tad_mctc.autograd import jac
-from tad_mctc.typing import DD, Tensor
 from tad_mctc.convert import tensor_to_numpy
+from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
 

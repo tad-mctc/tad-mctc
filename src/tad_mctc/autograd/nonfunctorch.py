@@ -22,9 +22,10 @@ These derivative functions do not use `functorch`, but construct the Jacobian
 row-by-row. This is slower than `functorch`.
 """
 from __future__ import annotations
-from ..typing import Tensor
+
 import torch
 
+from ..typing import Tensor
 
 __all__ = ["jac"]
 
