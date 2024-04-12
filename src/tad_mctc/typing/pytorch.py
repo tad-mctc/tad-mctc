@@ -124,14 +124,13 @@ class TensorLike:
     __dd: DD
     """Shortcut for device and dtype."""
 
-    __slots__ = ["__device", "__dtype", "__dd"]
+    __slots__ = ["__device", "__dtype"]
 
     def __init__(
         self, device: torch.device | None = None, dtype: torch.dtype | None = None
     ):
         self.__device = device if device is not None else get_default_device()
         self.__dtype = dtype if dtype is not None else get_default_dtype()
-        self.__dd = {"device": self.device, "dtype": self.dtype}
 
     @property
     def device(self) -> torch.device:
@@ -180,7 +179,7 @@ class TensorLike:
     @property
     def dd(self) -> DD:
         """Shortcut for device and dtype."""
-        return self.__dd
+        return {"device": self.device, "dtype": self.dtype}
 
     @dd.setter
     def dd(self, *_: Any) -> NoReturn:

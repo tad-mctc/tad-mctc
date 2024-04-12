@@ -29,6 +29,7 @@ from ..typing import Tensor
 __all__ = ["real_atoms", "real_pairs", "real_triples"]
 
 
+@torch.jit.script
 def real_atoms(numbers: Tensor) -> Tensor:
     """
     Create a mask for atoms, discerning padding and actual atoms.
@@ -47,6 +48,7 @@ def real_atoms(numbers: Tensor) -> Tensor:
     return numbers != 0
 
 
+@torch.jit.script
 def real_pairs(numbers: Tensor, mask_diagonal: bool = True) -> Tensor:
     """
     Create a mask for pairs of atoms from atomic numbers, discerning padding
@@ -73,6 +75,7 @@ def real_pairs(numbers: Tensor, mask_diagonal: bool = True) -> Tensor:
     return mask
 
 
+@torch.jit.script
 def real_triples(
     numbers: Tensor, mask_diagonal: bool = True, mask_self: bool = True
 ) -> Tensor:
