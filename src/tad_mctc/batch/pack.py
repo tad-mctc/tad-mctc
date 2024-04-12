@@ -1,7 +1,10 @@
-# This file is part of tad-mctc.
+# This file is part of dxtb, modified from tbmalt/tbmalt.
 #
 # SPDX-Identifier: Apache-2.0
 # Copyright (C) 2024 Grimme Group
+#
+# Original file licensed under the LGPL-3.0 License by tbmalt/tbmalt.
+# Modifications made by Grimme Group.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
