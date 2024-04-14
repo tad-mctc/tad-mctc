@@ -54,7 +54,7 @@ def str_to_device(s: str) -> torch.device:
 
     if "cuda" in s:
         if not torch.cuda.is_available():
-            raise KeyError(f"No CUDA devices available.")
+            raise KeyError("No CUDA devices available.")
         return torch.device("cuda", index=torch.cuda.current_device())
 
     raise KeyError(f"Unknown device '{s}' given.")
@@ -122,8 +122,8 @@ def any_to_tensor(
     if isinstance(x, list):
         if all(isinstance(item, (float, int, bool)) for item in x):
             return torch.tensor(x, device=device, dtype=dtype)
-        else:
-            raise ValueError("List must contain only float, int, or bool types.")
+
+        raise ValueError("List must contain only float, int, or bool types.")
 
     if isinstance(x, (float, int, bool)):
         return torch.tensor(x, device=device, dtype=dtype)
@@ -131,7 +131,7 @@ def any_to_tensor(
     if isinstance(x, str):
         try:
             return torch.tensor(float(x), device=device, dtype=dtype)
-        except ValueError:
-            raise ValueError(f"Cannot convert string '{x}' to float")
+        except ValueError as e:
+            raise ValueError(f"Cannot convert string '{x}' to float") from e
 
     raise TypeError(f"Tensor-incompatible type '{type(x)}' of variable {x}.")

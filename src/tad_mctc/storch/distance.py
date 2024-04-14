@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import torch
 
+from ..math import einsum
 from ..typing import Tensor
 from .elemental import sqrt as ssqrt
 
@@ -66,13 +67,13 @@ def euclidean_dist_quadratic_expansion(x: Tensor, y: Tensor) -> Tensor:
     )
 
     # using einsum is slightly faster than `torch.pow(x, 2).sum(-1)`
-    xnorm = torch.einsum("...ij,...ij->...i", x, x)
-    ynorm = torch.einsum("...ij,...ij->...i", y, y)
+    xnorm = einsum("...ij,...ij->...i", x, x)
+    ynorm = einsum("...ij,...ij->...i", y, y)
 
     n = xnorm.unsqueeze(-1) + ynorm.unsqueeze(-2)
 
-    # x @ y.mT
-    prod = torch.einsum("...ik,...jk->...ij", x, y)
+    # "...ik,...jk->...ij"
+    prod = x @ y.mT
 
     # important: remove negative values that give NaN in backward
     return ssqrt(n - 2.0 * prod, eps=eps)

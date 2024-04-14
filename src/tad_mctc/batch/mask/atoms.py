@@ -15,35 +15,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Typing: Builtins
-================
+Batch Utility: Atom Masks
+=========================
 
-This module contains all used built-in type annotations.
+Functions for creating masks that discern between padding and actual values.
 """
-from typing import (
-    IO,
-    Any,
-    Iterable,
-    Iterator,
-    Literal,
-    NoReturn,
-    Protocol,
-    TypedDict,
-    TypeVar,
-    overload,
-    runtime_checkable,
-)
+from __future__ import annotations
 
-__all__ = [
-    "IO",
-    "Any",
-    "Iterable",
-    "Iterator",
-    "Literal",
-    "NoReturn",
-    "Protocol",
-    "TypedDict",
-    "TypeVar",
-    "overload",
-    "runtime_checkable",
-]
+from ...typing import Tensor
+
+__all__ = ["real_atoms"]
+
+
+# scripting or tracing does not improve performance
+def real_atoms(numbers: Tensor) -> Tensor:
+    """
+    Create a mask for atoms, discerning padding and actual atoms.
+    Padding value is zero.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers for all atoms.
+
+    Returns
+    -------
+    Tensor
+        Mask for atoms that discerns padding and real atoms.
+    """
+    return numbers != 0

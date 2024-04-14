@@ -70,6 +70,7 @@ except ImportError:  # pragma: no cover
     @_wraps(torch.einsum)
     def einsum(*args: Any, optimize: Any = None) -> Tensor:
         if optimize is not None:
+            # pylint: disable=import-outside-toplevel
             from warnings import warn
 
             warn("Optimization not supported without 'opt_einsum' package.")
