@@ -25,4 +25,3 @@ from .pairs import real_pairs
 from .triples import real_triples
 
 __all__ = ["real_atoms", "real_pairs", "real_triples"]
-
