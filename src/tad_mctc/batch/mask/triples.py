@@ -24,58 +24,12 @@ from __future__ import annotations
 
 import torch
 
-from ..typing import Tensor
+from ...typing import Tensor
+from .pairs import real_pairs
 
-__all__ = ["real_atoms", "real_pairs", "real_triples"]
-
-
-@torch.jit.script
-def real_atoms(numbers: Tensor) -> Tensor:
-    """
-    Create a mask for atoms, discerning padding and actual atoms.
-    Padding value is zero.
-
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms.
-
-    Returns
-    -------
-    Tensor
-        Mask for atoms that discerns padding and real atoms.
-    """
-    return numbers != 0
+__all__ = ["real_triples"]
 
 
-@torch.jit.script
-def real_pairs(numbers: Tensor, mask_diagonal: bool = True) -> Tensor:
-    """
-    Create a mask for pairs of atoms from atomic numbers, discerning padding
-    and actual atoms. Padding value is zero.
-
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms.
-    mask_diagonal : bool, optional
-        Flag for also masking the diagonal, i.e., all pairs with the same
-        indices. Defaults to `True`, i.e., writing False to the diagonal.
-
-    Returns
-    -------
-    Tensor
-        Mask for atom pairs that discerns padding and real atoms.
-    """
-    real = real_atoms(numbers)
-    mask = real.unsqueeze(-2) * real.unsqueeze(-1)
-
-    if mask_diagonal is True:
-        mask *= ~torch.diag_embed(torch.ones_like(real))
-    return mask
-
-
-@torch.jit.script
 def real_triples(
     numbers: Tensor, mask_diagonal: bool = True, mask_self: bool = True
 ) -> Tensor:
@@ -105,8 +59,9 @@ def real_triples(
         mask *= ~torch.diag_embed(torch.ones_like(real))
 
     if mask_self is True:
-        mask *= ~torch.diag_embed(torch.ones_like(real), offset=0, dim1=-3, dim2=-2)
-        mask *= ~torch.diag_embed(torch.ones_like(real), offset=0, dim1=-3, dim2=-1)
-        mask *= ~torch.diag_embed(torch.ones_like(real), offset=0, dim1=-2, dim2=-1)
+        ones = torch.ones_like(real)
+        mask *= ~torch.diag_embed(ones, offset=0, dim1=-3, dim2=-2)
+        mask *= ~torch.diag_embed(ones, offset=0, dim1=-3, dim2=-1)
+        mask *= ~torch.diag_embed(ones, offset=0, dim1=-2, dim2=-1)
 
     return mask

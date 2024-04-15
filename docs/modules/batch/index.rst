@@ -5,6 +5,6 @@
 .. toctree::
 
    agnostic
-   mask
+   mask/index
    pack
    unpack

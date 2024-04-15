@@ -15,35 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Typing: Builtins
-================
+Batch Utility: Masks
+====================
 
-This module contains all used built-in type annotations.
+Functions for creating masks that discern between padding and actual values.
 """
-from typing import (
-    IO,
-    Any,
-    Iterable,
-    Iterator,
-    Literal,
-    NoReturn,
-    Protocol,
-    TypedDict,
-    TypeVar,
-    overload,
-    runtime_checkable,
-)
-
-__all__ = [
-    "IO",
-    "Any",
-    "Iterable",
-    "Iterator",
-    "Literal",
-    "NoReturn",
-    "Protocol",
-    "TypedDict",
-    "TypeVar",
-    "overload",
-    "runtime_checkable",
-]
+from .atoms import *
+from .pairs import *
+from .triples import *
