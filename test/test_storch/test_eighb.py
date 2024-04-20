@@ -225,6 +225,23 @@ def test_eighb_general_batch() -> None:
                 assert same_device, "Device persistence check"
 
 
+################################################################################
+
+
+def _eigen_proxy(
+    m: Tensor,
+    target_method: Literal["cond", "lorn"] | None,
+    size_data: Tensor | None = None,
+) -> tuple[Tensor, Tensor]:
+    m = symmetrizef(m)
+    if size_data is not None:
+        m = clean_zero_padding(m, size_data)
+    if target_method is None:
+        return torch.linalg.eigh(m)
+    else:
+        return storch.linalg.eighb(m, broadening_method=target_method)
+
+
 @pytest.mark.grad
 @pytest.mark.parametrize("bmethod", [None, "cond", "lorn"])
 def test_eighb_broadening_grad(bmethod: Literal["cond", "lorn"] | None) -> None:
@@ -249,25 +266,12 @@ def test_eighb_broadening_grad(bmethod: Literal["cond", "lorn"] | None) -> None:
     """
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
-    def eigen_proxy(
-        m: Tensor,
-        target_method: Literal["cond", "lorn"] | None,
-        size_data: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        m = symmetrizef(m)
-        if size_data is not None:
-            m = clean_zero_padding(m, size_data)
-        if target_method is None:
-            return torch.linalg.eigh(m)
-        else:
-            return storch.linalg.eighb(m, broadening_method=target_method)
-
     # Generate a single standard eigenvalue test instance
     a1 = _symrng((8, 8), dd)
     a1.requires_grad = True
 
     assert dgradcheck(
-        lambda a2, method_l=bmethod: eigen_proxy(
+        lambda a2, method_l=bmethod: _eigen_proxy(
             a2,
             target_method=method_l,  # type: ignore[arg-type]
         ),
@@ -300,26 +304,13 @@ def test_eighb_broadening_grad_batch(bmethod: Literal["cond", "lorn"]) -> None:
     """
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
-    def eigen_proxy(
-        m: Tensor,
-        target_method: Literal["cond", "lorn"] | None,
-        size_data: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        m = symmetrizef(m)
-        if size_data is not None:
-            m = clean_zero_padding(m, size_data)
-        if target_method is None:
-            return torch.linalg.eigh(m)
-        else:
-            return storch.linalg.eighb(m, broadening_method=target_method)
-
     # Generate a batch of standard eigenvalue test instances
     sizes = np.random.randint(3, 8, (5,))
     a2 = pack([_symrng((s, s), dd) for s in sizes])
     a2.requires_grad = True
 
     assert dgradcheck(
-        lambda a2_l, method_l=bmethod: eigen_proxy(
+        lambda a2_l, method_l=bmethod: _eigen_proxy(
             a2_l,
             target_method=method_l,  # type: ignore[arg-type]
             size_data=numpy_to_tensor(sizes, **dd),
@@ -329,36 +320,39 @@ def test_eighb_broadening_grad_batch(bmethod: Literal["cond", "lorn"]) -> None:
     ), f"Non-degenerate batch test failed on {bmethod}"
 
 
+################################################################################
+
+
+def _eigen_proxy_general(
+    m: Tensor,
+    n: Tensor,
+    target_scheme: Literal["chol", "lowd"],
+    size_data: Tensor | None = None,
+) -> tuple[Tensor, Tensor]:
+    m, n = symmetrizef(m), symmetrizef(n)
+    if size_data is not None:
+        m = clean_zero_padding(m, size_data)
+        n = clean_zero_padding(n, size_data)
+
+    factor = torch.tensor(1e-12, device=m.device, dtype=m.dtype)
+    return storch.linalg.eighb(m, n, scheme=target_scheme, factor=factor)
+
+
 @pytest.mark.grad
 @pytest.mark.parametrize("scheme", ["chol", "lowd"])
 def test_eighb_general_grad(scheme: Literal["chol", "lowd"]) -> None:
     """eighb gradient stability on general eigenvalue problems."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
-    def eigen_proxy(
-        m: Tensor,
-        n: Tensor,
-        target_scheme: Literal["chol", "lowd"],
-        size_data: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        m, n = symmetrizef(m), symmetrizef(n)
-        if size_data is not None:
-            m = clean_zero_padding(m, size_data)
-            n = clean_zero_padding(n, size_data)
-
-        factor = torch.tensor(1e-12, **dd)
-        return storch.linalg.eighb(m, n, scheme=target_scheme, factor=factor)
-
     # Generate a single generalised eigenvalue test instance
     a1 = _symrng((8, 8), dd)
     b1 = symmetrizef(torch.eye(8, **dd) * _rng((8,), dd), force=True)
 
-    # dgradcheck detaches!
     a1.requires_grad, b1.requires_grad = True, True
 
     # dgradcheck only takes tensors, but: Loop variable capture of lambda
     assert dgradcheck(
-        lambda a1_l, b1_l, scheme_l=scheme: eigen_proxy(
+        lambda a1_l, b1_l, scheme_l=scheme: _eigen_proxy_general(
             a1_l,
             b1_l,
             target_scheme=scheme_l,  # type: ignore[arg-type]
@@ -369,18 +363,24 @@ def test_eighb_general_grad(scheme: Literal["chol", "lowd"]) -> None:
         rtol=1e-1,
     ), f"Non-degenerate single test failed on {scheme}"
 
+
+@pytest.mark.grad
+@pytest.mark.parametrize("scheme", ["chol", "lowd"])
+def test_eighb_general_grad_batch(scheme: Literal["chol", "lowd"]) -> None:
+    """eighb gradient stability on general eigenvalue problems."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
     # Generate a batch of generalised eigenvalue test instances
     sizes = np.random.randint(3, 8, (5,))
     a2 = pack([_symrng((s, s), dd) for s in sizes])
     b2 = pack([symmetrizef(torch.eye(s, **dd) * _rng((s,), dd)) for s in sizes])
 
-    # dgradcheck detaches!
     a2.requires_grad, b2.requires_grad = True, True
 
     # -> loosen tolerances
     # sometimes randomly fails with "chol" on random GA runners
     assert dgradcheck(
-        lambda a2_l, b2_l, size_data_l, scheme_l=scheme: eigen_proxy(
+        lambda a2_l, b2_l, size_data_l, scheme_l=scheme: _eigen_proxy_general(
             a2_l,
             b2_l,
             size_data=size_data_l,
