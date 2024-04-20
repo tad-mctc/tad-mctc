@@ -116,11 +116,9 @@ def test_charge() -> None:
 def test_wrong_device() -> None:
     numbers = MockTensor(torch.randint(1, 118, (5,)))
     numbers.device = torch.device("cpu")
-    numbers.dtype = torch.int64
 
     positions = MockTensor(torch.randn((5, 3)))
     positions.device = torch.device("cuda")
-    positions.dtype = torch.float32
 
     with pytest.raises(DeviceError):
         Mol(numbers, positions)
@@ -129,11 +127,9 @@ def test_wrong_device() -> None:
 def test_checks_device() -> None:
     numbers = MockTensor(torch.randint(1, 118, (5,)))
     numbers.device = torch.device("cpu")
-    numbers.dtype = torch.int64
 
     positions = MockTensor(torch.randn((5, 3)))
     positions.device = torch.device("cpu")
-    positions.dtype = torch.float32
 
     mol = Mol(numbers, positions)
     assert mol.checks() is None
@@ -147,16 +143,13 @@ def test_checks_device() -> None:
 def test_checks_dtype() -> None:
     numbers = MockTensor(torch.randint(1, 118, (5,)))
     numbers.device = torch.device("cpu")
-    numbers.dtype = torch.int64
 
     positions = MockTensor(torch.randn((5, 3)))
     positions.device = torch.device("cpu")
-    positions.dtype = torch.float32
 
     mol = Mol(numbers, positions)
     assert mol.checks() is None
 
-    numbers.dtype = torch.float32
-    mol._numbers = numbers
+    mol._numbers = numbers.type(torch.float32)
     with pytest.raises(DtypeError):
         mol.checks()

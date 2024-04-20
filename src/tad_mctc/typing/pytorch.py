@@ -104,15 +104,6 @@ class MockTensor(Tensor):
     def device(self, value: Any) -> None:
         self._device = value
 
-    @property
-    def dtype(self) -> Any:
-        """Overridable dtype property."""
-        return self._dtype
-
-    @dtype.setter
-    def dtype(self, value: Any) -> None:
-        self._dtype = value
-
 
 class TensorLike:
     """
