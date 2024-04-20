@@ -55,7 +55,13 @@ class Mol(TensorLike):
     Representation of a molecule.
     """
 
-    __slots__ = ["_numbers", "_positions", "_charge", "_name"]
+    __slots__ = [
+        "_numbers",
+        "_positions",
+        "_charge",
+        "_name",
+        "__memoization_cache",
+    ]
 
     def __init__(
         self,
@@ -137,7 +143,7 @@ class Mol(TensorLike):
     def clear_cache(self) -> None:
         """Clear the cross-instance caches of all memoized methods."""
         if hasattr(self.distances, "clear"):
-            self.distances.clear()
+            self.distances.clear(self)
 
     def checks(self) -> None | NoReturn:
         """
@@ -164,6 +170,9 @@ class Mol(TensorLike):
 
         # check if all tensors are on the same device
         for s in self.__slots__:
+            if s.startswith("__"):
+                continue
+
             attr = getattr(self, s)
             if isinstance(attr, Tensor):
                 if attr.device != self.device:

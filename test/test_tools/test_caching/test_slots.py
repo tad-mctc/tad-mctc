@@ -19,18 +19,39 @@ Test caching.
 """
 from __future__ import annotations
 
-from tad_mctc.tools import memoize
+import pytest
+
+from tad_mctc.tools.caching import memoize
 
 
-class TestClass:
+class DummyClass:
+    __slots__ = ["dummy", "__memoization_cache"]
+
+    def __init__(self):
+        self.dummy = 0
+
     @memoize
     def compute(self, x, y=0):
         """A simple method to test memoization."""
-        return x + y + sum(range(1000))
+        return self.dummy + x + y + sum(range(1000))
 
 
-def test_memoization():
-    obj = TestClass()
+def test_fail() -> None:
+    class DummyClassSlots:
+        __slots__ = ["dummy"]
+
+        @memoize
+        def compute(self, x, y=0):
+            """A simple method to test memoization."""
+            return x + y + sum(range(1000))
+
+    with pytest.raises(AttributeError):
+        obj = DummyClassSlots()
+        obj.compute(10, y=20)
+
+
+def test_memoization() -> None:
+    obj = DummyClass()
 
     # Call the function with the same arguments to ensure it's cached
     first_result = obj.compute(10, y=20)
@@ -42,20 +63,20 @@ def test_memoization():
 
 
 def test_cache_separation():
-    obj1 = TestClass()
-    obj2 = TestClass()
+    obj1 = DummyClass()
+    obj2 = DummyClass()
 
     obj1.compute(5)
     obj2.compute(5)
 
-    # Different objects DO share cache
-    c1 = obj1.compute.get_cache()
-    c2 = obj2.compute.get_cache()
-    assert c1 == c2
+    # Different objects do NOT share cache
+    c1 = obj1.compute.get_cache(obj1)
+    c2 = obj2.compute.get_cache(obj2)
+    assert c1 != c2
 
 
 def test_argument_sensitivity():
-    obj = TestClass()
+    obj = DummyClass()
 
     result1 = obj.compute(5)
     result2 = obj.compute(5, 1)
@@ -65,9 +86,9 @@ def test_argument_sensitivity():
 
 
 def test_clear_cache():
-    obj = TestClass()
+    obj = DummyClass()
     obj.compute(10)
-    obj.compute.clear_cache()
+    obj.compute.clear_cache(obj)
 
     # The cache should be empty after clearing
-    assert not obj.compute.get_cache()
+    assert not obj.compute.get_cache(obj)

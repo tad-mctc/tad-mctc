@@ -239,12 +239,14 @@ class TensorLike:
 
         args = {}
         for s in self.__slots__:
-            if not s.startswith("__"):
-                attr = getattr(self, s)
-                if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
-                    if attr.dtype in self.allowed_dtypes:
-                        attr = attr.type(dtype)
-                args[s] = attr
+            if s.startswith("__"):
+                continue
+
+            attr = getattr(self, s)
+            if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
+                if attr.dtype in self.allowed_dtypes:
+                    attr = attr.type(dtype)
+            args[s] = attr
 
         return self.__class__(**args, dtype=dtype)
 
