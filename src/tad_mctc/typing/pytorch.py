@@ -104,6 +104,15 @@ class MockTensor(Tensor):
     def device(self, value: Any) -> None:
         self._device = value
 
+    @property
+    def dtype(self) -> Any:
+        """Overridable dtype property."""
+        return self._dtype
+
+    @dtype.setter
+    def dtype(self, value: Any) -> None:
+        self._dtype = value
+
 
 class TensorLike:
     """
@@ -288,6 +297,20 @@ class TensorLike:
                 args[s] = attr
 
         return self.__class__(**args, device=device)
+
+    def cpu(self) -> Self:
+        """
+        Returns a copy of the `TensorLike` instance on the CPU.
+
+        This method creates and returns a new copy of the `TensorLike` instance
+        on the CPU.
+
+        Returns
+        -------
+        TensorLike
+            A copy of the `TensorLike` instance placed on the CPU.
+        """
+        return self.to(torch.device("cpu"))
 
     @property
     def allowed_dtypes(self) -> tuple[torch.dtype, ...]:

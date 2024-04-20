@@ -106,3 +106,27 @@ def test_shape_incorrect_cartesian_directions() -> None:
     positions = torch.zeros((natoms, ncart - 1))
     with pytest.raises(ValueError):
         checks.shape_checks(numbers, positions)
+
+
+def test_dimensions() -> None:
+
+    numbers = torch.tensor([1, 8])
+    positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.5]])
+    charge = torch.tensor(0.0)
+
+    assert checks.dimension_check(numbers, min_ndim=1, max_ndim=2)
+    assert checks.dimension_check(positions, min_ndim=2, max_ndim=3)
+    assert checks.dimension_check(charge, min_ndim=0, max_ndim=1)
+
+
+def test_dimensions_fail() -> None:
+    with pytest.raises(TypeError):
+        checks.dimension_check(1, min_ndim=1, max_ndim=1)
+
+    numbers = torch.tensor([[[1]]])
+    with pytest.raises(RuntimeError):
+        checks.dimension_check(numbers, max_ndim=2)
+
+    positions = torch.tensor([0.0, 0.0, 0.0])
+    with pytest.raises(RuntimeError):
+        checks.dimension_check(positions, min_ndim=2)

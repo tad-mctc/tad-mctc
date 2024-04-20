@@ -50,14 +50,19 @@ from ... import storch
 from ...batch import deflate, real_pairs
 from ...data import pse
 from ...exceptions import MoleculeError, MoleculeWarning
-from ...typing import DD, IO, Any, Tensor
+from ...typing import DD, IO, Any, NoReturn, Tensor
 
-__all__ = ["coldfusion_check", "content_checks", "deflatable_check"]
+__all__ = [
+    "coldfusion_check",
+    "content_checks",
+    "deflatable_check",
+    "dimension_check",
+]
 
 
 def coldfusion_check(
     numbers: Tensor, positions: Tensor, threshold: Tensor | float | int | None = None
-) -> bool:
+) -> bool | NoReturn:
     """
     Check if interatomic distances are large enough (no fusion of atoms).
 
@@ -99,7 +104,7 @@ def coldfusion_check(
     return True
 
 
-def content_checks(numbers: Tensor, positions: Tensor) -> bool:
+def content_checks(numbers: Tensor, positions: Tensor) -> bool | NoReturn:
     """
     Check the content of the numbers and positions tensors.
 
@@ -138,7 +143,7 @@ def content_checks(numbers: Tensor, positions: Tensor) -> bool:
 
 def deflatable_check(
     positions: Tensor, fileobj: IO[Any] | None = None, **kwargs: Any
-) -> bool:
+) -> bool | NoReturn:
     """
     Check for the last coordinate being at the origin as this might clash with
     padding.
@@ -190,5 +195,57 @@ def deflatable_check(
             from warnings import warn
 
             warn(msg, MoleculeWarning)
+
+    return True
+
+
+def dimension_check(
+    x: Any,
+    min_ndim: int = -1,
+    max_ndim: int = 9999,
+) -> bool | NoReturn:
+    """
+    Check if the number of dimensions of a tensor is within a certain range.
+
+    Parameters
+    ----------
+    x : Any
+        The tensor to check.
+    min_ndim : int, optional
+        Minimum number of dimensions for the tensor. Defaults to `-1`.
+    max_ndim : int, optional
+        Maximum number of dimensions for the tensor. Defaults to `9999`.
+
+    Returns
+    -------
+    None | NoReturn
+        Returns `None` if the tensor has the correct number of dimensions.
+
+    Raises
+    ------
+    TypeError
+        If the input is not a tensor.
+    RuntimeError
+        If the number of dimensions is not within the specified range.
+
+    Examples
+    --------
+    >>> import torch
+    >>> from tad_mctc.io.checks.molecule import dimension_check
+    >>> x = torch.tensor([1, 2, 3])
+    >>> dimension_check(x, min_ndim=1, max_ndim=1)
+    True
+    >>> dimension_check(x, min_ndim=2, max_ndim=2)
+    Traceback (most recent call last):
+    ...
+    RuntimeError: The tensor should not fall below '2' dimensions.
+    """
+    if not isinstance(x, Tensor):
+        raise TypeError(f"Variable is not a tensor but '{type(x)}'.")
+
+    if x.ndim < min_ndim:
+        raise RuntimeError(f"The tensor should not fall below {min_ndim} dimensions.")
+    if x.ndim > max_ndim:
+        raise RuntimeError(f"The tensor should not exceed '{max_ndim}' dimensions.")
 
     return True

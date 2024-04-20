@@ -15,13 +15,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Molecule
-========
+Tools
+-----
 
-Collection of utility functions for calculations related to a molecule.
+Collection of tools for:
+- caching
+- memory
 """
-
-from .bond import *
-from .container import *
-from .geometry import *
-from .property import *
+from .caching import *
+from .memory import *

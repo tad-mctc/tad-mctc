@@ -5,5 +5,6 @@
 .. toctree::
 
    bond
+   container
    geometry
    property

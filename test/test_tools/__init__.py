@@ -14,14 +14,3 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Molecule
-========
-
-Collection of utility functions for calculations related to a molecule.
-"""
-
-from .bond import *
-from .container import *
-from .geometry import *
-from .property import *

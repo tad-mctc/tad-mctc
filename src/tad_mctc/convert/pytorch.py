@@ -98,22 +98,22 @@ def any_to_tensor(
 
     Examples
     --------
-    >>> totensor(3.14)
+    >>> any_to_tensor(3.14)
     tensor(3.1400)
 
-    >>> totensor(42, dtype=torch.float32)
+    >>> any_to_tensor(42, dtype=torch.float32)
     tensor(42.)
 
-    >>> totensor(True)
+    >>> any_to_tensor(True)
     tensor(True)
 
-    >>> totensor('2.718')
+    >>> any_to_tensor('2.718')
     tensor(2.7180)
 
-    >>> totensor('not_a_number')
+    >>> any_to_tensor('not_a_number')
     ValueError: Cannot convert string 'not_a_number' to float
 
-    >>> totensor(["1", "2"])
+    >>> any_to_tensor(["1", "2"])
     TypeError: Tensor-incompatible type '<class 'list'>' of variable ["1", "2"].
     """
     if isinstance(x, Tensor):
