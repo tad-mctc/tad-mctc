@@ -81,8 +81,8 @@ def test_getter() -> None:
     positions = torch.randn((5, 3))
     mol = Mol(numbers, positions)
 
-    assert pytest.approx(numbers) == mol.numbers
-    assert pytest.approx(positions) == mol.positions
+    assert pytest.approx(numbers.cpu()) == mol.numbers.cpu()
+    assert pytest.approx(positions.cpu()) == mol.positions.cpu()
 
 
 def test_charge() -> None:
@@ -114,8 +114,7 @@ def test_charge() -> None:
 
 
 def test_wrong_device() -> None:
-    numbers = MockTensor(torch.randint(1, 118, (5,)))
-    numbers.device = torch.device("cpu")
+    numbers = torch.randint(1, 118, (5,), device=torch.device("cpu"))
 
     positions = MockTensor(torch.randn((5, 3)))
     positions.device = torch.device("cuda")
@@ -125,29 +124,33 @@ def test_wrong_device() -> None:
 
 
 def test_checks_device() -> None:
-    numbers = MockTensor(torch.randint(1, 118, (5,)))
-    numbers.device = torch.device("cpu")
+    numbers = torch.randint(1, 118, (5,), device=torch.device("cpu"))
 
     positions = MockTensor(torch.randn((5, 3)))
     positions.device = torch.device("cpu")
 
-    mol = Mol(numbers, positions)
+    mol = Mol(numbers, positions, device=torch.device("cpu"))
     assert mol.checks() is None
 
-    numbers.device = torch.device("cuda")
-    mol._numbers = numbers
+    positions.device = torch.device("cuda")
+    mol._positions = positions
     with pytest.raises(DeviceError):
         mol.checks()
 
 
 def test_checks_dtype() -> None:
-    numbers = MockTensor(torch.randint(1, 118, (5,)))
-    numbers.device = torch.device("cpu")
+    numbers = torch.randint(1, 118, (5,))
 
-    positions = MockTensor(torch.randn((5, 3)))
-    positions.device = torch.device("cpu")
+    # directly passing randint to MockTensor fails for 1.11.0
+    numbers = numbers.type(torch.float32)
+    numbers = MockTensor(numbers)
+    numbers = numbers.to(torch.int64)
 
-    mol = Mol(numbers, positions)
+    cpu = torch.device("cpu")
+    numbers.device = cpu
+    positions = torch.randn((5, 3), device=cpu)
+
+    mol = Mol(numbers, positions, device=cpu)
     assert mol.checks() is None
 
     mol._numbers = numbers.type(torch.float32)

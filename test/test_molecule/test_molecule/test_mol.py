@@ -42,6 +42,7 @@ def test_dist(dtype: torch.dtype, name: str) -> None:
     positions = sample["positions"].to(**dd)
 
     mol = Mol(numbers, positions)
+    mol.clear_cache()
     dist = mol.distances()
     mol.clear_cache()
 

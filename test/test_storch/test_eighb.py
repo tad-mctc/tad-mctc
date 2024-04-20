@@ -226,8 +226,10 @@ def test_eighb_general_batch() -> None:
 
 
 @pytest.mark.grad
-def test_eighb_broadening_grad() -> None:
-    """eighb gradient stability on standard, broadened, eigenvalue problems.
+@pytest.mark.parametrize("bmethod", [None, "cond", "lorn"])
+def test_eighb_broadening_grad(bmethod: Literal["cond", "lorn"] | None) -> None:
+    """
+    eighb gradient stability on standard, broadened, eigenvalue problems.
 
     There is no separate test for the standard eigenvalue problem without
     broadening as this would result in a direct call to torch.symeig which is
@@ -262,47 +264,74 @@ def test_eighb_broadening_grad() -> None:
 
     # Generate a single standard eigenvalue test instance
     a1 = _symrng((8, 8), dd)
+    a1.requires_grad = True
 
-    method: Literal["cond", "lorn"] | None
-    broadening_methods: list[Literal["cond", "lorn"] | None]
+    assert dgradcheck(
+        lambda a2, method_l=bmethod: eigen_proxy(
+            a2,
+            target_method=method_l,  # type: ignore[arg-type]
+        ),
+        (a1,),
+        fast_mode=FAST_MODE,
+    ), f"Non-degenerate single test failed on {bmethod}"
 
-    broadening_methods = [None, "cond", "lorn"]
-    for method in broadening_methods:
-        # dgradcheck detaches
-        a1.requires_grad = True
 
-        grad_is_safe = dgradcheck(
-            lambda a2, method_l=method: eigen_proxy(
-                a2,
-                target_method=method_l,  # type: ignore[arg-type]
-            ),
-            (a1,),
-            fast_mode=FAST_MODE,
-        )
-        assert grad_is_safe, f"Non-degenerate single test failed on {method}"
+@pytest.mark.grad
+@pytest.mark.parametrize("bmethod", ["cond", "lorn"])
+def test_eighb_broadening_grad_batch(bmethod: Literal["cond", "lorn"]) -> None:
+    """
+    eighb gradient stability on standard, broadened, eigenvalue problems.
+
+    There is no separate test for the standard eigenvalue problem without
+    broadening as this would result in a direct call to torch.symeig which is
+    unnecessary. However, it is important to note that conditional broadening
+    technically is never tested, i.e. the lines:
+
+    .. code-block:: python
+        ...
+        if ctx.bm == 'cond':  # <- Conditional broadening
+            deltas = 1 / torch.where(torch.abs(deltas) > bf,
+                                     deltas, bf) * torch.sign(deltas)
+        ...
+
+    of `_SymEigB` are never actual run. This is because it only activates when
+    there are true eigen-value degeneracies; & degenerate eigenvalue problems
+    do not "play well" with the gradcheck operation.
+    """
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    def eigen_proxy(
+        m: Tensor,
+        target_method: Literal["cond", "lorn"] | None,
+        size_data: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        m = symmetrizef(m)
+        if size_data is not None:
+            m = clean_zero_padding(m, size_data)
+        if target_method is None:
+            return torch.linalg.eigh(m)
+        else:
+            return storch.linalg.eighb(m, broadening_method=target_method)
 
     # Generate a batch of standard eigenvalue test instances
     sizes = np.random.randint(3, 8, (5,))
     a2 = pack([_symrng((s, s), dd) for s in sizes])
+    a2.requires_grad = True
 
-    for method in broadening_methods[2:]:
-        # dgradcheck detaches!
-        a2.requires_grad = True
-
-        grad_is_safe = dgradcheck(
-            lambda a2_l, method_l=method: eigen_proxy(
-                a2_l,
-                target_method=method_l,  # type: ignore[arg-type]
-                size_data=numpy_to_tensor(sizes, **dd),
-            ),
-            (a2,),
-            fast_mode=FAST_MODE,
-        )
-        assert grad_is_safe, f"Non-degenerate batch test failed on {method}"
+    assert dgradcheck(
+        lambda a2_l, method_l=bmethod: eigen_proxy(
+            a2_l,
+            target_method=method_l,  # type: ignore[arg-type]
+            size_data=numpy_to_tensor(sizes, **dd),
+        ),
+        (a2,),
+        fast_mode=FAST_MODE,
+    ), f"Non-degenerate batch test failed on {bmethod}"
 
 
 @pytest.mark.grad
-def test_eighb_general_grad() -> None:
+@pytest.mark.parametrize("scheme", ["chol", "lowd"])
+def test_eighb_general_grad(scheme: Literal["chol", "lowd"]) -> None:
     """eighb gradient stability on general eigenvalue problems."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -324,47 +353,41 @@ def test_eighb_general_grad() -> None:
     a1 = _symrng((8, 8), dd)
     b1 = symmetrizef(torch.eye(8, **dd) * _rng((8,), dd), force=True)
 
-    scheme: Literal["chol", "lowd"]
-    schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
-    for scheme in schemes:
-        # dgradcheck detaches!
-        a1.requires_grad, b1.requires_grad = True, True
+    # dgradcheck detaches!
+    a1.requires_grad, b1.requires_grad = True, True
 
-        # dgradcheck only takes tensors, but: Loop variable capture of lambda
-        grad_is_safe = dgradcheck(
-            lambda a1_l, b1_l, scheme_l=scheme: eigen_proxy(
-                a1_l,
-                b1_l,
-                target_scheme=scheme_l,  # type: ignore[arg-type]
-            ),
-            (a1, b1),
-            fast_mode=False,
-            atol=1e-1,
-            rtol=1e-1,
-        )
-        assert grad_is_safe, f"Non-degenerate single test failed on {scheme}"
+    # dgradcheck only takes tensors, but: Loop variable capture of lambda
+    assert dgradcheck(
+        lambda a1_l, b1_l, scheme_l=scheme: eigen_proxy(
+            a1_l,
+            b1_l,
+            target_scheme=scheme_l,  # type: ignore[arg-type]
+        ),
+        (a1, b1),
+        fast_mode=False,
+        atol=1e-1,
+        rtol=1e-1,
+    ), f"Non-degenerate single test failed on {scheme}"
 
     # Generate a batch of generalised eigenvalue test instances
     sizes = np.random.randint(3, 8, (5,))
     a2 = pack([_symrng((s, s), dd) for s in sizes])
     b2 = pack([symmetrizef(torch.eye(s, **dd) * _rng((s,), dd)) for s in sizes])
 
-    # sometimes randomly fails with "chol" on random GA runners
-    # -> loosen tolerances
-    for scheme in schemes:
-        # dgradcheck detaches!
-        a2.requires_grad, b2.requires_grad = True, True
+    # dgradcheck detaches!
+    a2.requires_grad, b2.requires_grad = True, True
 
-        grad_is_safe = dgradcheck(
-            lambda a2_l, b2_l, size_data_l, scheme_l=scheme: eigen_proxy(
-                a2_l,
-                b2_l,
-                size_data=size_data_l,
-                target_scheme=scheme_l,  # type: ignore[arg-type]
-            ),
-            (a2, b2, numpy_to_tensor(sizes, **dd)),
-            fast_mode=False,
-            atol=1e-1,
-            rtol=1e-1,
-        )
-        assert grad_is_safe, f"Non-degenerate batch test failed on {scheme}"
+    # -> loosen tolerances
+    # sometimes randomly fails with "chol" on random GA runners
+    assert dgradcheck(
+        lambda a2_l, b2_l, size_data_l, scheme_l=scheme: eigen_proxy(
+            a2_l,
+            b2_l,
+            size_data=size_data_l,
+            target_scheme=scheme_l,  # type: ignore[arg-type]
+        ),
+        (a2, b2, numpy_to_tensor(sizes, **dd)),
+        fast_mode=False,
+        atol=1e-1,
+        rtol=1e-1,
+    ), f"Non-degenerate batch test failed on {scheme}"
