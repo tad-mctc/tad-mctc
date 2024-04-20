@@ -18,7 +18,9 @@
 Torch Autodiff Utilities
 ========================
 
-This library is a collection of utility functions that are used in PyTorch (re-)implementations of projects from the `Grimme group <https://github.com/grimme-lab>`__.
+This library is a collection of utility functions that are used in PyTorch (re-)
+implementations of projects from the
+`Grimme group <https://github.com/grimme-lab>`__.
 In particular, the *tad-mctc* library provides:
 
 - autograd functions (Jacobian, Hessian)
@@ -27,9 +29,11 @@ In particular, the *tad-mctc* library provides:
 
 - batch utility (packing, masks, ...)
 
+- conversion functions (numpy, atmoic symbols/numbers, ...)
+
 - coordination numbers (DFT-D3, DFT-D4, EEQ)
 
-- io (reading coordinate files)
+- io (reading/writing coordinate files)
 
 - molecular properties (bond lengths/orders/angles, moment of inertia, ...)
 
@@ -39,13 +43,14 @@ In particular, the *tad-mctc* library provides:
 
 - units
 
-The name is inspired by the Fortran pendant "modular computation tool chain library" (`mctc-lib <https://github.com/grimme-lab/mctc-lib/>`__).
+The name is inspired by the Fortran pendant "modular computation tool chain
+library" (`mctc-lib <https://github.com/grimme-lab/mctc-lib/>`__).
 
 .. note::
 
    This project is still in early development and the API is subject to change.
    Contributions are welcome, please checkout our
-   `contributing guidelines <https://github.com/dftd4/tad_mctc/blob/main/CONTRIBUTING.md>`_.
+   `contributing guidelines <https://github.com/tad-mctc/tad-mctc/blob/main/CONTRIBUTING.md>`_.
 
 Example
 -------

@@ -52,13 +52,17 @@ In particular, the *tad-mctc* library provides:
 
 - autograd functions (Jacobian, Hessian)
 
-- batch utility (packing, masks, ...)
-
 - atomic data (radii, EN, example molecules, ...)
 
-- io (reading coordinate files)
+- batch utility (packing, masks, ...)
 
-- coordination numbers
+- conversion functions (numpy, atmoic symbols/numbers, ...)
+
+- coordination numbers (DFT-D3, DFT-D4, EEQ)
+
+- io (reading/writing coordinate files)
+
+- molecular properties (bond lengths/orders/angles, moment of inertia, ...)
 
 - safeops (autograd-safe implementations of common functions)
 

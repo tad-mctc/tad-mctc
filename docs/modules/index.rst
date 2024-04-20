@@ -16,5 +16,6 @@ The following modules are contained with `tad_mctc`.
    molecule/index
    ncoord/index
    storch/index
+   tools/index
    typing/index
    units/index

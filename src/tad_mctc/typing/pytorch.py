@@ -239,12 +239,14 @@ class TensorLike:
 
         args = {}
         for s in self.__slots__:
-            if not s.startswith("__"):
-                attr = getattr(self, s)
-                if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
-                    if attr.dtype in self.allowed_dtypes:
-                        attr = attr.type(dtype)
-                args[s] = attr
+            if s.startswith("__"):
+                continue
+
+            attr = getattr(self, s)
+            if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
+                if attr.dtype in self.allowed_dtypes:
+                    attr = attr.type(dtype)
+            args[s] = attr
 
         return self.__class__(**args, dtype=dtype)
 
@@ -288,6 +290,20 @@ class TensorLike:
                 args[s] = attr
 
         return self.__class__(**args, device=device)
+
+    def cpu(self) -> Self:
+        """
+        Returns a copy of the `TensorLike` instance on the CPU.
+
+        This method creates and returns a new copy of the `TensorLike` instance
+        on the CPU.
+
+        Returns
+        -------
+        TensorLike
+            A copy of the `TensorLike` instance placed on the CPU.
+        """
+        return self.to(torch.device("cpu"))
 
     @property
     def allowed_dtypes(self) -> tuple[torch.dtype, ...]:

@@ -15,13 +15,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Molecule
-========
-
-Collection of utility functions for calculations related to a molecule.
+Test the utility functions.
 """
+from __future__ import annotations
 
-from .bond import *
-from .container import *
-from .geometry import *
-from .property import *
+import torch
+
+from tad_mctc.batch.mask import real_atoms
+from tad_mctc.batch.mask.jit import real_atoms_traced
+
+
+def test_real_atoms() -> None:
+    numbers = torch.tensor(
+        [
+            [1, 1, 0, 0, 0],  # H2
+            [6, 1, 1, 1, 1],  # CH4
+        ],
+    )
+    ref = torch.tensor(
+        [
+            [True, True, False, False, False],  # H2
+            [True, True, True, True, True],  # CH4
+        ],
+    )
+
+    mask = real_atoms(numbers)
+    assert (mask == ref).all()
+
+    jmask = real_atoms_traced(numbers)
+    assert (mask == jmask).all()

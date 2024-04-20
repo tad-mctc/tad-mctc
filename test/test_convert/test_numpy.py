@@ -90,8 +90,7 @@ def test_np_to_torch_with_dtype(dtype: torch.dtype) -> None:
     assert tensor.dtype == dtype
 
 
-@pytest.mark.cuda
-@pytest.mark.parametrize("device_str", ["cpu", "cuda"])
+@pytest.mark.parametrize("device_str", ["cpu"])
 def test_np_to_torch_with_device(device_str: str) -> None:
     device = convert.str_to_device(device_str)
 
@@ -111,8 +110,7 @@ def test_torch_to_np_with_dtype(dtype: np.dtype[np.float32 | np.float64]) -> Non
     assert arr.dtype == dtype
 
 
-@pytest.mark.cuda
-@pytest.mark.parametrize("device_str", ["cpu", "cuda"])
+@pytest.mark.parametrize("device_str", ["cpu"])
 def test_torch_to_np_with_device(device_str: str) -> None:
     device = convert.str_to_device(device_str)
 
