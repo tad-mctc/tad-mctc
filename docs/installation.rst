@@ -40,8 +40,10 @@ Install this project with ``pip`` in the environment
 The following dependencies are required
 
 - `numpy <https://numpy.org/>`__
-- `torch <https://pytorch.org/>`__
+- `opt_einsum <https://optimized-einsum.readthedocs.io/en/stable/>`__
+- `psutil <https://psutil.readthedocs.io/en/latest/>`__
 - `pytest <https://docs.pytest.org/>`__ (tests only)
+- `torch <https://pytorch.org/>`__
 
 Development
 -----------

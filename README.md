@@ -112,8 +112,10 @@ pip install .
 The following dependencies are required
 
 - [numpy](https://numpy.org/)
-- [torch](https://pytorch.org/)
+- [opt_einsum](https://optimized-einsum.readthedocs.io/en/stable/)
+- [psutil](https://psutil.readthedocs.io/en/latest/)
 - [pytest](https://docs.pytest.org/) (tests only)
+- [torch](https://pytorch.org/)
 
 ## Development
 

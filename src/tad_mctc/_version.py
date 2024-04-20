@@ -50,5 +50,5 @@ def version_tuple(version_string: str) -> tuple[int, ...]:
     return tuple(version_numbers)
 
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 __tversion__ = version_tuple(torch.__version__)
