@@ -23,11 +23,9 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tad_mctc.convert import str_to_device
 from tad_mctc.data.molecules import mols as samples
-from tad_mctc.exceptions import DeviceError
 from tad_mctc.molecule.container import Mol
-from tad_mctc.typing import DD, MockTensor
+from tad_mctc.typing import DD
 
 sample_list = ["H2", "LiH", "H2O", "SiH4", "MB16_43_01", "vancoh2"]
 
