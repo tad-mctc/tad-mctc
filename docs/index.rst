@@ -13,6 +13,10 @@ Torch Autodiff Utility
     :target: https://pypi.org/project/tad-mctc/
     :alt: PyPI
 
+.. image:: https://img.shields.io/conda/vn/conda-forge/tad-mctc.svg
+    :target: https://anaconda.org/conda-forge/tad-mctc
+    :alt: Conda Version
+
 .. image:: https://img.shields.io/badge/License-Apache%202.0-blue.svg
     :target: http://www.apache.org/licenses/LICENSE-2.0
     :alt: Apache-2.0
@@ -43,7 +47,7 @@ In particular, the *tad-mctc* library provides:
 
 - batch utility (packing, masks, ...)
 
-- conversion functions (numpy, atmoic symbols/numbers, ...)
+- conversion functions (numpy, atomic symbols/numbers, ...)
 
 - coordination numbers (DFT-D3, DFT-D4, EEQ)
 
