@@ -86,6 +86,7 @@ class Mol(TensorLike):
 
     @property
     def numbers(self) -> Tensor:
+        """Atomic numbers of the molecule."""
         return self._numbers
 
     @numbers.setter
@@ -95,6 +96,7 @@ class Mol(TensorLike):
 
     @property
     def positions(self) -> Tensor:
+        """Cartesian coordinates of the atoms in the molecule."""
         return self._positions
 
     @positions.setter
@@ -104,6 +106,7 @@ class Mol(TensorLike):
 
     @property
     def charge(self) -> Tensor:
+        """Charge of the molecule."""
         return self._charge
 
     @charge.setter
@@ -117,6 +120,7 @@ class Mol(TensorLike):
 
     @property
     def name(self) -> str | None:
+        """Name of the molecule."""
         return self._name
 
     @name.setter

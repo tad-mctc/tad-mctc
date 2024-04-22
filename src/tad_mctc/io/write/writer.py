@@ -32,6 +32,8 @@ __all__ = ["create_path_writer"]
 
 @runtime_checkable
 class WriterFunction(Protocol):
+    """Type annotation for a writer function."""
+
     def __call__(
         self,
         fileobj: IO[Any],
@@ -43,6 +45,8 @@ class WriterFunction(Protocol):
 
 @runtime_checkable
 class FileWriterFunction(Protocol):
+    """Type annotation for a file writer function."""
+
     def __call__(
         self,
         filepath: PathLike,
@@ -67,7 +71,8 @@ def create_path_writer(writer_function: WriterFunction) -> FileWriterFunction:
     Returns
     -------
     FileWriterFunction
-        A function that takes a file path, numbers, positions, mode, comment, and format string, and writes the data to the file.
+        A function that takes a file path, numbers, positions, mode, comment,
+        and format string, and writes the data to the file.
     """
 
     @wraps(writer_function)

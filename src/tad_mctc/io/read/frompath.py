@@ -41,6 +41,8 @@ __all__ = ["create_path_reader", "create_path_reader_dotfiles"]
 
 @runtime_checkable
 class ReaderFunction(Protocol):
+    """Type annotation for a reader function."""
+
     def __call__(
         self,
         fileobj: IO[Any],
@@ -51,6 +53,8 @@ class ReaderFunction(Protocol):
 
 @runtime_checkable
 class FileReaderFunction(Protocol):
+    """Type annotation for a file reader function."""
+
     def __call__(
         self,
         filepath: PathLike,
@@ -128,6 +132,8 @@ def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
 
 @runtime_checkable
 class ReaderFunctionTensor(Protocol):
+    """Type annotation for a reader function that returns a tensor."""
+
     def __call__(
         self,
         fileobj: IO[Any],
@@ -138,6 +144,8 @@ class ReaderFunctionTensor(Protocol):
 
 @runtime_checkable
 class FileReaderFunctionTensor(Protocol):
+    """Type annotation for a file reader function that returns a tensor."""
+
     def __call__(
         self,
         filepath: PathLike,
@@ -169,7 +177,7 @@ def create_path_reader_dotfiles(
     """
     # return default if file is not found (must be integer to allow integer
     # dtypes from PyTorch, e.g., 0.0 fails with torch.long)
-    DEFAULT_VALUE = 0
+    default_value = 0
 
     def read_from_path(
         filepath: PathLike,
@@ -211,7 +219,7 @@ def create_path_reader_dotfiles(
 
         # Check if the file now exists
         if not path.exists():
-            return torch.tensor(DEFAULT_VALUE, device=device, dtype=dtype)
+            return torch.tensor(default_value, device=device, dtype=dtype)
 
         with open(path, mode=mode, encoding=encoding) as fileobj:
             return reader_function(fileobj, device, dtype)

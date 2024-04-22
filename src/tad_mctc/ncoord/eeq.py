@@ -121,6 +121,22 @@ def cn_eeq(
 def cut_coordination_number(
     cn: Tensor, cn_max: Tensor | float | int = defaults.CUTOFF_EEQ_MAX
 ) -> Tensor:
+    """
+    Cut the coordination number at a maximum value.
+
+    Parameters
+    ----------
+    cn : Tensor
+        Coordination numbers.
+    cn_max : Tensor | float | int, optional
+        Maximum coordination number.
+        Defaults to :const:`tad_mctc.ncoord.defaults.CUTOFF_EEQ_MAX`.
+
+    Returns
+    -------
+    Tensor
+        Cut coordination numbers.
+    """
     if isinstance(cn_max, (float, int)):
         cn_max = torch.tensor(cn_max, device=cn.device, dtype=cn.dtype)
 

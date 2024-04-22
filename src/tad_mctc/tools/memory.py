@@ -106,6 +106,7 @@ def memory_device(device: torch.device) -> tuple[float, float]:
         )
 
     if device.type == "cpu":
+        # pylint: disable=import-outside-toplevel
         from psutil import virtual_memory
 
         mem = virtual_memory()
