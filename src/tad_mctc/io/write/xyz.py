@@ -62,8 +62,6 @@ def write_xyz(
         If the comment contains line breaks.
     """
     positions = positions * length.AU2AA
-    assert shape_checks(numbers, positions)
-    assert content_checks(numbers, positions)
 
     fmt = kwargs.pop("fmt", "%20.14f")
     comment = kwargs.pop("comment", "").rstrip()
@@ -71,10 +69,46 @@ def write_xyz(
     if "\n" in comment:
         raise ValueError("Comment line should not have line breaks.")
 
-    fileobj.write(f"{len(numbers)}\n{comment}\n")
-    for num, pos in zip(numbers, positions):
-        symbol = pse.Z2S[int(num.item())].title()
-        fileobj.write(f"{symbol:<2} {fmt % pos[0]} {fmt % pos[1]} {fmt % pos[2]}\n")
+    def _write(num: Tensor, pos: Tensor) -> None:
+        assert shape_checks(num, pos)
+        assert content_checks(num, pos)
+
+        fileobj.write(f"{len(num)}\n{comment}\n")
+        for n, p in zip(num, pos):
+            sym = pse.Z2S[int(n.item())].title()
+            fileobj.write(f"{sym:<2} {fmt % p[0]} {fmt % p[1]} {fmt % p[2]}\n")
+
+    # single frame
+    if len(numbers.shape) == 1 and len(positions.shape) == 2:
+        _write(numbers, positions)
+        return
+
+    # check shapes
+    if len(numbers.shape) != 1 and len(positions.shape) == 2:
+        raise ValueError(
+            "Invalid shapes: Atomic positions is 2D (not batched), but atomic "
+            "numbers are not 1D (batched?)."
+        )
+    if len(numbers.shape) == 1 and len(positions.shape) != 2:
+        raise ValueError(
+            "Invalid shapes: Atomic numbers are 1D (not batched), but atomic "
+            "positions are not 2D (batched?)."
+        )
+
+    # actual batched write
+    if len(numbers.shape) == 2 and len(positions.shape) == 3:
+        # pylint: disable=import-outside-toplevel
+        from tad_mctc.batch import deflate
+
+        for num, pos in zip(numbers, positions):
+            _write(deflate(num), deflate(pos))
+
+        return
+
+    raise ValueError(
+        f"Invalid shapes of atomic numbers ({numbers.shape}) and positions "
+        f"({positions.shape})."
+    )
 
 
 write_xyz_to_path = create_path_writer(write_xyz)

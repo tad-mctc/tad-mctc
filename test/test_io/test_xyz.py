@@ -54,6 +54,31 @@ def test_write_fail() -> None:
             write.write_xyz_to_path(filepath, numbers, positions)
 
 
+def test_write_batch_fail() -> None:
+    sample = samples["H2O"]
+
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = Path(tmpdirname) / "dummy.xyz"
+
+        # numbers batched, positions not
+        numbers = pack((sample["numbers"], sample["numbers"]))
+        positions = sample["positions"]
+        with pytest.raises(ValueError):
+            write.write_xyz_to_path(filepath, numbers, positions, overwrite=True)
+
+        # positions batched, numbers not
+        numbers = sample["numbers"]
+        positions = pack((sample["positions"], sample["positions"]))
+        with pytest.raises(ValueError):
+            write.write_xyz_to_path(filepath, numbers, positions, overwrite=True)
+
+        # too many dimensions
+        numbers = torch.rand(2, 3, 4)
+        positions = torch.rand(2, 3, 4, 3)
+        with pytest.raises(ValueError):
+            write.write_xyz_to_path(filepath, numbers, positions, overwrite=True)
+
+
 def test_write_comment_fail() -> None:
     sample = samples["H2O"]
     numbers = sample["numbers"]
@@ -124,3 +149,38 @@ def test_write_and_read_batch(dtype: torch.dtype, name1: str, name2: str) -> Non
     # Check if the read data matches the written data
     assert (read_numbers == numbers_batch).all()
     assert pytest.approx(positions_batch.cpu()) == read_positions.cpu()
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+@pytest.mark.parametrize("name1", sample_list)
+@pytest.mark.parametrize("name2", sample_list)
+def test_write_batch_and_read_batch(dtype: torch.dtype, name1: str, name2: str) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
+    sample1, sample2 = samples[name1], samples[name2]
+    numbers = pack(
+        (
+            sample1["numbers"].to(DEVICE),
+            sample2["numbers"].to(DEVICE),
+        )
+    )
+    positions = pack(
+        (
+            sample1["positions"].to(**dd),
+            sample2["positions"].to(**dd),
+        )
+    )
+
+    # Create a temporary directory to save the file
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = Path(tmpdirname) / "combined.xyz"
+
+        # Write structure to XYZ file
+        write.write_xyz_to_path(filepath, numbers, positions, mode="w")
+
+        # Read from XYZ file
+        read_numbers, read_positions = read.read_xyz_from_path(filepath, **dd)
+
+    # Check if the read data matches the written data
+    assert (read_numbers == numbers).all()
+    assert pytest.approx(positions.cpu()) == read_positions.cpu()
