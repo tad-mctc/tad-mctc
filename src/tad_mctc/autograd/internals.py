@@ -47,10 +47,11 @@ if __tversion__ < (2, 0, 0):
         from functorch import jacrev as fjacrev  # type: ignore[import-error]
         from functorch import vmap as fvmap  # type: ignore[import-error]
     except ModuleNotFoundError:
+        # pylint: disable=invalid-name
         fjacrev = None
         fvmap = None
 else:
-    from torch.func import jacrev as jacrev  # type: ignore[import-error]
+    from torch.func import jacrev  # type: ignore[import-error]
     from torch.func import vmap  # type: ignore[import-error]
 
     fjacrev = jacrev

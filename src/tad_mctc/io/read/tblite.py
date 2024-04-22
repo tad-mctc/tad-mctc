@@ -44,6 +44,7 @@ def _read_tblite_gfn(fileobj: IO[Any]) -> dict[str, str | float]:
     dict[str, str | float]
         Full tblite JSON output.
     """
+    # pylint: disable=import-outside-toplevel
     from json import loads as json_load
 
     return json_load(fileobj.read())

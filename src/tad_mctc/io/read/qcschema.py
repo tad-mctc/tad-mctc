@@ -70,7 +70,7 @@ def read_qcschema(
     }
     ddi: DD = {"device": device, "dtype": dtype_int}
 
-    # pylint: disable=import-beyond-top-level
+    # pylint: disable=import-outside-toplevel
     from json import loads as json_load
 
     data = json_load(fileobj.read())

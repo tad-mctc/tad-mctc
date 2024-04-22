@@ -60,7 +60,9 @@ def shape_checks(numbers: Tensor, positions: Tensor) -> bool:
 
     if positions.shape[-1] != 3:
         raise ValueError(
-            f"The last dimension of the position tensor must present the cartesian directions, i.e., it must be size 3 (but is {positions.shape[-1]}"
+            "The last dimension of the position tensor must present the "
+            "cartesian directions, i.e., it must be size 3 (but is "
+            f"{positions.shape[-1]}"
         )
 
     if len(numbers.shape) != 1 or len(positions.shape) != 2:
