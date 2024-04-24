@@ -29,7 +29,7 @@ In particular, the *tad-mctc* library provides:
 
 - batch utility (packing, masks, ...)
 
-- conversion functions (numpy, atmoic symbols/numbers, ...)
+- conversion functions (numpy, atomic symbols/numbers, ...)
 
 - coordination numbers (DFT-D3, DFT-D4, EEQ)
 

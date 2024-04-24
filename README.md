@@ -17,6 +17,9 @@
       <a href="https://pypi.org/project/tad-mctc/">
         <img src="https://img.shields.io/pypi/v/tad-mctc?color=orange" alt="PyPI"/>
       </a>
+      <a href="https://anaconda.org/conda-forge/tad-mctc">
+        <img src="https://img.shields.io/conda/vn/conda-forge/tad-mctc.svg" alt="Conda Version"/>
+      </a>
       <a href="http://www.apache.org/licenses/LICENSE-2.0">
         <img src="https://img.shields.io/badge/License-Apache%202.0-orange.svg" alt="Apache-2.0"/>
       </a>
@@ -56,7 +59,7 @@ In particular, the *tad-mctc* library provides:
 
 - batch utility (packing, masks, ...)
 
-- conversion functions (numpy, atmoic symbols/numbers, ...)
+- conversion functions (numpy, atomic symbols/numbers, ...)
 
 - coordination numbers (DFT-D3, DFT-D4, EEQ)
 
