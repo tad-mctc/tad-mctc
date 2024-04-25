@@ -4,12 +4,22 @@ Installation
 pip
 ~~~
 
+.. image:: https://img.shields.io/pypi/v/tad-mctc
+    :target: https://pypi.org/project/tad-mctc/
+    :alt: PyPI
+
 *tad-mctc* can easily be installed with ``pip``.
 
 .. code::
 
     pip install tad-mctc
 
+conda
+~~~~~
+
+.. image:: https://img.shields.io/conda/vn/conda-forge/tad-mctc.svg
+    :target: https://anaconda.org/conda-forge/tad-mctc
+    :alt: Conda Version
 
 *tad-mctc* is also available from ``conda``.
 

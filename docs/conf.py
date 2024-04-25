@@ -31,7 +31,6 @@ copyright = f"2023 {author}"
 extensions = [
     "sphinx_design",
     "sphinx_copybutton",
-    "sphinx_design",
     "sphinx.ext.autosummary",
     "sphinx.ext.autodoc",
     "sphinx.ext.intersphinx",
