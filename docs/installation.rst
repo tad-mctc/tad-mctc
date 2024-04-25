@@ -14,7 +14,7 @@ pip
 *tad-mctc* is also available from ``conda``.
 
 .. code::
-  
+
     conda install tad-mctc
 
 From source
