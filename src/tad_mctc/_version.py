@@ -51,4 +51,7 @@ def version_tuple(version_string: str) -> tuple[int, ...]:
 
 
 __version__ = "0.1.4"
+"""Version of tad-mctc in semantic versioning."""
+
 __tversion__ = version_tuple(torch.__version__)
+"""Version of PyTorch reduced to semantic versioning."""

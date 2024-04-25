@@ -11,6 +11,12 @@ pip
     pip install tad-mctc
 
 
+*tad-mctc* is also available from ``conda``.
+
+.. code::
+  
+    conda install tad-mctc
+
 From source
 ~~~~~~~~~~~
 

@@ -25,8 +25,14 @@
   <tr>
     <td>Status:</td>
     <td>
-      <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/python.yaml">
-        <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/python.yaml/badge.svg" alt="Test Status"/>
+      <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/ubuntu.yaml">
+        <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/ubuntu.yaml/badge.svg" alt="Test Status Ubuntu"/>
+      </a>
+      <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/macos.yaml">
+        <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/macos.yaml/badge.svg" alt="Test Status macOS"/>
+      </a>
+      <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/windows.yaml">
+        <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/windows.yaml/badge.svg" alt="Test Status Windows"/>
       </a>
       <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/release.yaml">
         <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/release.yaml/badge.svg" alt="Build Status"/>
@@ -46,9 +52,8 @@
 
 <br>
 
-
 This library is a collection of utility functions that are used in PyTorch (re-)implementations of projects from the [Grimme group](https://github.com/grimme-lab).
-In particular, the *tad-mctc* library provides:
+In particular, the _tad-mctc_ library provides:
 
 - autograd functions (Jacobian, Hessian)
 
@@ -72,17 +77,23 @@ In particular, the *tad-mctc* library provides:
 
 The name is inspired by the Fortran pendant "modular computation tool chain library" ([mctc-lib](https://github.com/grimme-lab/mctc-lib/)).
 
-
 ## Installation
 
 ### pip
 
-*tad-mctc* can easily be installed with ``pip``.
+_tad-mctc_ can easily be installed with `pip`.
 
 ```sh
 pip install tad-mctc
 ```
 
+### conda
+
+_tad-mctc_ is also available from `conda`.
+
+```sh
+conda install tad-mctc
+```
 
 ### From source
 
@@ -103,7 +114,7 @@ mamba env create -n torch -f environment.yaml
 mamba activate torch
 ```
 
-Install this project with ``pip`` in the environment
+Install this project with `pip` in the environment
 
 ```sh
 pip install .
@@ -126,7 +137,7 @@ mamba install black covdefaults mypy pre-commit pylint pytest pytest-cov pytest-
 pip install pytest-random-order
 ```
 
-With pip, add the option ``-e`` for installing in development mode, and add ``[dev]`` for the development dependencies
+With pip, add the option `-e` for installing in development mode, and add `[dev]` for the development dependencies
 
 ```sh
 pip install -e .[dev]
@@ -144,7 +155,7 @@ For testing all Python environments, simply run `tox`.
 tox
 ```
 
-Note that this randomizes the order of tests but skips "large" tests. To modify this behavior, `tox` has to skip the optional *posargs*.
+Note that this randomizes the order of tests but skips "large" tests. To modify this behavior, `tox` has to skip the optional _posargs_.
 
 ```sh
 tox -- test
