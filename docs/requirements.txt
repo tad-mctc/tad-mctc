@@ -1,7 +1,12 @@
 sphinx
+sphinx-autodoc
+sphinx-autosummary
 sphinx-book-theme
 sphinx-copybutton
 sphinx-design
+sphinx-intersphinx
+sphinx-napoleon
+sphinx-viewcode
 numpy
 opt_einsum
 psutil
