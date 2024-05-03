@@ -27,7 +27,9 @@ from ...typing import Tensor
 __all__ = ["shape_checks"]
 
 
-def shape_checks(numbers: Tensor, positions: Tensor) -> bool:
+def shape_checks(
+    numbers: Tensor, positions: Tensor, allow_batched: bool = True
+) -> bool:
     """
     Check the shapes of the numbers and positions tensors. This explicitly
     checks for non-batched tensor shapes (batched tensors throw errors).
@@ -65,7 +67,8 @@ def shape_checks(numbers: Tensor, positions: Tensor) -> bool:
             f"{positions.shape[-1]}"
         )
 
-    if len(numbers.shape) != 1 or len(positions.shape) != 2:
-        raise ValueError("Invalid shape for tensors (batched tensors not allowed).")
+    if allow_batched is False:
+        if len(numbers.shape) != 1 or len(positions.shape) != 2:
+            raise ValueError("Invalid shape for tensors (batched tensors not allowed).")
 
     return True

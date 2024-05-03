@@ -4,9 +4,11 @@
 
 .. toctree::
 
-   reader
+   dotfiles
    frompath
    orca
    qcschema
+   reader
+   tblite
    turbomole
    xyz

@@ -5,8 +5,8 @@
 .. toctree::
 
    batched
+   compat
    gradcheck
    hessian
    internals
-   jac
    nonfunctorch

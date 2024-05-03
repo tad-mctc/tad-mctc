@@ -1,4 +1,4 @@
-# This file is part of dxtb, modified from tbmalt/tbmalt.
+# This file is part of tad-mctc, modified from tbmalt/tbmalt.
 #
 # SPDX-Identifier: Apache-2.0
 # Copyright (C) 2024 Grimme Group

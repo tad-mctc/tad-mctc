@@ -51,7 +51,6 @@ html_theme_options = {
     "use_download_button": False,
     "path_to_docs": "doc",
     "show_navbar_depth": 3,
-    "logo_only": False,
 }
 
 html_sidebars = {}  # type: ignore[var-annotated]
