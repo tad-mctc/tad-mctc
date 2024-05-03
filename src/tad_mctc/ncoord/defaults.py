@@ -15,26 +15,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Parameters
-==========
+Coordination number: Defaults
+=============================
 
 Parameters for the counting functions and default cutoffs.
 """
+
+__all__ = [
+    "KCN_EEQ",
+    "KCN_D3",
+    "KA",
+    "KB",
+    "R_SHIFT",
+    "CUTOFF_D3",
+    "CUTOFF_D4",
+    "CUTOFF_EEQ",
+    "CUTOFF_EEQ_MAX",
+    "KCN_D4",
+    "D4_K4",
+    "D4_K5",
+    "D4_K6",
+]
 
 KCN_EEQ = 7.5
 """Steepness of counting function in EEQ model (7.5)."""
 
 KCN_D3 = 16.0
-"""GFN1: Steepness of counting function."""
+"""Steepness of counting function in GFN1."""
 
 KA = 10.0
-"""GFN2: Steepness of first counting function."""
+"""Steepness of first counting function in GFN2."""
 
 KB = 20.0
-"""GFN2: Steepness of second counting function."""
+"""Steepness of second counting function in GFN2."""
 
 R_SHIFT = 2.0
-"""GFN2: Offset of the second counting function."""
+"""Offset of the second counting function in GFN2."""
 
 
 CUTOFF_D3 = 25.0
