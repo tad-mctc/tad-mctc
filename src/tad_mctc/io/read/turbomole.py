@@ -115,8 +115,8 @@ def read_turbomole(
         numbers = torch.tensor([pse.S2Z[symbol] for symbol in symbols], **ddi)
         positions = torch.tensor(coords, **dd)
 
-        assert shape_checks(numbers, positions)
-        assert content_checks(numbers, positions)
+        assert shape_checks(numbers, positions, allow_batched=False)
+        assert content_checks(numbers, positions, allow_batched=False)
         assert deflatable_check(positions, fileobj, **kwargs)
 
     # Check if data was actually parsed

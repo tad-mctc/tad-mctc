@@ -93,8 +93,8 @@ def read_qcschema(
     numbers = torch.tensor([pse.S2Z[s] for s in mol["symbols"]], **ddi)
     positions = torch.tensor(coords, **dd)
 
-    assert shape_checks(numbers, positions)
-    assert content_checks(numbers, positions)
+    assert shape_checks(numbers, positions, allow_batched=False)
+    assert content_checks(numbers, positions, allow_batched=False)
     assert deflatable_check(positions, fileobj, **kwargs)
 
     return numbers, positions

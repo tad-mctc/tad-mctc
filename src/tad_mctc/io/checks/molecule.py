@@ -107,7 +107,12 @@ def coldfusion_check(
     return True
 
 
-def content_checks(numbers: Tensor, positions: Tensor) -> bool | NoReturn:
+def content_checks(
+    numbers: Tensor,
+    positions: Tensor,
+    max_element: int = pse.MAX_ELEMENT,
+    allow_batched: bool = True,
+) -> bool | NoReturn:
     """
     Check the content of the numbers and positions tensors.
 
@@ -117,9 +122,13 @@ def content_checks(numbers: Tensor, positions: Tensor) -> bool | NoReturn:
     Parameters
     ----------
     numbers : Tensor
-        A 1D tensor containing atomic numbers or symbols.
+        Atomic numbers for all atoms in the system of shape `(..., nat)`.
     positions : Tensor
-        A 2D tensor of shape (n_atoms, 3) containing atomic positions.
+        Cartesian coordinates of all atoms (shape: `(..., nat, 3)`).
+    max_element : int, optional
+        Maximum atomic number allowed. Defaults to `pse.MAX_ELEMENT`.
+    allow_batched : bool, optional
+        Allow batched tensors. Defaults to `True`.
 
     Returns
     -------
@@ -128,16 +137,18 @@ def content_checks(numbers: Tensor, positions: Tensor) -> bool | NoReturn:
 
     Raises
     ------
-    ValueError
+    MoleculeError
         Atomic number too large or too small.
     """
-    if numbers.max() > pse.MAX_ELEMENT:
-        raise MoleculeError(f"Atomic number larger than {pse.MAX_ELEMENT} found.")
-    if numbers.min() < 1:
-        raise MoleculeError(
-            "Atomic number smaller than 1 found. This may indicate residual "
-            "padding. Remove before writing to file."
-        )
+    if numbers.max() > max_element:
+        raise MoleculeError(f"Atomic number larger than {max_element} found.")
+
+    if allow_batched is False:
+        if numbers.min() < 1:
+            raise MoleculeError(
+                "Atomic number smaller than 1 found. This may indicate "
+                "residual padding. Remove before writing to file."
+            )
 
     assert coldfusion_check(numbers, positions)
 

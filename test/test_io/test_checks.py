@@ -55,7 +55,7 @@ def test_content() -> None:
     # Invalid case: atomic number too small
     numbers_small = torch.tensor([1, 0])
     with pytest.raises(MoleculeError):
-        checks.content_checks(numbers_small, positions)
+        checks.content_checks(numbers_small, positions, allow_batched=False)
 
 
 def test_deflatable() -> None:
@@ -74,7 +74,7 @@ def test_shape_valid() -> None:
     # Valid shapes
     numbers = torch.zeros((natoms,))
     positions = torch.zeros((natoms, ncart))
-    assert checks.shape_checks(numbers, positions)
+    assert checks.shape_checks(numbers, positions, allow_batched=True)
 
 
 def test_shape_mismatched_shapes() -> None:
@@ -97,7 +97,7 @@ def test_shape_incorrect_dimensions_numbers() -> None:
     numbers = torch.zeros((nbatch, natoms))
     positions = torch.zeros((nbatch, natoms, ncart))
     with pytest.raises(ValueError):
-        checks.shape_checks(numbers, positions)
+        checks.shape_checks(numbers, positions, allow_batched=False)
 
 
 def test_shape_incorrect_cartesian_directions() -> None:

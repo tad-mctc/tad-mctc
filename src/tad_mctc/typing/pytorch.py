@@ -154,6 +154,25 @@ class TensorLike:
         """
         raise AttributeError("Move object to device using the `.to` method")
 
+    def override_device(self, device: torch.device) -> None:
+        """
+        Override the device of the class object.
+
+        .. warning::
+
+            This does not change the device of the underlying tensors. It only
+            changes the device of the class object. Use with caution.
+
+        Parameters
+        ----------
+        device : torch.device
+            Device to override the current device.
+
+        """
+        self.__device = device
+
+    ###########################################################################
+
     @property
     def dtype(self) -> torch.dtype:
         """Floating point dtype used by class object."""
@@ -175,6 +194,24 @@ class TensorLike:
             Setter is called.
         """
         raise AttributeError("Change object to dtype using the `.type` method")
+
+    def override_dtype(self, dtype: torch.dtype) -> None:
+        """
+        Override the dtype of the class object.
+
+        .. warning::
+
+            This does not change the dtype of the underlying tensors. It only
+            changes the dtype of the class object. Use with caution.
+
+        Parameters
+        ----------
+        dtype : torch.dtype
+            Floating point dtype to override the current dtype.
+        """
+        self.__dtype = dtype
+
+    ###########################################################################
 
     @property
     def dd(self) -> DD:
