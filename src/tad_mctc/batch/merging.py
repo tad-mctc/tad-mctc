@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import torch
 
-from ..typing import Tensor, TensorOrTensors, Any
+from ..typing import Any, Tensor, TensorOrTensors
 
 __all__ = ["merge"]
 

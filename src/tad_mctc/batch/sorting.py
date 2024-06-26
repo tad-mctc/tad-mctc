@@ -27,8 +27,7 @@ from __future__ import annotations
 
 import torch
 
-
-from tad_mctc.typing import Tensor, NamedTuple
+from tad_mctc.typing import NamedTuple, Tensor
 
 
 class SortResult(NamedTuple):

@@ -19,9 +19,10 @@ Test the sorting utility functions.
 """
 from __future__ import annotations
 
-import torch
 import numpy as np
-from tad_mctc.batch import psort, pack, pargsort
+import torch
+
+from tad_mctc.batch import pack, pargsort, psort
 from tad_mctc.convert import normalize_device
 
 from ..conftest import DEVICE

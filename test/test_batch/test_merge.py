@@ -19,11 +19,11 @@ Test the sorting utility functions.
 """
 from __future__ import annotations
 
-import torch
 import pytest
+import torch
 
-from tad_mctc.batch import merge, pack
 from tad_mctc.autograd import dgradcheck
+from tad_mctc.batch import merge, pack
 from tad_mctc.convert import normalize_device
 
 from ..conftest import DEVICE
