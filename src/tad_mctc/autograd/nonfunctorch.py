@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import torch
 
-from ..typing import Tensor
+from ..typing import Tensor, Any, Callable
 
 __all__ = ["jac"]
 
@@ -37,7 +37,7 @@ def jac(
     retain_graph: bool = True,
 ) -> Tensor:
     """
-    Compute the Jacobian of `a` with respect to `b` row-by-row.
+    Compute the Jacobian of ``a`` with respect to ``b`` row-by-row.
 
     Parameters
     ----------
@@ -47,15 +47,15 @@ def jac(
         Variable with respect to which the derivative is taken.
     create_graph : bool | None, optional
         Whether to create a backprogatable graph. Required for additional
-        (higher) derivatives. Defaults to `True`.
+        (higher) derivatives. Defaults to ``True``.
     retain_graph : bool, optional
-        Whether to use the multiple graph multiple times. Defaults to `True`.
+        Whether to use the multiple graph multiple times. Defaults to ``True``.
         Otherwise, the graph is deleted after the first call.
 
     Returns
     -------
     Tensor
-        Jacobian of `a` with respect to `b`.
+        Jacobian of ``a`` with respect to ``b``.
     """
     # catch missing gradients (e.g., halogen bond correction evaluates to
     # zero if no donors/acceptors are present)

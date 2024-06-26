@@ -34,16 +34,7 @@ from tad_mctc.convert import numpy_to_tensor, symmetrizef, tensor_to_numpy
 from tad_mctc.typing import DD, Literal, Tensor
 
 from ..conftest import DEVICE, FAST_MODE
-
-
-def _rng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
-    s = (size,) if isinstance(size, int) else size
-    n = np.random.rand(*s)
-    return numpy_to_tensor(n, **dd)  # type: ignore[arg-type]
-
-
-def _symrng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
-    return symmetrizef(_rng(size, dd))
+from ..utils import _rng, _symrng
 
 
 def clean_zero_padding(m: Tensor, sizes: Tensor) -> Tensor:
