@@ -29,8 +29,10 @@ import torch
 
 from tad_mctc.typing import NamedTuple, Tensor
 
+__all__ = ["pargsort", "psort"]
 
-class SortResult(NamedTuple):
+
+class _SortResult(NamedTuple):
     values: Tensor
     indices: Tensor
 
@@ -76,7 +78,7 @@ def pargsort(tensor: Tensor, mask: Tensor | None = None, dim: int = -1) -> Tenso
         return s1.gather(dim, s2)
 
 
-def psort(tensor: Tensor, mask: Tensor | None = None, dim: int = -1) -> SortResult:
+def psort(tensor: Tensor, mask: Tensor | None = None, dim: int = -1) -> _SortResult:
     """
     Sort a packed tensor while ignoring any padding values.
 
@@ -97,7 +99,7 @@ def psort(tensor: Tensor, mask: Tensor | None = None, dim: int = -1) -> SortResu
 
     Returns
     -------
-    SortResult
+    _SortResult
         A namedtuple (values, indices) is returned, where ``values`` are the
         sorted  values and ``indices`` are the indices of the elements in the
         original input tensor.
@@ -109,8 +111,8 @@ def psort(tensor: Tensor, mask: Tensor | None = None, dim: int = -1) -> SortResu
 
     if mask is None:
         values, indices = torch.sort(tensor, dim=dim)
-        return SortResult(values=values, indices=indices)
+        return _SortResult(values=values, indices=indices)
 
     indices = pargsort(tensor, mask, dim)
     sorted_tensor = tensor.gather(dim, indices)
-    return SortResult(values=sorted_tensor, indices=indices)
+    return _SortResult(values=sorted_tensor, indices=indices)
