@@ -63,6 +63,15 @@ def test_str_to_device_with_cuda() -> None:
             assert device.index == 0
 
 
+def test_normalize_device() -> None:
+    assert convert.normalize_device("cpu").type == "cpu"
+    assert convert.normalize_device(torch.device("cpu")).type == "cpu"
+    assert convert.normalize_device(None) == torch.tensor(1).device
+
+
+###############################################################################
+
+
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 def test_any_to_tensor_with_tensor(dtype: torch.dtype) -> None:
     ref = torch.tensor([1, 2, 3], dtype=dtype)
