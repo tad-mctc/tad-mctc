@@ -26,10 +26,10 @@ import torch
 
 from ..typing import Any, Tensor
 
-__all__ = ["str_to_device", "any_to_tensor"]
+__all__ = ["normalize_device", "str_to_device", "any_to_tensor"]
 
 
-def str_to_device(s: str) -> torch.device:
+def str_to_device(s: str | None) -> torch.device:
     """
     Convert device name to `torch.device`. Critically, this also sets the index
     for CUDA devices to `torch.cuda.current_device()`.
@@ -49,6 +49,9 @@ def str_to_device(s: str) -> torch.device:
     KeyError
         Unknown device name is given.
     """
+    if s is None:
+        return torch.tensor(1).device
+
     if "cpu" in s:
         return torch.device("cpu")
 
@@ -58,6 +61,32 @@ def str_to_device(s: str) -> torch.device:
         return torch.device("cuda", index=torch.cuda.current_device())
 
     raise KeyError(f"Unknown device '{s}' given.")
+
+
+def normalize_device(s: torch.device | str | None) -> torch.device:
+    """
+    Convert any device input to `torch.device`. Critically, this also sets the
+    index for CUDA devices to `torch.cuda.current_device()`.
+
+    Parameters
+    ----------
+    s : torch.device | str | None
+        Name of the device as string.
+
+    Returns
+    -------
+    torch.device
+        Device as torch class.
+
+    Raises
+    ------
+    KeyError
+        Unknown device name is given.
+    """
+    if isinstance(s, torch.device):
+        return s
+
+    return str_to_device(s)
 
 
 def any_to_tensor(

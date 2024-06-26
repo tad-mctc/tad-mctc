@@ -22,5 +22,7 @@ Functions for dealing with batched calculations.
 """
 from .agnostic import *
 from .mask import *
-from .pack import *
-from .unpack import *
+from .merging import *
+from .packing import *
+from .sorting import *
+from .unpacking import *

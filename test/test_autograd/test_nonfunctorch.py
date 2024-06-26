@@ -22,7 +22,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tad_mctc.autograd import jac
+from tad_mctc.autograd.nonfunctorch import jac
 from tad_mctc.convert import tensor_to_numpy
 from tad_mctc.typing import DD, Tensor
 
@@ -36,6 +36,15 @@ def _linear(A: Tensor, x: Tensor) -> Tensor:
     The Jacobian of this function is A.
     """
     return A @ x
+
+
+def _quadratic(A: Tensor, x: Tensor) -> Tensor:
+    """
+    A simple quadratic function for testing.
+    f(x) = x^T A x, where A is a constant matrix.
+    The Hessian of this function is 2A.
+    """
+    return x @ A @ x
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -67,3 +76,31 @@ def test_zeros(dtype: torch.dtype) -> None:
 
     # Expected Jacobian for the quadratic function is A
     assert pytest.approx(torch.zeros_like(dAdx).cpu()) == tensor_to_numpy(dAdx)
+
+
+# @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+# def test_hessian(dtype: torch.dtype) -> None:
+#     dd: DD = {"device": DEVICE, "dtype": dtype}
+#     # Create a test input
+#     A = torch.tensor([[3.0, 2.0], [2.0, 3.0]], **dd)
+#     x = torch.tensor([1.0, 2.0], requires_grad=True, **dd)
+
+#     # Calculate the Hessian using the `hessian` function
+#     hessian_matrix = hess(_quadratic, (A, x), argnums=1)
+
+#     # Expected Hessian for the quadratic function is 2A
+#     assert pytest.approx(2 * A.cpu()) == hessian_matrix.cpu()
+
+
+# @pytest.mark.parametrize("dtype", [torch.float, torch.double])
+# def test_hessian_options(dtype: torch.dtype) -> None:
+#     dd: DD = {"device": DEVICE, "dtype": dtype}
+#     # Create a test input
+#     A = torch.tensor([[3.0, 2.0], [2.0, 3.0]], **dd)
+#     x = torch.tensor([1.0, 2.0], requires_grad=True, **dd)
+
+#     # Calculate the Hessian using the `hessian` function
+#     hessian_matrix = hess(_quadratic, (A, x), argnums=1, create_graph=True)
+
+#     # Expected Hessian for the quadratic function is 2A
+#     assert pytest.approx(2 * A.cpu()) == tensor_to_numpy(hessian_matrix)

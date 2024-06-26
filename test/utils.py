@@ -15,37 +15,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Typing: Builtins
-================
-
-This module contains all used built-in type annotations.
+Utility functions for testing.
 """
-from typing import (
-    IO,
-    Any,
-    Iterable,
-    Iterator,
-    Literal,
-    NamedTuple,
-    NoReturn,
-    Protocol,
-    TypedDict,
-    TypeVar,
-    overload,
-    runtime_checkable,
-)
+from __future__ import annotations
 
-__all__ = [
-    "IO",
-    "Any",
-    "Iterable",
-    "Iterator",
-    "Literal",
-    "NamedTuple",
-    "NoReturn",
-    "Protocol",
-    "TypedDict",
-    "TypeVar",
-    "overload",
-    "runtime_checkable",
-]
+import numpy as np
+
+from tad_mctc.convert import numpy_to_tensor, symmetrizef
+from tad_mctc.typing import DD, Tensor
+
+__all__ = ["_rng", "_symrng"]
+
+
+def _rng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
+    s = (size,) if isinstance(size, int) else size
+    n = np.random.rand(*s)
+    return numpy_to_tensor(n, **dd)  # type: ignore[arg-type]
+
+
+def _symrng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
+    return symmetrizef(_rng(size, dd))
