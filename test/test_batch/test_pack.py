@@ -19,16 +19,17 @@ Test the packing utility functions.
 """
 from __future__ import annotations
 
-import torch
 import numpy as np
 import pytest
+import torch
 
+from tad_mctc.autograd import dgradcheck
 from tad_mctc.batch import pack
-from tad_mctc.typing import DD
 from tad_mctc.convert import normalize_device
+from tad_mctc.typing import DD
+
 from ..conftest import DEVICE
 from ..utils import _rng
-from tad_mctc.autograd import dgradcheck
 
 mol1 = torch.tensor([1, 1])  # H2
 mol2 = torch.tensor([8, 1, 1])  # H2O

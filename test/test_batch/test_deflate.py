@@ -22,9 +22,10 @@ from __future__ import annotations
 import pytest
 import torch
 
+from tad_mctc.autograd import dgradcheck
 from tad_mctc.batch import deflate, pack
 from tad_mctc.convert import normalize_device
-from tad_mctc.autograd import dgradcheck
+
 from ..conftest import DEVICE
 
 

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import torch
 
-from ..typing import Tensor, Any, Callable
+from ..typing import Any, Callable, Tensor
 
 __all__ = ["jac"]
 

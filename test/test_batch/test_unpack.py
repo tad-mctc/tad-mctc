@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import torch
 
-from tad_mctc.batch import unpack, deflate
+from tad_mctc.batch import deflate, unpack
 from tad_mctc.convert import normalize_device
+
 from ..conftest import DEVICE
 
 
