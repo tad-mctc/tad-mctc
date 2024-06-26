@@ -44,12 +44,12 @@ jobs:
         os: [macos-12, macos-13, macos-14]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         # only test oldest and newest version of torch
-        torch-version: ["1.11.0", "2.3.1"]
+        torch-version: ["1.11.0", "2.2.2"]
         exclude:
           # PyTorch now fully supports Python=<3.11
           # see: https://github.com/pytorch/pytorch/issues/86566
           #
-          # PyTorch does not support Python 3.12 (all platforms)
+          # PyTorch does now support Python 3.12 (macOS)
           # see: https://github.com/pytorch/pytorch/issues/110436
           - python-version: "3.12"
             torch-version: "1.11.0"
