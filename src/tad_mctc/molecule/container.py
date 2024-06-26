@@ -188,6 +188,27 @@ class Mol(TensorLike):
                 f"consistent with atomic numbers ({self.numbers.shape})."
             )
 
+    def sum_formula(self) -> str:
+        """
+        Calculate the sum formula of the molecule.
+
+        Returns
+        -------
+        str
+            Sum formula.
+        """
+        from ..data import pse
+
+        formula = ""
+
+        unique, counts = torch.unique(self.numbers, return_counts=True)
+        for u, c in zip(unique, counts):
+            formula += f"{pse.Z2S[int(u)]}"
+            if c > 1:
+                formula += f"{c}"
+
+        return formula
+
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.__class__.__name__}({self.numbers.tolist()})"
 

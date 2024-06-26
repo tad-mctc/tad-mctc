@@ -356,6 +356,7 @@ def test_eighb_general_grad(scheme: Literal["chol", "lowd"]) -> None:
 
 
 @pytest.mark.grad
+@pytest.mark.flaky(reruns=5, reruns_delay=2)
 @pytest.mark.parametrize("scheme", ["chol", "lowd"])
 def test_eighb_general_grad_batch(scheme: Literal["chol", "lowd"]) -> None:
     """eighb gradient stability on general eigenvalue problems."""

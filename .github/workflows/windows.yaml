@@ -46,6 +46,8 @@ jobs:
         # only test oldest and newest version of torch
         torch-version: ["1.11.0", "2.2.2"]
         exclude:
+          # Check latest versions here: https://download.pytorch.org/whl/torch/
+          #
           # PyTorch now fully supports Python=<3.11
           # see: https://github.com/pytorch/pytorch/issues/86566
           #

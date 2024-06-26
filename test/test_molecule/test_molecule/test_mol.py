@@ -76,3 +76,22 @@ def test_cache() -> None:
 
     # clear cache should still execute without error
     mol.clear_cache()
+
+
+@pytest.mark.parametrize("name", sample_list)
+def test_formula(name: str) -> None:
+    sample = samples[name]
+    numbers = sample["numbers"].to(device)
+    positions = sample["positions"].to(device)
+
+    ref = {
+        "H2": "H2",
+        "LiH": "HLi",
+        "H2O": "H2O",
+        "SiH4": "H4Si",
+        "MB16_43_01": "H6B2N2O2FNaAlCl",
+        "vancoh2": "H77C66N9O24",
+    }
+
+    mol = Mol(numbers, positions)
+    assert ref[name] == mol.sum_formula()
