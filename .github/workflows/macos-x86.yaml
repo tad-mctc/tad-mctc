@@ -47,7 +47,7 @@ jobs:
         torch-version: ["1.11.0", "2.2.2"]
         exclude:
           # Check latest versions here: https://download.pytorch.org/whl/torch/
-          # 
+          #
           # Wheels for macOS x86_64 are deprecated since 2.3.0
           #
           # PyTorch now fully supports Python=<3.11
