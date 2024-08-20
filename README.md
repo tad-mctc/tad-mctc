@@ -31,8 +31,11 @@
       <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/ubuntu.yaml">
         <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/ubuntu.yaml/badge.svg" alt="Test Status Ubuntu"/>
       </a>
-      <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/macos.yaml">
-        <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/macos.yaml/badge.svg" alt="Test Status macOS"/>
+      <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/macos-x86.yaml">
+        <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/macos-x86.yaml/badge.svg" alt="Test Status macOS (x86)"/>
+      </a>
+      <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/macos-arm.yaml">
+        <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/macos-arm.yaml/badge.svg" alt="Test Status macOS (ARM)"/>
       </a>
       <a href="https://github.com/tad-mctc/tad-mctc/actions/workflows/windows.yaml">
         <img src="https://github.com/tad-mctc/tad-mctc/actions/workflows/windows.yaml/badge.svg" alt="Test Status Windows"/>

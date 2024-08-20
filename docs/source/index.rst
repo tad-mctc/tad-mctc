@@ -29,9 +29,13 @@ Torch Autodiff Utility
     :target: https://github.com/tad-mctc/tad-mctc/actions/workflows/windows.yaml
     :alt: Test Status Windows
 
-.. image:: https://github.com/tad-mctc/tad-mctc/actions/workflows/macos.yaml/badge.svg
-    :target: https://github.com/tad-mctc/tad-mctc/actions/workflows/macos.yaml
-    :alt: Test Status macOS
+.. image:: https://github.com/tad-mctc/tad-mctc/actions/workflows/macos-x86.yaml/badge.svg
+    :target: https://github.com/tad-mctc/tad-mctc/actions/workflows/macos-x86.yaml
+    :alt: Test Status macOS (x86)
+
+.. image:: https://github.com/tad-mctc/tad-mctc/actions/workflows/macos-arm.yaml/badge.svg
+    :target: https://github.com/tad-mctc/tad-mctc/actions/workflows/macos-arm.yaml
+    :alt: Test Status macOS (ARM)
 
 .. image:: https://readthedocs.org/projects/tad-mctc/badge/?version=latest
     :target: https://tad-mctc.readthedocs.io
