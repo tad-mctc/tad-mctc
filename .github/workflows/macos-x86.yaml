@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-name: Tests (macOS)
+name: Tests (macOS x86)
 
 on:
   push:
@@ -41,12 +41,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-12, macos-13, macos-14]
+        os: [macos-12, macos-13]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         # only test oldest and newest version of torch
         torch-version: ["1.11.0", "2.2.2"]
         exclude:
           # Check latest versions here: https://download.pytorch.org/whl/torch/
+          #
+          # Wheels for macOS x86_64 are deprecated since 2.3.0
           #
           # PyTorch now fully supports Python=<3.11
           # see: https://github.com/pytorch/pytorch/issues/86566
@@ -63,12 +65,6 @@ jobs:
             torch-version: "1.12.1"
           - python-version: "3.11"
             torch-version: "1.13.1"
-          # Python 3.8/3.9 is not on macos-latest (macos-14-arm64)
-          # https://github.com/actions/setup-python/issues/696
-          - os: macos-14
-            python-version: "3.8"
-          - os: macos-14
-            python-version: "3.9"
 
     runs-on: ${{ matrix.os }}
 
