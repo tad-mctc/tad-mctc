@@ -44,7 +44,7 @@ jobs:
         os: [macos-12, macos-13, macos-14]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         # only test oldest and newest version of torch
-        torch-version: ["1.11.0", "2.2.2"]
+        torch-version: ["1.11.0", "2.4.0"]
         exclude:
           # Check latest versions here: https://download.pytorch.org/whl/torch/
           #
