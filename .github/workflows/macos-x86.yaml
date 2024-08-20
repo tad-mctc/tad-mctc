@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-name: Tests (macOS)
+name: Tests (macOS x86)
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-12, macos-13-large, macos-14-large]
+        os: [macos-12, macos-13]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         # only test oldest and newest version of torch
         torch-version: ["1.11.0", "2.2.2"]
