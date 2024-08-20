@@ -38,10 +38,11 @@ from tad_mctc.ncoord import (
     gfn2_count,
 )
 from tad_mctc.typing import DD, CountingFunction, Tensor
+from tad_mctc.ncoord.typing import CNFunction
 
 from ...conftest import DEVICE
 from ..samples import samples
-from ..utils import CNFunction, numgrad
+from ..utils import numgrad
 
 sample_list = ["SiH4", "PbH4-BiH3", "MB16_43_01"]
 

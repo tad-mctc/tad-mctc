@@ -34,10 +34,10 @@ from tad_mctc.ncoord import (
     exp_count,
     gfn2_count,
 )
+from tad_mctc.ncoord.typing import CNFunction, CNGradFunction
 from tad_mctc.typing import DD, CountingFunction
 
 from ..conftest import DEVICE
-from .utils import CNFunction, CNGradFunction
 
 
 @pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq])

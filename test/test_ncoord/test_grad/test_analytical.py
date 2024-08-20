@@ -35,10 +35,11 @@ from tad_mctc.ncoord import (  # cn_d4,; cn_d4_gradient,; cn_eeq,; cn_eeq_gradie
     gfn2_count,
 )
 from tad_mctc.typing import DD, CountingFunction
+from tad_mctc.ncoord.typing import CNFunction, CNGradFunction
 
 from ...conftest import DEVICE
 from ..samples import samples
-from ..utils import CNFunction, CNGradFunction, numgrad
+from ..utils import numgrad
 
 sample_list = ["SiH4", "PbH4-BiH3", "MB16_43_01"]
 

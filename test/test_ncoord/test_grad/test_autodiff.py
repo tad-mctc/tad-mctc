@@ -27,10 +27,10 @@ from tad_mctc.autograd import dgradcheck, dgradgradcheck
 from tad_mctc.batch import pack
 from tad_mctc.ncoord import cn_d3, cn_d4, cn_eeq, erf_count, exp_count, gfn2_count
 from tad_mctc.typing import DD, Callable, CountingFunction, Tensor
+from tad_mctc.ncoord.typing import CNFunction
 
 from ...conftest import DEVICE
 from ..samples import samples
-from ..utils import CNFunction
 
 tol = 1e-8
 sample_list = ["SiH4", "PbH4-BiH3", "MB16_43_01"]
