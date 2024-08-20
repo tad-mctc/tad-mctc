@@ -7,7 +7,7 @@ from __future__ import annotations
 import torch
 
 from tad_mctc.ncoord.typing import CNFunction
-from tad_mctc.typing import Tensor, CountingFunction
+from tad_mctc.typing import CountingFunction, Tensor
 
 __all__ = ["numgrad"]
 

@@ -34,8 +34,8 @@ from tad_mctc.ncoord import (  # cn_d4,; cn_d4_gradient,; cn_eeq,; cn_eeq_gradie
     exp_count,
     gfn2_count,
 )
-from tad_mctc.typing import DD, CountingFunction
 from tad_mctc.ncoord.typing import CNFunction, CNGradFunction
+from tad_mctc.typing import DD, CountingFunction
 
 from ...conftest import DEVICE
 from ..samples import samples

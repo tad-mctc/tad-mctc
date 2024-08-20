@@ -26,8 +26,8 @@ import torch
 from tad_mctc.autograd import dgradcheck, dgradgradcheck
 from tad_mctc.batch import pack
 from tad_mctc.ncoord import cn_d3, cn_d4, cn_eeq, erf_count, exp_count, gfn2_count
-from tad_mctc.typing import DD, Callable, CountingFunction, Tensor
 from tad_mctc.ncoord.typing import CNFunction
+from tad_mctc.typing import DD, Callable, CountingFunction, Tensor
 
 from ...conftest import DEVICE
 from ..samples import samples

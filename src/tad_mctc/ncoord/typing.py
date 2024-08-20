@@ -22,8 +22,8 @@ Type annotations for CNs.
 """
 from __future__ import annotations
 
-from ..typing import Any, CountingFunction, Tensor, Protocol
-from .count import erf_count, derf_count
+from ..typing import Any, CountingFunction, Protocol, Tensor
+from .count import derf_count, erf_count
 
 __all__ = ["CNFunction", "CNGradFunction"]
 
