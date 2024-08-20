@@ -9,3 +9,4 @@
    d4
    defaults
    eeq
+   typing

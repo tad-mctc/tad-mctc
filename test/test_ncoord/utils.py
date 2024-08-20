@@ -6,46 +6,10 @@ from __future__ import annotations
 
 import torch
 
-from tad_mctc.ncoord import derf_count, erf_count
-from tad_mctc.typing import Any, CountingFunction, Protocol, Tensor
+from tad_mctc.ncoord.typing import CNFunction
+from tad_mctc.typing import CountingFunction, Tensor
 
-
-class CNFunction(Protocol):
-    """
-    Type annotation for coordination number function.
-    """
-
-    def __call__(
-        self,
-        numbers: Tensor,
-        positions: Tensor,
-        *,
-        counting_function: CountingFunction = erf_count,
-        rcov: Tensor | None = None,
-        en: Tensor | None = None,
-        cutoff: Tensor | None = None,
-        kcn: float = 7.5,
-        **kwargs: Any,
-    ) -> Tensor: ...
-
-
-class CNGradFunction(Protocol):
-    """
-    Type annotation for coordination number function.
-    """
-
-    def __call__(
-        self,
-        numbers: Tensor,
-        positions: Tensor,
-        *,
-        dcounting_function: CountingFunction = derf_count,
-        rcov: Tensor | None = None,
-        en: Tensor | None = None,
-        cutoff: Tensor | None = None,
-        kcn: float = 7.5,
-        **kwargs: Any,
-    ) -> Tensor: ...
+__all__ = ["numgrad"]
 
 
 def numgrad(
