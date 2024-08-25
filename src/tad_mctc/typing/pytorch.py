@@ -107,12 +107,13 @@ class MockTensor(Tensor):
 
 class TensorLike:
     """
-    Provide `device` and `dtype` as well as `to()` and `type()` for other
-    classes.
+    Provide ``device`` and ``dtype`` as well as :meth:`torch.Tensor.to`
+    and :meth:`torch.Tensor.type` for other classes.
 
-    The selection of `torch.Tensor` variables to change within the class is
-    handled by searching `__slots__`. Hence, if one wants to use this
-    functionality the subclass of `TensorLike` must specify `__slots__`.
+    The selection of :class:`torch.Tensor` variables to change within the
+    class is handled by searching ``__slots__``. Hence, if one wants to use
+    this functionality the subclass of :class:`.TensorLike` must specify
+    ``__slots__``.
     """
 
     __device: torch.device
@@ -120,9 +121,6 @@ class TensorLike:
 
     __dtype: torch.dtype
     """Floating point dtype used by class object."""
-
-    __dd: DD
-    """Shortcut for device and dtype."""
 
     __slots__ = ["__device", "__dtype"]
 
@@ -132,6 +130,15 @@ class TensorLike:
         self.__device = device if device is not None else get_default_device()
         self.__dtype = dtype if dtype is not None else get_default_dtype()
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
+        if not hasattr(cls, "__slots__"):
+            raise TypeError(
+                f"Subclasses of {cls.__name__} must define `__slots__` "
+                "make use of its functionality."
+            )
+
     @property
     def device(self) -> torch.device:
         """The device on which the class object resides."""
@@ -140,7 +147,7 @@ class TensorLike:
     @device.setter
     def device(self, *_: Any) -> NoReturn:
         """
-        Instruct users to use the ".to" method if wanting to change device.
+        Instruct users to use the :meth:`to` method if wanting to change device.
 
         Returns
         -------
@@ -181,12 +188,13 @@ class TensorLike:
     @dtype.setter
     def dtype(self, *_: Any) -> NoReturn:
         """
-        Instruct users to use the `.type` method if wanting to change dtype.
+        Instruct users to use the :meth:`type` method if wanting to change
+        dtype.
 
         Returns
         -------
         NoReturn
-            Always raises an `AttributeError`.
+            Always raises an ``AttributeError``.
 
         Raises
         ------
@@ -221,12 +229,12 @@ class TensorLike:
     @dd.setter
     def dd(self, *_: Any) -> NoReturn:
         """
-        Instruct users to use the `.type` and `.to` methods to change.
+        Instruct users to use the :meth:`type` and :meth:`to` methods to change.
 
         Returns
         -------
         NoReturn
-            Always raises an `AttributeError`.
+            Always raises an ``AttributeError``.
 
         Raises
         ------
@@ -240,10 +248,10 @@ class TensorLike:
 
     def type(self, dtype: torch.dtype) -> Self:
         """
-        Returns a copy of the `TensorLike` instance with specified floating
-        point type.
-        This method creates and returns a new copy of the `TensorLike` instance
-        with the specified dtype.
+        Returns a copy of the :class:`.TensorLike` instance with specified
+        floating point type.
+        This method creates and returns a new copy of the :class:`.TensorLike`
+        instance with the specified dtype.
 
         Parameters
         ----------
@@ -253,12 +261,13 @@ class TensorLike:
         Returns
         -------
         TensorLike
-            A copy of the `TensorLike` instance with the specified dtype.
+            A copy of the :class:`.TensorLike` instance with the specified
+            dtype.
 
         Notes
         -----
-        If the `TensorLike` instance has already the desired dtype `self` will
-        be returned.
+        If the :class:`.TensorLike` instance has already the desired dtype
+        ``Self`` will be returned.
         """
         if self.dtype == dtype:
             return self
@@ -281,18 +290,24 @@ class TensorLike:
 
             attr = getattr(self, s)
             if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
-                if attr.dtype in self.allowed_dtypes:
-                    attr = attr.type(dtype)
+                if attr.dtype != dtype:
+                    if attr.dtype in self.allowed_dtypes:
+                        attr = attr.type(dtype)
             args[s] = attr
 
-        return self.__class__(**args, dtype=dtype)
+        return self.__class__(**args, dtype=dtype, device=self.device)
 
-    def to(self, device: torch.device) -> Self:
+    def to(
+        self,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> Self:
         """
-        Returns a copy of the `TensorLike` instance on the specified device.
+        Returns a copy of the :class:`.TensorLike` instance on the specified
+        device.
 
-        This method creates and returns a new copy of the `TensorLike` instance
-        on the specified device "``device``".
+        This method creates and returns a new copy of the :class:`.TensorLike`
+        instance on the specified device "``device``".
 
         Parameters
         ----------
@@ -302,14 +317,23 @@ class TensorLike:
         Returns
         -------
         TensorLike
-            A copy of the `TensorLike` instance placed on the specified device.
+            A copy of the :class:`.TensorLike` instance placed on the specified
+            device.
 
         Notes
         -----
-        If the `TensorLike` instance is already on the desired device `self`
-        will be returned.
+        If the :class:`.TensorLike` instance is already on the desired device
+        ``self`` will be returned.
         """
-        if self.device == device:
+        if device is None and dtype is None:
+            return self
+
+        # Default to current device and dtype if not specified
+        device = device if device is not None else self.device
+        dtype = dtype if dtype is not None else self.dtype
+
+        # If both device and dtype are the same, return self
+        if self.device == device and self.dtype == dtype:
             return self
 
         if len(self.__slots__) == 0:
@@ -318,40 +342,51 @@ class TensorLike:
                 f"'{self.__class__.__name__}' class."
             )
 
+        if dtype not in self.allowed_dtypes:
+            raise DtypeError(
+                f"Only '{self.allowed_dtypes}' allowed (received '{dtype}')."
+            )
+
         args = {}
         for s in self.__slots__:
-            if not s.startswith("__"):
-                attr = getattr(self, s)
-                if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
-                    attr = attr.to(device=device)
-                args[s] = attr
+            if s.startswith("__"):
+                continue
 
-        return self.__class__(**args, device=device)
+            attr = getattr(self, s)
+            if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
+                if attr.device != device or attr.dtype != dtype:
+                    attr = attr.to(device=device, dtype=dtype)
+
+            args[s] = attr
+
+        return self.__class__(**args, device=device, dtype=self.dtype)
 
     def cpu(self) -> Self:
         """
-        Returns a copy of the `TensorLike` instance on the CPU.
+        Returns a copy of the :class:`.TensorLike` instance on the CPU.
 
-        This method creates and returns a new copy of the `TensorLike` instance
-        on the CPU.
+        This method creates and returns a new copy of the :class:`.TensorLike`
+        instance on the CPU.
 
         Returns
         -------
         TensorLike
-            A copy of the `TensorLike` instance placed on the CPU.
+            A copy of the :class:`.TensorLike` instance placed on the CPU.
         """
         return self.to(torch.device("cpu"))
 
     @property
     def allowed_dtypes(self) -> tuple[torch.dtype, ...]:
         """
-        Specification of dtypes that the TensorLike object can take. Defaults
-        to float types and must be overridden by subclass if float are not
-        allowed. The IndexHelper is an example that should only allow integers.
+        Specification of dtypes that the :class:`.TensorLike` object can take.
+        Defaults to float types and must be overridden by subclass if float are
+        not allowed. The IndexHelper is an example that should only allow
+        integers.
 
         Returns
         -------
         tuple[torch.dtype, ...]
-            Collection of allowed dtypes the TensorLike object can take.
+            Collection of allowed dtypes the :class:`.TensorLike` object can
+            take.
         """
         return (torch.float16, torch.float32, torch.float64)
