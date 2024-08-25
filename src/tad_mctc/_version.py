@@ -50,7 +50,7 @@ def version_tuple(version_string: str) -> tuple[int, ...]:
     return tuple(version_numbers)
 
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 """Version of tad-mctc in semantic versioning."""
 
 __tversion__ = version_tuple(torch.__version__)
