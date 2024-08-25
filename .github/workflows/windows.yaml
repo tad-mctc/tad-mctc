@@ -47,7 +47,7 @@ jobs:
         torch-version: ["1.11.0", "2.4.0"]
         exclude:
           # Check latest versions here: https://download.pytorch.org/whl/torch/
-          # 
+          #
           # PyTorch issues:
           # 3.11: https://github.com/pytorch/pytorch/issues/86566
           # 3.12: https://github.com/pytorch/pytorch/issues/110436
