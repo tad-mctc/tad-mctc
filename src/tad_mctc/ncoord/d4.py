@@ -53,17 +53,18 @@ def cn_d4(
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers of the atoms in the system.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
-        Cartesian coordinates of the atoms in the system (batch, natoms, 3).
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
     counting_function : CountingFunction
-        Calculate weight for pairs. Defaults to `erf_count`.
+        Calculate weight for pairs. Defaults to
+        :func:`tad_mctc.ncoord.count.erf_count`.
     rcov : Tensor | None, optional
-        Covalent radii for each species. Defaults to `None`.
+        Covalent radii for each species. Defaults to ``None``.
     en : Tensor | None, optional
-        Electronegativities for all atoms. Defaults to `None`.
+        Electronegativities for all atoms. Defaults to ``None``.
     cutoff : Tensor | None, optional
-        Real-space cutoff. Defaults to `None`.
+        Real-space cutoff. Defaults to ``None``.
     kcn : float, optional
         Steepness of the counting function.
     kwargs : dict[str, Any]
@@ -72,12 +73,13 @@ def cn_d4(
     Returns
     -------
     Tensor
-        Coordination numbers for all atoms.
+        Coordination numbers for all atoms (shape: ``(..., nat)``).
 
     Raises
     ------
     ValueError
-        If shape mismatch between `numbers`, `positions` and `rcov` is detected.
+        If shape mismatch between ``numbers``, ``positions`` and
+        ``rcov`` is detected.
     """
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
 

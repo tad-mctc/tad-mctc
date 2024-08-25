@@ -60,7 +60,8 @@ def exp_count(
     r0 : Tensor
         Covalent atomic radii (R_AB = R_A + R_B).
     kcn : Tensor | float | int, optional
-        Steepness of the counting function. Defaults to `defaults.KCN_D3`.
+        Steepness of the counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
 
     Returns
     -------
@@ -83,7 +84,8 @@ def erf_count(
     r0 : Tensor
         Covalent atomic radii (R_AB = R_A + R_B).
     kcn : Tensor | float | int, optional
-        Steepness of the counting function. Defaults to `defaults.KCN_D3`.
+        Steepness of the counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
 
     Returns
     -------
@@ -111,11 +113,14 @@ def gfn2_count(
     r0 : Tensor
         Covalent atomic radii (R_AB = R_A + R_B) or cutoff radius.
     ka : Tensor | float | int, optional
-        Steepness of the first counting function. Defaults to `KA`.
+        Steepness of the first counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.KA`.
     kb : Tensor | float | int, optional
-        Steepness of the second counting function. Defaults to `KB`.
+        Steepness of the second counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.KB`.
     r_shift : Tensor | float | int, optional
-        Offset of the second counting function. Defaults to `R_SHIFT`.
+        Offset of the second counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.R_SHIFT`.
 
     Returns
     -------
@@ -141,7 +146,8 @@ def dexp_count(
     r0 : Tensor
         Covalent atomic radii (R_AB = R_A + R_B).
     kcn : Tensor | float | int, optional
-        Steepness of the counting function. Defaults to `defaults.KCN_D3`.
+        Steepness of the counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
 
     Returns
     -------
@@ -165,7 +171,8 @@ def derf_count(
     r0 : Tensor
         Covalent atomic radii (R_AB = R_A + R_B).
     kcn : Tensor | float | int, optional
-        Steepness of the counting function. Defaults to `defaults.KCN_D3`.
+        Steepness of the counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
 
     Returns
     -------
@@ -193,11 +200,14 @@ def dgfn2_count(
     r0 : Tensor
         Covalent atomic radii (R_AB = R_A + R_B) or cutoff radius.
     ka : Tensor | float | int, optional
-        Steepness of the first counting function. Defaults to `KA`.
+        Steepness of the first counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.KA`.
     kb : Tensor | float | int, optional
-        Steepness of the second counting function. Defaults to `KB`.
+        Steepness of the second counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.KB`.
     r_shift : Tensor | float | int, optional
-        Offset of the second counting function. Defaults to `R_SHIFT`.
+        Offset of the second counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.R_SHIFT`.
 
     Returns
     -------

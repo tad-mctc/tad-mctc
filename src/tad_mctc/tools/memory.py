@@ -47,7 +47,7 @@ def memory_tensor(size: Size, dtype: torch.dtype) -> float:
     ----------
     size : Size
         Shape of the tensor.
-    dtype : torch.dtype
+    dtype : :class:`torch.dtype`
         Data type of the tensor.
 
     Returns
@@ -92,7 +92,7 @@ def memory_device(device: torch.device) -> tuple[float, float]:
 
     Parameters
     ----------
-    device : torch.device
+    device : :class:`torch.device`
         Device to check memory for.
 
     Returns

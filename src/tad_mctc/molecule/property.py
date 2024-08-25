@@ -40,14 +40,14 @@ def mass_center(masses: Tensor, positions: Tensor) -> Tensor:
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system of shape `(..., nat)`.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
-        Cartesian coordinates of all atoms of shape `(..., nat, 3)`.
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
 
     Returns
     -------
     Tensor
-        Cartesian coordinates of center of mass of shape `(..., 3)`.
+        Cartesian coordinates of center of mass of shape ``(..., 3)``.
     """
     s = storch.reciprocal(torch.sum(masses, dim=-1))
     return einsum("...z,...zx,...->...x", masses, positions, s)
@@ -60,15 +60,15 @@ def positions_rel_com(masses: Tensor, positions: Tensor) -> Tensor:
     Parameters
     ----------
     masses : Tensor
-        Atomic masses for all atoms in the system (shape: `(..., nat)`).
+        Atomic masses for all atoms in the system (shape: ``(..., nat)``).
     positions : Tensor
-        Cartesian coordinates of all atoms (shape: `(..., nat, 3)`).
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
 
     Returns
     -------
     Tensor
         Cartesian coordinates relative to center of mass (shape:
-        `(..., nat, 3)`).
+        ``(..., nat, 3)``).
     """
     com = mass_center(masses, positions)
     return positions - com.unsqueeze(-2)
@@ -86,20 +86,20 @@ def inertia_moment(
     Parameters
     ----------
     masses : Tensor
-        Atomic masses for all atoms in the system (shape: `(..., nat)`).
+        Atomic masses for all atoms in the system (shape: ``(..., nat)``).
     positions : Tensor
-        Cartesian coordinates of all atoms (shape: `(..., nat, 3)`).
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
     center_pa : bool, optional
-        If `True`, the tensor is centered relative to the principal axes, which
-        prepares for rotational analysis. Defaults to `True`.
+        If ``True``, the tensor is centered relative to the principal axes,
+        which prepares for rotational analysis. Defaults to ``True``.
     pos_already_com : bool, optional
-        If `True`, the positions are already centered at the center of mass.
-        Defaults to `False`.
+        If ``True``, the positions are already centered at the center of mass.
+        Defaults to ``False``.
 
     Returns
     -------
     Tensor
-        Inertia tensor of shape `(..., 3, 3)`.
+        Inertia tensor of shape ``(..., 3, 3)``.
     """
     if pos_already_com is False:
         positions = positions_rel_com(masses, positions)
@@ -127,14 +127,14 @@ def rot_consts(masses: Tensor, positions: Tensor) -> Tensor:  # pragma: no cover
     Parameters
     ----------
     masses : Tensor
-        Atomic masses for all atoms in the system (shape: `(..., nat)`).
+        Atomic masses for all atoms in the system (shape: ``(..., nat)``).
     positions : Tensor
-        Cartesian coordinates of all atoms (shape: `(..., nat, 3)`).
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
 
     Returns
     -------
     Tensor
-        Rotational constants of shape `(..., 3)`.
+        Rotational constants of shape ``(..., 3)``.
     """
     im = inertia_moment(masses, positions, center_pa=True)
 

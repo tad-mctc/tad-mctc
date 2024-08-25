@@ -39,7 +39,7 @@ def shape_checks(
     numbers : Tensor
         A 1D tensor containing atomic numbers or symbols.
     positions : Tensor
-        A 2D tensor of shape (n_atoms, 3) containing atomic positions.
+        A 2D tensor of shape ``(nat, 3)`` containing atomic positions.
 
     Returns
     -------

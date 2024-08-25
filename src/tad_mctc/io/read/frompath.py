@@ -100,9 +100,9 @@ def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
             Mode in which the file is opened. Defaults to `"r"`.
         encoding : str, optional
             Encoding for file. Defaults to `"utf-8"`.
-        device : torch.device | None, optional
+        device : :class:`torch.device` | None, optional
             Device to store the tensor on. Defaults to `None`.
-        dtype : torch.dtype | None, optional
+        dtype : :class:`torch.dtype` | None, optional
             Floating point data type of the tensor. Defaults to `None`.
 
         Returns
@@ -197,9 +197,9 @@ def create_path_reader_dotfiles(
             Mode in which the file is opened. Defaults to `"r"`.
         encoding : str, optional
             Encoding for file. Defaults to `"utf-8"`.
-        device : torch.device | None, optional
+        device : :class:`torch.device` | None, optional
             Device to store the tensor on. Defaults to `None`.
-        dtype : torch.dtype | None, optional
+        dtype : :class:`torch.dtype` | None, optional
             Floating point data type of the tensor. Defaults to `None`.
 
         Returns

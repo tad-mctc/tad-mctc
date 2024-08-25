@@ -122,18 +122,19 @@ def content_checks(
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system of shape `(..., nat)`.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
-        Cartesian coordinates of all atoms (shape: `(..., nat, 3)`).
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
     max_element : int, optional
-        Maximum atomic number allowed. Defaults to `pse.MAX_ELEMENT`.
+        Maximum atomic number allowed. Defaults to
+        :data:`tad_mctc.data.pse.MAX_ELEMENT`.
     allow_batched : bool, optional
-        Allow batched tensors. Defaults to `True`.
+        Allow batched tensors. Defaults to ``True``.
 
     Returns
     -------
     bool
-        True if content is correct.
+        ``True`` if content is correct.
 
     Raises
     ------
@@ -162,13 +163,13 @@ def deflatable_check(
     Check for the last coordinate being at the origin as this might clash with
     padding.
 
-    This function should be asserted as it returns `True` on success and raises
-    an error on failure.
+    This function should be asserted as it returns ``True`` on success and
+    raises an error on failure.
 
     Parameters
     ----------
     positions : Tensor
-        A 2D tensor of shape (n_atoms, 3) containing atomic positions.
+        A 2D tensor of shape ``(nat, 3)`` containing atomic positions.
     fileobj : IO[Any] | None, optional
         The file-like object from which is read (only for printing).
 
@@ -181,7 +182,7 @@ def deflatable_check(
     ------
     MoleculeError
         Padding clashes with coordinates. Requires the keyword argument
-        `raise_padding_exception=True`.
+        ``raise_padding_exception=True``.
     """
     # collect the padding value
     pad = kwargs.pop("padding_value", 0)
@@ -227,14 +228,14 @@ def dimension_check(
     x : Any
         The tensor to check.
     min_ndim : int, optional
-        Minimum number of dimensions for the tensor. Defaults to `-1`.
+        Minimum number of dimensions for the tensor. Defaults to ``-1``.
     max_ndim : int, optional
-        Maximum number of dimensions for the tensor. Defaults to `9999`.
+        Maximum number of dimensions for the tensor. Defaults to ``9999``.
 
     Returns
     -------
     None | NoReturn
-        Returns `None` if the tensor has the correct number of dimensions.
+        Returns ``None`` if the tensor has the correct number of dimensions.
 
     Raises
     ------

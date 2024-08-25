@@ -31,8 +31,8 @@ __all__ = ["normalize_device", "str_to_device", "any_to_tensor"]
 
 def str_to_device(s: str | None) -> torch.device:
     """
-    Convert device name to `torch.device`. Critically, this also sets the index
-    for CUDA devices to `torch.cuda.current_device()`.
+    Convert device name to :class:`torch.device`. Critically, this also sets
+    the index for CUDA devices to :func:`torch.cuda.current_device`.
 
     Parameters
     ----------
@@ -65,17 +65,17 @@ def str_to_device(s: str | None) -> torch.device:
 
 def normalize_device(s: torch.device | str | None) -> torch.device:
     """
-    Convert any device input to `torch.device`. Critically, this also sets the
-    index for CUDA devices to `torch.cuda.current_device()`.
+    Convert any device input to :class:`torch.device`. Critically, this also
+    sets the index for CUDA devices to :func:`torch.cuda.current_device`.
 
     Parameters
     ----------
-    s : torch.device | str | None
+    s : :class:`torch.device` | str | None
         Name of the device as string.
 
     Returns
     -------
-    torch.device
+    :class:`torch.device`
         Device as torch class.
 
     Raises
@@ -105,10 +105,10 @@ def any_to_tensor(
     x : Any
         The input to convert. Can be of type Tensor, float, int, bool, or str,
         or a list containing float, int, or bool.
-    device : torch.device, optional
+    device : :class:`torch.device`, optional
         The device on which to place the created tensor. If None, the default
         device is used.
-    dtype : torch.dtype, optional
+    dtype : :class:`torch.dtype`, optional
         The desired data type for the tensor. If None, the default data type is
         used or inferred from the input.
 
@@ -120,10 +120,10 @@ def any_to_tensor(
     Raises
     ------
     ValueError
-        If `x` is a string that cannot be converted to a float or if the list
+        If ``x`` is a string that cannot be converted to a float or if the list
         contains elements other than float, int, or bool.
     TypeError
-        If `x` is of a type that cannot be converted to a tensor.
+        If ``x`` is of a type that cannot be converted to a tensor.
 
     Examples
     --------

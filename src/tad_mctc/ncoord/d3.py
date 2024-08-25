@@ -50,29 +50,32 @@ def cn_d3(
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
-        Atomic positions of molecular structure.
-    counting_function : CountingFunction
-        Calculate weight for pairs.
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    counting_function : CountingFunction, optional
+        Calculate weight for pairs. Defaults to
+        :func:`tad_mctc.ncoord.count.exp_count`.
     rcov : Tensor | None, optional
-        Covalent radii for each species. Defaults to `None`.
+        Covalent radii for each species. Defaults to ``None``.
     cutoff : Tensor | None, optional
-        Real-space cutoff. Defaults to `None`.
+        Real-space cutoff. Defaults to ``None``.
     kcn : float, optional
-        Steepness of the counting function.
+        Steepness of the counting function. Defaults to
+        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
     kwargs : dict[str, Any]
         Pass-through arguments for counting function.
 
     Returns
     -------
     Tensor
-        Coordination numbers for all atoms.
+        Coordination numbers for all atoms (shape: ``(..., nat)``).
 
     Raises
     ------
     ValueError
-        If shape mismatch between `numbers`, `positions` and `rcov` is detected.
+        If shape mismatch between ``numbers``, ``positions`` and
+        ``rcov`` is detected.
     """
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
 
@@ -127,27 +130,29 @@ def cn_d3_gradient(
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
-        Atomic positions of molecular structure.
-    dcounting_function : CountingFunction
-        Derivative of the counting function.
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    dcounting_function : CountingFunction, optional
+        Derivative of the counting function. Defaults to
+        :func:`tad_mctc.ncoord.count.dexp_count`.
     rcov : Tensor | None, optional
-        Covalent radii for each species. Defaults to `None`.
+        Covalent radii for each species. Defaults to ``None``.
     cutoff : Tensor | None, optional
-        Real-space cutoff. Defaults to `None`.
+        Real-space cutoff. Defaults to ``None``.
     kwargs : dict[str, Any]
         Pass-through arguments for counting function.
 
     Returns
     -------
     Tensor
-        Coordination numbers for all atoms.
+        Coordination numbers for all atoms (shape: ``(..., nat, nat, 3)``).
 
     Raises
     ------
     ValueError
-        If shape mismatch between `numbers`, `positions` and `rcov` is detected.
+        If shape mismatch between ``numbers``, ``positions`` and
+        ``rcov`` is detected.
     """
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
 

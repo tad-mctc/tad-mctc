@@ -69,9 +69,9 @@ def numpy_to_tensor(
     ----------
     x : NDArray[Any]
         Array to convert.
-    device : torch.device | None, optional
+    device : :class:`torch.device` | None, optional
         Device to store the tensor on. Defaults to `None`.
-    dtype : torch.dtype | None, optional
+    dtype : :class:`torch.dtype` | None, optional
         Data type of the tensor. Defaults to `None`.
 
     Returns
