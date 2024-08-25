@@ -43,9 +43,9 @@ def bond_angles(numbers: Tensor, positions: Tensor) -> Tensor:
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system of shape `(..., nat)`.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
-        Cartesian coordinates of all atoms of shape `(..., nat, 3)`.
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
 
     Returns
     -------
@@ -92,9 +92,9 @@ def is_linear(
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system of shape `(..., nat)`.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
-        Cartesian coordinates of all atoms of shape `(..., nat, 3)`.
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
     atol : float, optional
         Absolute tolerance for the comparison. Defaults to 1e-8.
     rtol : float, optional

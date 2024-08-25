@@ -248,11 +248,11 @@ def guess_bond_order(
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system of shape `(..., nat)`.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
-        Cartesian coordinates of all atoms (shape: `(..., nat, 3)`).
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
     cn : Tensor
-        Coordination numbers for all atoms (shape: `(..., nat)`).
+        Coordination numbers for all atoms (shape: ``(..., nat)``).
     counting_function : CountingFunction
         Function to determine whether two atoms are bonded,
         additional arguments are passed to the counting function.

@@ -52,17 +52,20 @@ def cn_eeq(
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers of the atoms in the system.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
-        Cartesian coordinates of the atoms in the system (batch, natoms, 3).
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
     counting_function : CountingFunction
-        Calculate weight for pairs. Defaults to `erf_count`.
+        Calculate weight for pairs. Defaults to
+        :func:`tad_mctc.ncoord.count.erf_count`.
     rcov : Tensor | None, optional
-        Covalent radii for each species. Defaults to `None`.
+        Covalent radii for each species. Defaults to ``None``.
     cutoff : Tensor | float | int | None, optional
-        Real-space cutoff. Defaults to `defaults.CUTOFF_EEQ`.
+        Real-space cutoff. Defaults to
+        :data:`tad_mctc.ncoord.defaults.CUTOFF_EEQ`.
     cn_max : Tensor | float | int | None, optional
-        Maximum coordination number. Defaults to `defaults.CUTOFF_EEQ_MAX`.
+        Maximum coordination number. Defaults to
+        :data:`tad_mctc.ncoord.defaults.CUTOFF_EEQ_MAX`.
     kcn : Tensor | float | int, optional
         Steepness of the counting function.
     kwargs : dict[str, Any]
@@ -71,12 +74,13 @@ def cn_eeq(
     Returns
     -------
     Tensor
-        Coordination numbers for all atoms.
+        Coordination numbers for all atoms (shape: ``(..., nat)``).
 
     Raises
     ------
     ValueError
-        If shape mismatch between `numbers`, `positions` and `rcov` is detected.
+        If shape mismatch between ``numbers``, ``positions`` and
+        ``rcov`` is detected.
     """
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
 
@@ -130,7 +134,7 @@ def cut_coordination_number(
         Coordination numbers.
     cn_max : Tensor | float | int, optional
         Maximum coordination number.
-        Defaults to :const:`tad_mctc.ncoord.defaults.CUTOFF_EEQ_MAX`.
+        Defaults to :data:`tad_mctc.ncoord.defaults.CUTOFF_EEQ_MAX`.
 
     Returns
     -------

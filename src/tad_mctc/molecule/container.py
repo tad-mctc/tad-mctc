@@ -96,7 +96,7 @@ class Mol(TensorLike):
 
     @property
     def positions(self) -> Tensor:
-        """Cartesian coordinates of the atoms in the molecule."""
+        """Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``)."""
         return self._positions
 
     @positions.setter

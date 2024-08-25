@@ -40,19 +40,21 @@ def get_atomic_masses(
     dtype: torch.dtype | None = None,
 ) -> Tensor:
     """
-    Get isotope-averaged atomic masses for all `numbers`.
+    Get isotope-averaged atomic masses for all ``numbers``.
 
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     atomic_units : bool, optional
-        Flag for unit conversion. If `True` (default), the atomic masses will
-        be returned in atomic units. If `False`, the unit remains g/mol.
-    device : torch.device | None, optional
-        Device to store the tensor. If `None` (default), the default device is used.
-    dtype : torch.dtype, optional
-        Data type of the tensor. If `None` (default), the default dtype is used.
+        Flag for unit conversion. If ``True`` (default), the atomic masses
+        will be returned in atomic units. If ``False``, the unit remains g/mol.
+    device : :class:`torch.device` | None, optional
+        Device to store the tensor. If ``None`` (default), the default device
+        is used.
+    dtype : :class:`torch.dtype`, optional
+        Data type of the tensor. If ``None`` (default), the default dtype
+        is used.
 
     Returns
     -------
@@ -69,16 +71,18 @@ def get_zvalence(
     dtype: torch.dtype | None = None,
 ) -> Tensor:
     """
-    Get charge of valence shell for all `numbers`.
+    Get charge of valence shell for all ``numbers``.
 
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system.
-    device : torch.device | None, optional
-        Device to store the tensor. If `None` (default), the default device is used.
-    dtype : torch.dtype, optional
-        Data type of the tensor. If `None` (default), the default dtype is used.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+    device : :class:`torch.device` | None, optional
+        Device to store the tensor. If ``None`` (default), the default device
+        is used.
+    dtype : :class:`torch.dtype`, optional
+        Data type of the tensor. If ``None`` (default), the default dtype
+        is used.
 
     Returns
     -------
@@ -94,16 +98,18 @@ def get_ecore(
     dtype: torch.dtype | None = None,
 ) -> Tensor:
     """
-    Get number of core electrons for all `numbers`.
+    Get number of core electrons for all ``numbers``.
 
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system.
-    device : torch.device | None, optional
-        Device to store the tensor. If `None` (default), the default device is used.
-    dtype : torch.dtype, optional
-        Data type of the tensor. If `None` (default), the default dtype is used.
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+    device : :class:`torch.device` | None, optional
+        Device to store the tensor. If ``None`` (default), the default device
+        is used.
+    dtype : :class:`torch.dtype`, optional
+        Data type of the tensor. If ``None`` (default), the default dtype
+        is used.
 
     Returns
     -------

@@ -51,9 +51,9 @@ def read(
         The file-like object to read from.
     ftype : str | None, optional
         File type. Defaults to `None`, i.e., infered from the extension.
-    device : torch.device | None, optional
+    device : :class:`torch.device` | None, optional
         Device to store the tensor on. Defaults to `None`.
-    dtype : torch.dtype | None, optional
+    dtype : :class:`torch.dtype` | None, optional
         Floating point data type of the tensor. Defaults to `None`.
     dtype_int : torch.dtype, optional
         Integer data type of the tensor. Defaults to `torch.long`.
@@ -136,9 +136,9 @@ def read_from_path(
         File type. Defaults to `None`, i.e., infered from the extension.
     mode : str, optional
         Mode in which the file is opened. Defaults to `"r"`.
-    device : torch.device | None, optional
+    device : :class:`torch.device` | None, optional
         Device to store the tensor on. Defaults to `None`.
-    dtype : torch.dtype | None, optional
+    dtype : :class:`torch.dtype` | None, optional
         Floating point data type of the tensor. Defaults to `None`.
     dtype_int : torch.dtype, optional
         Integer data type of the tensor. Defaults to `torch.long`.

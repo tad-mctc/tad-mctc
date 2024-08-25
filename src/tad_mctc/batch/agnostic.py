@@ -46,9 +46,9 @@ def eye(
         Tensor shape to create the identity tensor from.
     value : float, optional
         Value to fill the diagonal with. Defaults to `1.0`.
-    device : torch.device | None, optional
+    device : :class:`torch.device` | None, optional
         Device to create the tensor on. If `None`, the device of the input
-    dtype : torch.dtype | None, optional
+    dtype : :class:`torch.dtype` | None, optional
         Data type of the tensor. If `None`, the data type of the input.
 
     Returns

@@ -56,9 +56,9 @@ def read_turbomole(
     ----------
     fileobj : IO[Any]
         The file-like object to read from.
-    device : torch.device | None, optional
+    device : :class:`torch.device` | None, optional
         Device to store the tensor on. Defaults to `None`.
-    dtype : torch.dtype | None, optional
+    dtype : :class:`torch.dtype` | None, optional
         Floating point data type of the tensor. Defaults to `None`.
     dtype_int : torch.dtype, optional
         Integer data type of the tensor. Defaults to `torch.long`.
@@ -148,9 +148,9 @@ def read_turbomole_energy(
     ----------
     fileobj : IO[Any]
         The file-like object to read from.
-    device : torch.device | None, optional
+    device : :class:`torch.device` | None, optional
         Device to store the tensor on. Defaults to `None`.
-    dtype : torch.dtype | None, optional
+    dtype : :class:`torch.dtype` | None, optional
         Floating point data type of the tensor. Defaults to `None`.
 
     Returns

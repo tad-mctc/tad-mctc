@@ -165,7 +165,7 @@ class TensorLike:
 
         Parameters
         ----------
-        device : torch.device
+        device : :class:`torch.device`
             Device to override the current device.
 
         """
@@ -206,7 +206,7 @@ class TensorLike:
 
         Parameters
         ----------
-        dtype : torch.dtype
+        dtype : :class:`torch.dtype`
             Floating point dtype to override the current dtype.
         """
         self.__dtype = dtype
@@ -247,7 +247,7 @@ class TensorLike:
 
         Parameters
         ----------
-        dtype : torch.dtype
+        dtype : :class:`torch.dtype`
             Floating point type.
 
         Returns
@@ -296,7 +296,7 @@ class TensorLike:
 
         Parameters
         ----------
-        device : torch.device
+        device : :class:`torch.device`
             Device to which all associated tensors should be moved.
 
         Returns
