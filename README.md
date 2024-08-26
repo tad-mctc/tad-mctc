@@ -4,7 +4,7 @@
   <tr>
     <td>Compatibility:</td>
     <td>
-      <img src="https://img.shields.io/badge/Python-3.8%20|%203.9%20|%203.10%20|%203.11-blue.svg" alt="Python Versions"/>
+      <img src="https://img.shields.io/badge/Python-3.8%20|%203.9%20|%203.10%20|%203.11%20|%203.12-blue.svg" alt="Python Versions"/>
       <img src="https://img.shields.io/badge/PyTorch-%3E=1.11.0-blue.svg" alt="PyTorch Versions"/>
     </td>
   </tr>
@@ -133,6 +133,24 @@ The following dependencies are required
 - [psutil](https://psutil.readthedocs.io/en/latest/)
 - [pytest](https://docs.pytest.org/) (tests only)
 - [torch](https://pytorch.org/)
+
+
+## Compatibility
+
+| PyTorch \ Python | 3.8                | 3.9                | 3.10               | 3.11               | 3.12               |
+|------------------|--------------------|--------------------|--------------------|--------------------|--------------------|
+| 1.11.0           | :white_check_mark: | :white_check_mark: | :x:                | :x:                | :x:                |
+| 1.12.1           | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x:                | :x:                |
+| 1.13.1           | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x:                |
+| 2.0.1            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x:                |
+| 2.1.2            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x:                |
+| 2.2.2            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| 2.3.1            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| 2.4.0            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+
+
+On macOS and Windows, PyTorch<2.0.0 does only support Python<3.11.
+
 
 ## Development
 
