@@ -146,8 +146,10 @@ The following dependencies are required
 | 2.1.2            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :x:                |
 | 2.2.2            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 | 2.3.1            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| 2.4.0            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| 2.4.1            | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 
+Note that only the latest bug fix version is listed, but all preceding bug fix minor versions are supported.
+For example, although only version 2.2.2 is listed, version 2.2.0 and 2.2.1 are also supported.
 
 On macOS and Windows, PyTorch<2.0.0 does only support Python<3.11.
 
