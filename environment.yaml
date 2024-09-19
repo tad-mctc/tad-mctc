@@ -20,6 +20,6 @@ channels:
   - conda-forge
   - pytorch
 dependencies:
-  - numpy
+  - numpy<2
   - python>=3.8
-  - pytorch>=1.11.0
+  - pytorch>=1.11.0,<2.5
