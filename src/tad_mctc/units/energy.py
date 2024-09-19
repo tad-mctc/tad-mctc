@@ -31,6 +31,7 @@ __all__ = [
     "AU2EV", "EV2AU",
     "AU2JOULE", "JOULE2AU",
     "AU2KCAL", "KCAL2AU",
+    "AU2KCALMOL", "KCALMOL2AU",
     "AU2KELVIN", "KELVIN2AU",
     "AU2VAA", "VAA2AU",
     "AU2VOLT", "VOLT2AU",
@@ -77,6 +78,12 @@ AU2KCAL = AU2JOULE * JOULE2KCAL
 
 KCAL2AU = 1.0 / AU2KCAL
 """Factor for conversion from kilo Calorie to atomic units."""
+
+AU2KCALMOL = AU2KCAL * CODATA.na
+"""Factor for conversion from atomic units to kilo Calorie per mole."""
+
+KCALMOL2AU = 1.0 / AU2KCALMOL
+"""Factor for conversion from kilo Calorie per mole to atomic units."""
 
 
 EV2JOULE = CODATA.e
