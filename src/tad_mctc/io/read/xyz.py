@@ -27,6 +27,7 @@ import torch
 
 from ...batch import pack
 from ...data import pse
+from ...exceptions import FormatErrorXYZ
 from ...typing import DD, IO, Any, Tensor, get_default_dtype
 from ...units import length
 from ..checks import content_checks, deflatable_check, shape_checks
@@ -82,10 +83,19 @@ def read_xyz(
     positions_images = []
 
     while True:
-        natoms_line = fileobj.readline()
+        # Stripping here also covers additional trailing new lines; otherwise,
+        # a blank line would be interpreted as the start of a new image.
+        natoms_line = fileobj.readline().strip()
         if not natoms_line:
             break
-        natoms = int(natoms_line.strip())
+
+        # Check if line is a number (must strip newline character before)
+        if not natoms_line.isdigit():
+            raise FormatErrorXYZ(
+                "The first line in an xyz file should be the number of atoms "
+                f"in the structure, but is {repr(natoms_line)}."
+            )
+        natoms = int(natoms_line)
 
         # Skip comment line
         fileobj.readline()

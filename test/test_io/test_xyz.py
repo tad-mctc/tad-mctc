@@ -25,6 +25,7 @@ import torch
 
 from tad_mctc.batch import pack
 from tad_mctc.data.molecules import mols as samples
+from tad_mctc.exceptions import FormatErrorXYZ
 from tad_mctc.io import read, write
 from tad_mctc.typing import DD
 
@@ -36,6 +37,10 @@ sample_list = ["H2O"]
 def test_read_fail() -> None:
     with pytest.raises(FileNotFoundError):
         read.read_xyz_from_path("not found")
+
+    p = Path(__file__).parent.resolve() / "fail" / "nat-no-digit.xyz"
+    with pytest.raises(FormatErrorXYZ):
+        read.read_xyz_from_path(p)
 
 
 def test_write_fail() -> None:
