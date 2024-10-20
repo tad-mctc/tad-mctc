@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-12, macos-13]
+        os: [macos-13]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         # only test oldest and newest version of torch
         torch-version: ["1.11.0", "2.2.2"]
@@ -54,6 +54,9 @@ jobs:
           # 3.13: https://github.com/pytorch/pytorch/issues/130249
           #
           # Wheels for macOS x86_64 are deprecated since 2.3.0
+          #
+          # Starting with macOS 14, runners are based on ARM.
+          # The macOS 12 runner image is removed on December 3rd.
           #
           # PyTorch<2.2.0 does only support Python<3.12 (all platforms)
           - python-version: "3.12"
@@ -73,6 +76,9 @@ jobs:
             torch-version: "1.12.1"
           - python-version: "3.11"
             torch-version: "1.13.1"
+          # PyTorch>=2.5.0 does not support Python<3.9
+          - python-version: "3.8"
+            torch-version: "2.5.0"
 
     runs-on: ${{ matrix.os }}
 
