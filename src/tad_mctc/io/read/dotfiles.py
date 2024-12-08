@@ -86,5 +86,79 @@ read_chrg = read_uhf = read_spin = read_dotfile
 
 
 read_chrg_from_path = create_path_reader_dotfiles(read_dotfile, name=".CHRG")
+"""
+Read a ``.CHRG`` file.
+
+Parameters
+----------
+fileobj : IO[Any]
+    The file-like object to read from.
+device : :class:`torch.device` | None, optional
+    Device to store the tensor on. Defaults to `None`.
+dtype : :class:`torch.dtype` | None, optional
+    Floating point data type of the tensor. Defaults to `None`.
+
+Returns
+-------
+Tensor
+    Tensor of the value in the file.
+
+Raises
+------
+EmptyFileError
+    File is empty (at least the first line).
+FormatError
+    File does not conform with the expected format.
+"""
+
 read_uhf_from_path = create_path_reader_dotfiles(read_dotfile, name=".UHF")
+"""
+Read a ``.UHF`` file.
+
+Parameters
+----------
+fileobj : IO[Any]
+    The file-like object to read from.
+device : :class:`torch.device` | None, optional
+    Device to store the tensor on. Defaults to `None`.
+dtype : :class:`torch.dtype` | None, optional
+    Floating point data type of the tensor. Defaults to `None`.
+
+Returns
+-------
+Tensor
+    Tensor of the value in the file.
+
+Raises
+------
+EmptyFileError
+    File is empty (at least the first line).
+FormatError
+    File does not conform with the expected format.
+"""
+
 read_spin_from_path = create_path_reader_dotfiles(read_dotfile, name=".UHF")
+"""
+Read a ``.UHF`` file.
+
+Parameters
+----------
+fileobj : IO[Any]
+    The file-like object to read from.
+device : :class:`torch.device` | None, optional
+    Device to store the tensor on. Defaults to `None`.
+dtype : :class:`torch.dtype` | None, optional
+    Floating point data type of the tensor. Defaults to `None`.
+
+Returns
+-------
+Tensor
+    Tensor of the value in the file.
+
+Raises
+------
+EmptyFileError
+    File is empty (at least the first line).
+FormatError
+    File does not conform with the expected format.
+"""
