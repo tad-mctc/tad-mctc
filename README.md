@@ -84,9 +84,11 @@ In particular, the _tad-mctc_ library provides:
 The name is inspired by the Fortran pendant "modular computation tool chain library" ([mctc-lib](https://github.com/grimme-lab/mctc-lib/)).
 
 
+## Citation
+
 If you use this software, please cite the following publication
 
-- \M. Friede, C. Hölzer, S. Ehlert, S. Grimme, *J. Chem. Phys.*, **2024**, *161*, 062501. DOI: [10.1063/5.0216715](https://doi.org/10.1063/5.0216715)
+- M. Friede, C. Hölzer, S. Ehlert, S. Grimme, *J. Chem. Phys.*, **2024**, *161*, 062501. DOI: [10.1063/5.0216715](https://doi.org/10.1063/5.0216715)
 
 
 ## Installation
