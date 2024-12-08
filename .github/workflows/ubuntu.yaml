@@ -53,7 +53,7 @@ jobs:
             "2.2.2",
             "2.3.1",
             "2.4.1",
-            "2.5.0",
+            "2.5.1",
           ]
         exclude:
           # Check latest versions here: https://download.pytorch.org/whl/torch/
@@ -81,7 +81,7 @@ jobs:
             torch-version: "1.12.1"
           # PyTorch>=2.5.0 does not support Python<3.9
           - python-version: "3.8"
-            torch-version: "2.5.0"
+            torch-version: "2.5.1"
 
     runs-on: ${{ matrix.os }}
 

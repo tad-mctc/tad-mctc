@@ -41,11 +41,13 @@ from __future__ import annotations
 import torch
 
 from .. import storch
+from ..batch import real_pairs
 from ..convert import any_to_tensor
 from ..exceptions import DeviceError, DtypeError
 from ..io.checks import dimension_check
+from ..io.read import read_chrg_from_path, read_from_path
 from ..tools import memoize
-from ..typing import NoReturn, Tensor, TensorLike
+from ..typing import NoReturn, PathLike, Self, Tensor, TensorLike
 
 __all__ = ["Mol"]
 
@@ -144,10 +146,49 @@ class Mol(TensorLike):
         """
         return storch.cdist(self.positions)
 
+    @memoize
+    def enn(self, cutoff: Tensor | float | int | None = 25.0) -> Tensor:
+        """
+        Calculate the nuclear repulsion energy.
+
+        .. warning::
+
+            Memoization for this method creates a cache that stores the
+            nuclear repulsion energy across all instances.
+
+        Parameters
+        ----------
+        cutoff : Tensor | float | int | None, optional
+            Cutoff distance for the nuclear repulsion energy.
+            Defaults to `25.0`.
+
+        Returns
+        -------
+        Tensor
+            Nuclear repulsion energy.
+        """
+        zero = torch.tensor(0.0, dtype=self.dtype, device=self.device)
+        cutoff = any_to_tensor(cutoff, device=self.device, dtype=self.dtype)
+
+        mask = real_pairs(self.numbers, mask_diagonal=True)
+
+        numbers = self.numbers.type(self.dtype)
+        zab = torch.einsum("i,j->ij", numbers, numbers)
+
+        enn = torch.where(
+            mask * (self.distances() <= cutoff),
+            storch.divide(zab, self.distances()),
+            zero,
+        )
+
+        return 0.5 * torch.sum(enn)
+
     def clear_cache(self) -> None:
         """Clear the cross-instance caches of all memoized methods."""
         if hasattr(self.distances, "clear"):
             self.distances.clear(self)
+        if hasattr(self.enn, "clear"):
+            self.enn.clear(self)
 
     def checks(self) -> None | NoReturn:
         """
@@ -208,6 +249,57 @@ class Mol(TensorLike):
                 formula += f"{c}"
 
         return formula
+
+    ##########################################################################
+
+    @classmethod
+    def from_path(
+        cls,
+        path: PathLike,
+        ftype: str | None = None,
+        name: str | None = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+        dtype_int: torch.dtype = torch.long,
+    ) -> Self:
+        """
+        Create a molecule from a file.
+
+        Parameters
+        ----------
+        path : PathLike
+            Path to the file.
+        ftype : str | None, optional
+            File type. Defaults to `None`. If `None`, the file type is
+            determined from the file extension.
+        name : str | None, optional
+            Name of the molecule. Defaults to `None`.
+        device : :class:`torch.device` | None, optional
+            Device to store the tensor on. Defaults to `None`.
+        dtype : :class:`torch.dtype` | None, optional
+            Floating point data type of the tensor. Defaults to `None`.
+        dtype_int : :class:`torch.dtype`, optional
+            Integer data type of the tensor. Defaults to `torch.long`.
+
+        Returns
+        -------
+        Mol
+            Molecule.
+        """
+
+        numbers, positions = read_from_path(
+            path, ftype=ftype, device=device, dtype=dtype, dtype_int=dtype_int
+        )
+        chrg = read_chrg_from_path(path, device=device, dtype=dtype)
+
+        return cls(
+            numbers,
+            positions,
+            charge=chrg,
+            name=name,
+            device=device,
+            dtype=dtype,
+        )
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.__class__.__name__}({self.numbers.tolist()})"
