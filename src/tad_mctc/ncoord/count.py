@@ -72,7 +72,7 @@ def exp_count(
 
 
 def erf_count(
-    r: Tensor, r0: Tensor, kcn: Tensor | float | int = defaults.KCN_D3
+    r: Tensor, r0: Tensor, kcn: Tensor | float | int = defaults.KCN_D4
 ) -> Tensor:
     """
     Error function counting function for coordination number contributions.
@@ -159,7 +159,7 @@ def dexp_count(
 
 
 def derf_count(
-    r: Tensor, r0: Tensor, kcn: Tensor | float | int = defaults.KCN_D3
+    r: Tensor, r0: Tensor, kcn: Tensor | float | int = defaults.KCN_D4
 ) -> Tensor:
     """
     Derivative of error function counting function w.r.t. the distance.
