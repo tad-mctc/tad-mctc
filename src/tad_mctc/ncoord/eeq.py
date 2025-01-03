@@ -145,6 +145,4 @@ def cut_coordination_number(
     if cn_max > 50:
         return cn
 
-    return torch.log(1.0 + torch.exp(cn_max)) - torch.log(
-        1.0 + torch.exp(cn_max - cn)
-    )
+    return torch.log(1.0 + torch.exp(cn_max)) - torch.log(1.0 + torch.exp(cn_max - cn))
