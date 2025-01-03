@@ -42,7 +42,6 @@ def cn_eeq(
     rcov: Tensor | None = None,
     cutoff: Tensor | float | int | None = defaults.CUTOFF_EEQ,
     cn_max: Tensor | float | int | None = defaults.CUTOFF_EEQ_MAX,
-    kcn: Tensor | float | int = defaults.KCN_EEQ,
     **kwargs: Any,
 ) -> Tensor:
     """
@@ -66,10 +65,9 @@ def cn_eeq(
     cn_max : Tensor | float | int | None, optional
         Maximum coordination number. Defaults to
         :data:`tad_mctc.ncoord.defaults.CUTOFF_EEQ_MAX`.
-    kcn : Tensor | float | int, optional
-        Steepness of the counting function.
     kwargs : dict[str, Any]
-        Pass-through arguments for counting function.
+        Pass-through arguments for counting function. For example, ``kcn``,
+        the steepness of the counting function.
 
     Returns
     -------
@@ -111,7 +109,7 @@ def cn_eeq(
     rc = rcov.unsqueeze(-2) + rcov.unsqueeze(-1)
     cf = torch.where(
         mask * (distances <= cutoff),
-        counting_function(distances, rc, kcn, **kwargs),
+        counting_function(distances, rc, **kwargs),
         torch.tensor(0.0, **dd),
     )
     cn = torch.sum(cf, dim=-1)

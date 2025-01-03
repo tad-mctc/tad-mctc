@@ -41,7 +41,6 @@ def cn_d3(
     counting_function: CountingFunction = exp_count,
     rcov: Tensor | None = None,
     cutoff: Tensor | None = None,
-    kcn: float = defaults.KCN_D3,
     **kwargs: Any,
 ) -> Tensor:
     """
@@ -60,11 +59,10 @@ def cn_d3(
         Covalent radii for each species. Defaults to ``None``.
     cutoff : Tensor | None, optional
         Real-space cutoff. Defaults to ``None``.
-    kcn : float, optional
-        Steepness of the counting function. Defaults to
-        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
     kwargs : dict[str, Any]
-        Pass-through arguments for counting function.
+        Pass-through arguments for counting function. For example, ``kcn``,
+        the steepness of the counting function, which defaults to
+        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
 
     Returns
     -------
@@ -106,7 +104,7 @@ def cn_d3(
     rc = rcov.unsqueeze(-2) + rcov.unsqueeze(-1)
     cf = torch.where(
         mask * (distances <= cutoff),
-        counting_function(distances, rc, kcn, **kwargs),
+        counting_function(distances, rc, **kwargs),
         torch.tensor(0.0, **dd),
     )
 
@@ -120,7 +118,6 @@ def cn_d3_gradient(
     dcounting_function: CountingFunction = dexp_count,
     rcov: Tensor | None = None,
     cutoff: Tensor | None = None,
-    kcn: float = defaults.KCN_D3,
     **kwargs: Any,
 ) -> Tensor:
     """
@@ -141,7 +138,9 @@ def cn_d3_gradient(
     cutoff : Tensor | None, optional
         Real-space cutoff. Defaults to ``None``.
     kwargs : dict[str, Any]
-        Pass-through arguments for counting function.
+        Pass-through arguments for counting function. For example, ``kcn``,
+        the steepness of the counting function, which defaults to
+        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
 
     Returns
     -------
@@ -183,7 +182,7 @@ def cn_d3_gradient(
     rc = rcov.unsqueeze(-2) + rcov.unsqueeze(-1)
     dcf = torch.where(
         mask * (distances <= cutoff),
-        dcounting_function(distances, rc, kcn, **kwargs),
+        dcounting_function(distances, rc, **kwargs),
         torch.tensor(0.0, **dd),
     )
 
