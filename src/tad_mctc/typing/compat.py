@@ -75,6 +75,7 @@ if sys.version_info >= (3, 9):
 else:
     from typing import Callable, Generator, Sequence
 
+CountingFunction = Callable[[Tensor, Tensor], Tensor]
 
 if sys.version_info >= (3, 10):
     # "from __future__ import annotations" only affects type annotations
@@ -85,7 +86,6 @@ if sys.version_info >= (3, 10):
     Size = list[int] | tuple[int, ...] | torch.Size
     TensorOrTensors = list[Tensor] | tuple[Tensor, ...] | Tensor
     DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
-    CountingFunction = Callable[[Tensor, Tensor, Tensor | float | int], Tensor]
 elif sys.version_info >= (3, 9):
     # in Python 3.9, "from __future__ import annotations" works with type
     # aliases but requires using `Union` from typing
@@ -95,7 +95,6 @@ elif sys.version_info >= (3, 9):
     Sliceable = Union[list[Tensor], tuple[Tensor, ...]]
     Size = Union[list[int], tuple[int], torch.Size]
     TensorOrTensors = Union[list[Tensor], tuple[Tensor, ...], Tensor]
-    CountingFunction = Callable[[Tensor, Tensor, Union[Tensor, float, int]], Tensor]
 
     # no Union here, same as 3.10
     DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
@@ -109,7 +108,6 @@ elif sys.version_info >= (3, 8):
     Size = Union[List[int], Tuple[int], torch.Size]
     TensorOrTensors = Union[List[Tensor], Tuple[Tensor, ...], Tensor]
     DampingFunction = Callable[[int, Tensor, Tensor, Dict[str, Tensor]], Tensor]
-    CountingFunction = Callable[[Tensor, Tensor, Union[Tensor, float, int]], Tensor]
 else:
     vinfo = sys.version_info
     raise RuntimeError(
@@ -136,7 +134,9 @@ def _wraps(
             fun.__name__ = name if namestr is None else namestr.format(fun=name)  # type: ignore
             fun.__module__ = getattr(wrapped, "__module__", "<unknown module>")
             fun.__doc__ = (
-                doc if docstr is None else docstr.format(fun=name, doc=doc, **kwargs)
+                doc
+                if docstr is None
+                else docstr.format(fun=name, doc=doc, **kwargs)
             )
             fun.__qualname__ = getattr(wrapped, "__qualname__", fun.__name__)  # type: ignore
             fun.__wrapped__ = wrapped  # type: ignore

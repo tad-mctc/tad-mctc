@@ -44,7 +44,6 @@ def cn_d4(
     rcov: Tensor | None = None,
     en: Tensor | None = None,
     cutoff: Tensor | None = None,
-    kcn: float = defaults.KCN_D4,
     **kwargs: Any,
 ) -> Tensor:
     """
@@ -65,10 +64,9 @@ def cn_d4(
         Electronegativities for all atoms. Defaults to ``None``.
     cutoff : Tensor | None, optional
         Real-space cutoff. Defaults to ``None``.
-    kcn : float, optional
-        Steepness of the counting function.
     kwargs : dict[str, Any]
-        Pass-through arguments for counting function.
+        Pass-through arguments for counting function. For example, ``kcn``.
+        the steepness of the counting function.
 
     Returns
     -------
@@ -121,7 +119,7 @@ def cn_d4(
     rc = rcov.unsqueeze(-2) + rcov.unsqueeze(-1)
     cf = torch.where(
         mask * (distances <= cutoff),
-        den * counting_function(distances, rc, kcn, **kwargs),
+        den * counting_function(distances, rc, **kwargs),
         torch.tensor(0.0, **dd),
     )
     return torch.sum(cf, dim=-1)
