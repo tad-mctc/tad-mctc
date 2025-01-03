@@ -106,7 +106,9 @@ def _wrap_gradcheck(
 
 
 def dgradcheck(
-    func: Callable[..., TensorOrTensors], diffvars: TensorOrTensors, **kwargs: Any
+    func: Callable[..., TensorOrTensors],
+    diffvars: TensorOrTensors,
+    **kwargs: Any,
 ) -> bool:
     """
     Wrapper for `torch.autograd.gradcheck` that detaches the differentiated
@@ -128,7 +130,9 @@ def dgradcheck(
 
 
 def dgradgradcheck(
-    func: Callable[..., TensorOrTensors], diffvars: TensorOrTensors, **kwargs: Any
+    func: Callable[..., TensorOrTensors],
+    diffvars: TensorOrTensors,
+    **kwargs: Any,
 ) -> bool:
     """
     Wrapper for `torch.autograd.gradgradcheck` that detaches the differentiated

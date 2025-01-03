@@ -63,7 +63,9 @@ __all__ = [
 
 
 def coldfusion_check(
-    numbers: Tensor, positions: Tensor, threshold: Tensor | float | int | None = None
+    numbers: Tensor,
+    positions: Tensor,
+    threshold: Tensor | float | int | None = None,
 ) -> bool | NoReturn:
     """
     Check if interatomic distances are large enough (no fusion of atoms).
@@ -260,8 +262,12 @@ def dimension_check(
         raise TypeError(f"Variable is not a tensor but '{type(x)}'.")
 
     if x.ndim < min_ndim:
-        raise RuntimeError(f"The tensor should not fall below {min_ndim} dimensions.")
+        raise RuntimeError(
+            f"The tensor should not fall below {min_ndim} dimensions."
+        )
     if x.ndim > max_ndim:
-        raise RuntimeError(f"The tensor should not exceed '{max_ndim}' dimensions.")
+        raise RuntimeError(
+            f"The tensor should not exceed '{max_ndim}' dimensions."
+        )
 
     return True

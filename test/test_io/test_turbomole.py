@@ -105,7 +105,9 @@ def test_write_and_read(dtype: torch.dtype, name: str, extra: bool) -> None:
             prepend_to_file(filepath, "something")
 
         # Read from XYZ file
-        read_numbers, read_positions = read.read_turbomole_from_path(filepath, **dd)
+        read_numbers, read_positions = read.read_turbomole_from_path(
+            filepath, **dd
+        )
 
     # Check if the read data matches the written data
     assert (read_numbers == numbers).all()

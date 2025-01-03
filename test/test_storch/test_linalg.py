@@ -89,7 +89,9 @@ hamiltonian = torch.tensor(
 
 @pytest.mark.parametrize("broadening", ["none", "cond", "lorn"])
 @pytest.mark.parametrize("dtype", [torch.double])
-def test_eighb(broadening: Literal["cond", "lorn", "none"], dtype: torch.dtype) -> None:
+def test_eighb(
+    broadening: Literal["cond", "lorn", "none"], dtype: torch.dtype
+) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
     a = numpy_to_tensor(np.random.rand(8, 8), **dd)
     a.requires_grad_(True)

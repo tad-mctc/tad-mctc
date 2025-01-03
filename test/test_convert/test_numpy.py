@@ -102,7 +102,9 @@ def test_np_to_torch_with_device(device_str: str) -> None:
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])
-def test_torch_to_np_with_dtype(dtype: np.dtype[np.float32 | np.float64]) -> None:
+def test_torch_to_np_with_dtype(
+    dtype: np.dtype[np.float32 | np.float64],
+) -> None:
     tensor = torch.zeros((10, 10))
     arr = convert.tensor_to_numpy(tensor, dtype=dtype)
 

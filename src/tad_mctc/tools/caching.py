@@ -155,7 +155,9 @@ def memoize_all_instances(fcn: Callable[..., T]) -> Callable[..., T]:
     return wrapper
 
 
-def memoize_with_deps(*dependency_getters: Callable[..., Any]):  # pragma: no cover
+def memoize_with_deps(
+    *dependency_getters: Callable[..., Any]
+):  # pragma: no cover
     """
     Memoization with multiple dependency-based cache invalidation. This
     decorator allows specification of `__slots__`. It works with and without

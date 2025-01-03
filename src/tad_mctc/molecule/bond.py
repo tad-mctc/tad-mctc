@@ -156,7 +156,9 @@ _cf = torch.tensor(
 Coordination number based scaling factor.
 """
 
-_ir = torch.tensor([0] + 2 * [1] + 8 * [2] + 8 * [3] + 18 * [4] + 18 * [5] + 32 * [6])
+_ir = torch.tensor(
+    [0] + 2 * [1] + 8 * [2] + 8 * [3] + 18 * [4] + 18 * [5] + 32 * [6]
+)
 """
 Row index in the periodic table
 """

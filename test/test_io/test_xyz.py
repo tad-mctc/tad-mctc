@@ -69,19 +69,25 @@ def test_write_batch_fail() -> None:
         numbers = pack((sample["numbers"], sample["numbers"]))
         positions = sample["positions"]
         with pytest.raises(ValueError):
-            write.write_xyz_to_path(filepath, numbers, positions, overwrite=True)
+            write.write_xyz_to_path(
+                filepath, numbers, positions, overwrite=True
+            )
 
         # positions batched, numbers not
         numbers = sample["numbers"]
         positions = pack((sample["positions"], sample["positions"]))
         with pytest.raises(ValueError):
-            write.write_xyz_to_path(filepath, numbers, positions, overwrite=True)
+            write.write_xyz_to_path(
+                filepath, numbers, positions, overwrite=True
+            )
 
         # too many dimensions
         numbers = torch.rand(2, 3, 4)
         positions = torch.rand(2, 3, 4, 3)
         with pytest.raises(ValueError):
-            write.write_xyz_to_path(filepath, numbers, positions, overwrite=True)
+            write.write_xyz_to_path(
+                filepath, numbers, positions, overwrite=True
+            )
 
 
 def test_write_comment_fail() -> None:
@@ -124,7 +130,9 @@ def test_write_and_read(dtype: torch.dtype, name: str) -> None:
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("name1", sample_list)
 @pytest.mark.parametrize("name2", sample_list)
-def test_write_and_read_batch(dtype: torch.dtype, name1: str, name2: str) -> None:
+def test_write_and_read_batch(
+    dtype: torch.dtype, name1: str, name2: str
+) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     sample1 = samples[name1]
@@ -159,7 +167,9 @@ def test_write_and_read_batch(dtype: torch.dtype, name1: str, name2: str) -> Non
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("name1", sample_list)
 @pytest.mark.parametrize("name2", sample_list)
-def test_write_batch_and_read_batch(dtype: torch.dtype, name1: str, name2: str) -> None:
+def test_write_batch_and_read_batch(
+    dtype: torch.dtype, name1: str, name2: str
+) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     sample1, sample2 = samples[name1], samples[name2]

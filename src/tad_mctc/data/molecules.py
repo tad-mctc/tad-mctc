@@ -229,7 +229,9 @@ mols: dict[str, Molecule] = {
         ),
     },
     "MB16_43_01": {
-        "numbers": symbol_to_number("Na H O H F H H O N H H Cl B B N Al".split()),
+        "numbers": symbol_to_number(
+            "Na H O H F H H O N H H Cl B B N Al".split()
+        ),
         "positions": torch.tensor(
             [
                 [-1.85528263484662, +3.58670515364616, -2.41763729306344],
@@ -253,7 +255,9 @@ mols: dict[str, Molecule] = {
         ),
     },
     "MB16_43_02": {
-        "numbers": symbol_to_number("H S B O Mg H H H Si H B Li F H H S".split()),
+        "numbers": symbol_to_number(
+            "H S B O Mg H H H Si H B Li F H H S".split()
+        ),
         "positions": torch.tensor(
             [
                 [-1.79537625851198, -3.77866422935275, -1.07883558363403],
@@ -277,7 +281,9 @@ mols: dict[str, Molecule] = {
         ),
     },
     "MB16_43_03": {
-        "numbers": symbol_to_number("C O H Li Mg Al C H H H F S C H Na H".split()),
+        "numbers": symbol_to_number(
+            "C O H Li Mg Al C H H H F S C H Na H".split()
+        ),
         "positions": torch.tensor(
             [
                 [-0.02148551327524, -0.67161751504297, -4.75078512817560],
@@ -301,7 +307,9 @@ mols: dict[str, Molecule] = {
         ),
     },
     "MB16_43_07": {
-        "numbers": symbol_to_number("C H B H H Cl F N C H S H H O F Mg".split()),
+        "numbers": symbol_to_number(
+            "C H B H H Cl F N C H S H H O F Mg".split()
+        ),
         "positions": torch.tensor(
             [
                 [-3.75104222741336, -5.81308736205268, -1.22507366840233],
@@ -325,7 +333,9 @@ mols: dict[str, Molecule] = {
         ),
     },
     "MB16_43_08": {
-        "numbers": symbol_to_number("C O B F H Al H H O B Be C H H B F".split()),
+        "numbers": symbol_to_number(
+            "C O B F H Al H H O B Be C H H B F".split()
+        ),
         "positions": torch.tensor(
             [
                 [-1.27823293129313, +0.06442674490989, +2.76980447300615],
@@ -366,7 +376,9 @@ mols: dict[str, Molecule] = {
         ),
     },
     "C6H5I-CH3SH": {
-        "numbers": symbol_to_number("C C C C C C I H H H H H S H C H H H".split()),
+        "numbers": symbol_to_number(
+            "C C C C C C I H H H H H S H C H H H".split()
+        ),
         "positions": torch.tensor(
             [
                 [-1.42754169820131, -1.50508961850828, -1.93430551124333],
@@ -1206,7 +1218,9 @@ mols: dict[str, Molecule] = {
 }
 
 
-def merge_nested_dicts(a: dict[str, Molecule], b: dict[str, Any]) -> dict[str, Any]:
+def merge_nested_dicts(
+    a: dict[str, Molecule], b: dict[str, Any]
+) -> dict[str, Any]:
     """
     Merge nested dictionaries. dictionary `a` remains unaltered, while
     the corresponding keys of it are added to `b`.
