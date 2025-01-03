@@ -75,7 +75,9 @@ def test_single(
     cutoff = torch.tensor(50, **dd)
 
     numdr = numgrad(function[0], cfunc[0], numbers, positions)
-    dcndr = function[1](numbers, positions, dcounting_function=cfunc[1], cutoff=cutoff)
+    dcndr = function[1](
+        numbers, positions, dcounting_function=cfunc[1], cutoff=cutoff
+    )
 
     # the same atom gets masked in the PyTorch implementation
     mask = real_pairs(numbers, mask_diagonal=True).unsqueeze(-1)

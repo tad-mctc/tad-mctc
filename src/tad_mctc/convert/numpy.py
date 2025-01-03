@@ -119,7 +119,9 @@ def tensor_to_numpy(x: Tensor, dtype: DTypeLike | None = None) -> NDArray[Any]:
                 interpreted = np.array(x.storage().tolist(), dtype=dtype)
             else:
                 storage_bytes = bytes(x.untyped_storage())  # type: ignore
-                interpreted = np.frombuffer(storage_bytes, dtype=xdtype).astype(dtype)
+                interpreted = np.frombuffer(storage_bytes, dtype=xdtype).astype(
+                    dtype
+                )
 
             return interpreted.reshape(x.shape)
 

@@ -89,7 +89,9 @@ def test_general():
     assert check_1, "Failed to unpack"
 
     # Check 2: ensure axis declaration is obeyed
-    check_2 = all((i == deflate(j)).all() for i, j in zip(unpack(a, axis=1), a.T))
+    check_2 = all(
+        (i == deflate(j)).all() for i, j in zip(unpack(a, axis=1), a.T)
+    )
     assert check_2, 'Failed to respect "axis" declaration'
 
     # Check 3: device persistence check.

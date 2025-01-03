@@ -99,7 +99,9 @@ def deflate(
     """
     # Check shape is viable
     if axis is not None and tensor.ndim <= 1:
-        raise ValueError("Tensor must be at least 2D when specifying an ``axis``.")
+        raise ValueError(
+            "Tensor must be at least 2D when specifying an ``axis``."
+        )
 
     mask = tensor == value
     if axis is not None:

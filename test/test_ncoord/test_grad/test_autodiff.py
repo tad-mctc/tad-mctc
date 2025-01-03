@@ -25,7 +25,14 @@ import torch
 
 from tad_mctc.autograd import dgradcheck, dgradgradcheck
 from tad_mctc.batch import pack
-from tad_mctc.ncoord import cn_d3, cn_d4, cn_eeq, erf_count, exp_count, gfn2_count
+from tad_mctc.ncoord import (
+    cn_d3,
+    cn_d4,
+    cn_eeq,
+    erf_count,
+    exp_count,
+    gfn2_count,
+)
 from tad_mctc.ncoord.typing import CNFunction
 from tad_mctc.typing import DD, Callable, CountingFunction, Tensor
 
@@ -37,7 +44,10 @@ sample_list = ["SiH4", "PbH4-BiH3", "MB16_43_01"]
 
 
 def gradchecker(
-    dtype: torch.dtype, name: str, cnf: CNFunction, count_function: CountingFunction
+    dtype: torch.dtype,
+    name: str,
+    cnf: CNFunction,
+    count_function: CountingFunction,
 ) -> tuple[
     Callable[[Tensor], Tensor],  # autograd function
     Tensor,  # differentiable variables
@@ -147,7 +157,9 @@ def test_gradcheck_batch(
     Check a single analytical gradient of parameters against numerical
     gradient from `torch.autograd.gradcheck`.
     """
-    func, diffvars = gradchecker_batch(dtype, name1, name2, cn_function, count_function)
+    func, diffvars = gradchecker_batch(
+        dtype, name1, name2, cn_function, count_function
+    )
     assert dgradcheck(func, diffvars, atol=tol)
 
 
@@ -168,5 +180,7 @@ def test_gradgradcheck_batch(
     Check a single analytical gradient of parameters against numerical
     gradient from `torch.autograd.gradgradcheck`.
     """
-    func, diffvars = gradchecker_batch(dtype, name1, name2, cn_function, count_function)
+    func, diffvars = gradchecker_batch(
+        dtype, name1, name2, cn_function, count_function
+    )
     assert dgradgradcheck(func, diffvars, atol=tol)

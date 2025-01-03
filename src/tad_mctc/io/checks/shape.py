@@ -69,6 +69,8 @@ def shape_checks(
 
     if allow_batched is False:
         if len(numbers.shape) != 1 or len(positions.shape) != 2:
-            raise ValueError("Invalid shape for tensors (batched tensors not allowed).")
+            raise ValueError(
+                "Invalid shape for tensors (batched tensors not allowed)."
+            )
 
     return True

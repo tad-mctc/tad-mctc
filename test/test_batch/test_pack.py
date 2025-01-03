@@ -156,7 +156,9 @@ def test_pack():
 
     # Construct a numpy equivalent
     max_size = max(packed.shape[1:])
-    ref = np.stack([np.pad(i.cpu().numpy(), (0, max_size - len(i))) for i in matrices])
+    ref = np.stack(
+        [np.pad(i.cpu().numpy(), (0, max_size - len(i))) for i in matrices]
+    )
 
     equivalent = np.all((packed.cpu().numpy() - ref) < 1e-12)
     assert equivalent, "Check pack method against numpy"

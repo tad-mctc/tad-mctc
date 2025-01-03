@@ -101,7 +101,8 @@ def test_general():
 
     # Check 6: high dimensionality tests (warning: this is dependent on `pack`)
     tensors = [
-        torch.full((i, i + 1, i + 2, i + 3, i + 4), i, device=DEVICE) for i in range(10)
+        torch.full((i, i + 1, i + 2, i + 3, i + 4), i, device=DEVICE)
+        for i in range(10)
     ]
     over_packed = pack(tensors, size=torch.Size((20, 19, 23, 20, 30)))
     check_6 = (deflate(over_packed, axis=0) == pack(tensors)).all()

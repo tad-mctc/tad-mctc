@@ -223,7 +223,9 @@ class SymEigBroadBase(torch.autograd.Function):
         # Apply broadening
         if bm == "cond":  # <- Conditional broadening
             deltas = (
-                1 / torch.where(torch.abs(deltas) > bf, deltas, bf) * torch.sign(deltas)
+                1
+                / torch.where(torch.abs(deltas) > bf, deltas, bf)
+                * torch.sign(deltas)
             )
         elif bm == "lorn":  # <- Lorentzian broadening
             deltas = deltas / (deltas**2 + bf)
@@ -236,7 +238,9 @@ class SymEigBroadBase(torch.autograd.Function):
         # Construct F matrix where F_ij = v_bar_j - v_bar_i; construction is
         # done in this manner to avoid 1/0 which can cause intermittent and
         # hard-to-diagnose issues.
-        F = torch.zeros(*w.shape, w.shape[-1], dtype=ctx.dtype, device=w_bar.device)
+        F = torch.zeros(
+            *w.shape, w.shape[-1], dtype=ctx.dtype, device=w_bar.device
+        )
         # Upper then lower triangle
         F[..., tri_u[0], tri_u[1]] = deltas
         F[..., tri_u[1], tri_u[0]] -= F[..., tri_u[0], tri_u[1]]

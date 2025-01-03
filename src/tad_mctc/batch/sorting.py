@@ -37,7 +37,9 @@ class _SortResult(NamedTuple):
     indices: Tensor
 
 
-def pargsort(tensor: Tensor, mask: Tensor | None = None, dim: int = -1) -> Tensor:
+def pargsort(
+    tensor: Tensor, mask: Tensor | None = None, dim: int = -1
+) -> Tensor:
     """
     Returns indices that sort packed tensors while ignoring padding values.
 
@@ -78,7 +80,9 @@ def pargsort(tensor: Tensor, mask: Tensor | None = None, dim: int = -1) -> Tenso
         return s1.gather(dim, s2)
 
 
-def psort(tensor: Tensor, mask: Tensor | None = None, dim: int = -1) -> _SortResult:
+def psort(
+    tensor: Tensor, mask: Tensor | None = None, dim: int = -1
+) -> _SortResult:
     """
     Sort a packed tensor while ignoring any padding values.
 

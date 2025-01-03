@@ -134,7 +134,9 @@ def _wraps(
             fun.__name__ = name if namestr is None else namestr.format(fun=name)  # type: ignore
             fun.__module__ = getattr(wrapped, "__module__", "<unknown module>")
             fun.__doc__ = (
-                doc if docstr is None else docstr.format(fun=name, doc=doc, **kwargs)
+                doc
+                if docstr is None
+                else docstr.format(fun=name, doc=doc, **kwargs)
             )
             fun.__qualname__ = getattr(wrapped, "__qualname__", fun.__name__)  # type: ignore
             fun.__wrapped__ = wrapped  # type: ignore

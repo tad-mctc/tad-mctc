@@ -31,7 +31,11 @@ __all__ = ["divide", "reciprocal", "sqrt"]
 
 
 def divide(
-    x: Tensor, y: Tensor, *, eps: Tensor | float | int | None = None, **kwargs: Any
+    x: Tensor,
+    y: Tensor,
+    *,
+    eps: Tensor | float | int | None = None,
+    **kwargs: Any,
 ) -> Tensor:
     """
     Safe divide operation.

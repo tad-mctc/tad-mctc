@@ -45,4 +45,6 @@ def get_eps(x: Tensor) -> Tensor:
     Tensor
         Smallest value of corresponding dtype.
     """
-    return torch.tensor(torch.finfo(x.dtype).eps, device=x.device, dtype=x.dtype)
+    return torch.tensor(
+        torch.finfo(x.dtype).eps, device=x.device, dtype=x.dtype
+    )

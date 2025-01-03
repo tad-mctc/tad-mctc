@@ -76,14 +76,20 @@ def read_qcschema(
     data = json_load(fileobj.read())
 
     if "molecule" not in data:
-        raise KeyError(f"Invalid schema: Key 'molecule' not found in '{fileobj}'.")
+        raise KeyError(
+            f"Invalid schema: Key 'molecule' not found in '{fileobj}'."
+        )
 
     mol = data["molecule"]
 
     if "symbols" not in mol:
-        raise KeyError(f"Invalid schema: Key 'symbols' not found in '{fileobj}'.")
+        raise KeyError(
+            f"Invalid schema: Key 'symbols' not found in '{fileobj}'."
+        )
     if "geometry" not in mol:
-        raise KeyError(f"Invalid schema: Key 'geometry' not found in '{fileobj}'.")
+        raise KeyError(
+            f"Invalid schema: Key 'geometry' not found in '{fileobj}'."
+        )
 
     geo = mol["geometry"]
     coords = []

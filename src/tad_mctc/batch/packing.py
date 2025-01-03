@@ -133,14 +133,19 @@ def pack(
 
     # Identify the maximum size, if one was not specified.
     if size is None:
-        size = [int(x) for x in torch.tensor([i.shape for i in tensors]).max(0).values]
+        size = [
+            int(x)
+            for x in torch.tensor([i.shape for i in tensors]).max(0).values
+        ]
 
     # Tensor to pack into, filled with padding value
     padded = torch.full((_count, *size), value, dtype=_dtype, device=_device)
 
     # Generate the mask if requested.
     if return_mask is True:
-        mask = torch.full((_count, *size), False, dtype=torch.bool, device=_device)
+        mask = torch.full(
+            (_count, *size), False, dtype=torch.bool, device=_device
+        )
 
     # Loop over & pack "tensors" into "padded". A proxy index "n" must be used
     # for assignments rather than a slice to prevent in-place errors.
@@ -173,4 +178,6 @@ def pack(
             mask = mask.permute(order)
 
     # Return the packed tensor, and the mask if requested.
-    return (padded, mask) if return_mask is True and mask is not None else padded
+    return (
+        (padded, mask) if return_mask is True and mask is not None else padded
+    )
