@@ -173,6 +173,7 @@ def test_pow(dtype: torch.dtype, xlist: list) -> None:
 
     # negative fractional tensor exponents
     out = storch.pow(x, torch.tensor([-0.5, -1, -2], **dd))
+    assert (torch.isnan(out) == False).all()
 
     # zero exponents
     out = storch.pow(x, 0, eps=1.0e-10)
