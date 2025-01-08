@@ -239,7 +239,6 @@ def guess_bond_order(
     positions: Tensor,
     cn: Tensor,
     counting_function: CountingFunction = erf_count,
-    kcn: float = defaults.KCN_EEQ,
     **kwargs: Any,
 ) -> Tensor:
     """
@@ -317,9 +316,12 @@ def guess_bond_order(
         torch.tensor(torch.finfo(positions.dtype).eps, **dd),
     )
 
+    if "kcn" not in kwargs:
+        kwargs["kcn"] = defaults.KCN_EEQ
+
     bond_length = guess_bond_length(numbers, cn)
     return torch.where(
         mask,
-        counting_function(distances, bond_length, kcn, **kwargs),
+        counting_function(distances, bond_length, **kwargs),
         torch.tensor(0.0, **dd),
     )

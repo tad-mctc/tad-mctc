@@ -175,6 +175,10 @@ class Mol(TensorLike):
         numbers = self.numbers.type(self.dtype)
         zab = torch.einsum("i,j->ij", numbers, numbers)
 
+        print(self.dtype)
+        print(zab)
+        print(self.distances())
+
         enn = torch.where(
             mask * (self.distances() <= cutoff),
             storch.divide(zab, self.distances()),
@@ -189,6 +193,8 @@ class Mol(TensorLike):
             self.distances.clear(self)
         if hasattr(self.enn, "clear"):
             self.enn.clear(self)
+
+        return None
 
     def checks(self) -> None | NoReturn:
         """
@@ -228,6 +234,8 @@ class Mol(TensorLike):
                 f"Shape of positions ({self.positions.shape[:-1]}) is not "
                 f"consistent with atomic numbers ({self.numbers.shape})."
             )
+
+        return None
 
     def sum_formula(self) -> str:
         """

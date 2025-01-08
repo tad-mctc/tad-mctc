@@ -27,7 +27,7 @@ from functools import wraps
 
 import torch
 
-from ..typing import Any, Callable, TypeVar
+from ..typing import Any, CacheKey, Callable, TypeVar
 
 __all__ = ["memoize", "memoize_all_instances"]
 
@@ -54,7 +54,7 @@ def memoize(fcn: Callable[..., T]) -> Callable[..., T]:  # pragma: no cover
     """
 
     @wraps(fcn)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> T:
         # name mangling of dunder attributes!
         name = f"_{self.__class__.__name__}__memoization_cache"
 
@@ -85,13 +85,13 @@ def memoize(fcn: Callable[..., T]) -> Callable[..., T]:  # pragma: no cover
         cache[key] = result
         return result
 
-    def clear(self):
+    def clear(self: Any) -> None:
         name = f"_{self.__class__.__name__}__memoization_cache"
 
         if hasattr(self, name):
             setattr(self, name, {})
 
-    def get(self):
+    def get(self: Any) -> dict[str, Any]:
         name = f"_{self.__class__.__name__}__memoization_cache"
 
         if not hasattr(self, name):
@@ -126,10 +126,10 @@ def memoize_all_instances(fcn: Callable[..., T]) -> Callable[..., T]:
     """
 
     # creating the cache outside the wrapper shares it across instances
-    cache = {}
+    cache: dict[CacheKey, T] = {}
 
     @wraps(fcn)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(self: Any, *args: Any, **kwargs: Any) -> T:
         # create unique key for all instances in cache dictionary
         key = (id(self), fcn.__name__, args, frozenset(kwargs.items()))
 
@@ -142,10 +142,10 @@ def memoize_all_instances(fcn: Callable[..., T]) -> Callable[..., T]:
         cache[key] = result
         return result
 
-    def clear(*_):
+    def clear(*_: Any) -> None:
         cache.clear()
 
-    def get(*_):
+    def get(*_: Any) -> dict[CacheKey, T]:
         return cache
 
     setattr(wrapper, "clear", clear)
@@ -157,7 +157,7 @@ def memoize_all_instances(fcn: Callable[..., T]) -> Callable[..., T]:
 
 def memoize_with_deps(
     *dependency_getters: Callable[..., Any]
-):  # pragma: no cover
+) -> Callable[..., Any]:  # pragma: no cover
     """
     Memoization with multiple dependency-based cache invalidation. This
     decorator allows specification of `__slots__`. It works with and without
@@ -170,11 +170,11 @@ def memoize_with_deps(
 
     def decorator(fcn: Callable[..., T]) -> Callable[..., T]:
         # creating the cache outside the wrapper shares it across instances
-        cache = {}
-        dependency_cache = {}
+        cache: dict[CacheKey, T] = {}
+        dependency_cache: dict[CacheKey, tuple[Any, ...]] = {}
 
         @wraps(fcn)
-        def wrapper(self, *args, **kwargs):
+        def wrapper(self: Any, *args: Any, **kwargs: Any) -> T:
             # create unique key for all instances in cache dictionary
             key = (id(self), fcn.__name__, args, frozenset(kwargs.items()))
 
@@ -201,14 +201,14 @@ def memoize_with_deps(
             dependency_cache[key] = current_deps
             return result
 
-        def clear():
+        def clear() -> None:
             cache.clear()
             dependency_cache.clear()
 
-        def get():
+        def get() -> dict[CacheKey, T]:
             return cache
 
-        def get_dep():
+        def get_dep() -> dict[CacheKey, tuple[Any, ...]]:
             return dependency_cache
 
         setattr(wrapper, "clear", clear)
