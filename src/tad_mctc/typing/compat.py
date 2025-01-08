@@ -105,7 +105,7 @@ elif sys.version_info >= (3, 9):
 elif sys.version_info >= (3, 8):
     # in Python 3.8, "from __future__ import annotations" only affects
     # type annotations not type aliases
-    from typing import Dict, List, Tuple, Union, FrozenSet
+    from typing import Dict, FrozenSet, List, Tuple, Union
 
     PathLike = Union[str, Path]
     Sliceable = Union[List[Tensor], Tuple[Tensor, ...]]
