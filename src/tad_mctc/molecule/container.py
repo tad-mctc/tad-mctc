@@ -175,10 +175,6 @@ class Mol(TensorLike):
         numbers = self.numbers.type(self.dtype)
         zab = torch.einsum("i,j->ij", numbers, numbers)
 
-        print(self.dtype)
-        print(zab)
-        print(self.distances())
-
         enn = torch.where(
             mask * (self.distances() <= cutoff),
             storch.divide(zab, self.distances()),
