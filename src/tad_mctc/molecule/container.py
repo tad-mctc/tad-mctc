@@ -190,6 +190,8 @@ class Mol(TensorLike):
         if hasattr(self.enn, "clear"):
             self.enn.clear(self)
 
+        return None
+
     def checks(self) -> None | NoReturn:
         """
         Check all variables for consistency.
@@ -228,6 +230,8 @@ class Mol(TensorLike):
                 f"Shape of positions ({self.positions.shape[:-1]}) is not "
                 f"consistent with atomic numbers ({self.numbers.shape})."
             )
+
+        return None
 
     def sum_formula(self) -> str:
         """

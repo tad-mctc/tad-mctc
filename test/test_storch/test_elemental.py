@@ -94,6 +94,100 @@ def test_divide(dtype: torch.dtype) -> None:
 ###############################################################################
 
 
+def test_pow_fail() -> None:
+    dd: DD = {"device": DEVICE, "dtype": torch.float32}
+    x = torch.tensor([1, 2, 3], **dd)
+
+    with pytest.raises(TypeError):
+        storch.pow(x, 2, eps="0")  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError):
+        storch.pow(x, 2, eps=0)
+
+    with pytest.raises(ValueError):
+        storch.pow(x, 2, eps=torch.tensor(0.0))
+
+    with pytest.raises(ValueError):
+        storch.pow(x, "2")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("xlist", [[-1, 0, 2], [1, 2, 3]])
+def test_pow(dtype: torch.dtype, xlist: list) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+    x = torch.tensor(xlist, **dd)
+
+    assert (torch.pow(x, 2) == storch.pow(x, 2)).all()
+
+    # positive integer exponents
+    out = storch.pow(x, 2, eps=torch.tensor(torch.finfo(dtype).eps))
+    assert (torch.isnan(out) == False).all()
+
+    # positive integer exponents with float
+    out = storch.pow(x, 2.0)
+    assert (torch.isnan(out) == False).all()
+
+    # positive integer scalar tensor exponents
+    out = storch.pow(x, torch.tensor(1, **dd))
+    assert (torch.isnan(out) == False).all()
+
+    # positive integer tensor exponents
+    out = storch.pow(x, torch.tensor([1, 2, 3], **dd))
+    assert (torch.isnan(out) == False).all()
+
+    # negative integer exponents
+    out = storch.pow(x, -2)
+    assert (torch.isnan(out) == False).all()
+
+    # negative integer exponents with float
+    out = storch.pow(x, -2.0)
+    assert (torch.isnan(out) == False).all()
+
+    # negative integer scalar tensor exponents
+    out = storch.pow(x, torch.tensor(-1, **dd))
+    assert (torch.isnan(out) == False).all()
+
+    # negative integer tensor exponents
+    out = storch.pow(x, torch.tensor([-1, -2, -3], **dd))
+    assert (torch.isnan(out) == False).all()
+
+    # positive fractional exponents
+    out = storch.pow(x, 0.5)
+    assert (torch.isnan(out) == False).all()
+
+    # positive fractional scalar tensor exponents
+    out = storch.pow(x, torch.tensor(0.5, **dd))
+    assert (torch.isnan(out) == False).all()
+
+    # positive fractional tensor exponents
+    out = storch.pow(x, torch.tensor([0.5, 1, 2], **dd))
+    assert (torch.isnan(out) == False).all()
+
+    # negative fractional exponents
+    out = storch.pow(x, -0.5)
+    assert (torch.isnan(out) == False).all()
+
+    # negative fractional scalar tensor exponents
+    out = storch.pow(x, torch.tensor(-0.5, **dd))
+    assert (torch.isnan(out) == False).all()
+
+    # negative fractional tensor exponents
+    out = storch.pow(x, torch.tensor([-0.5, -1, -2], **dd))
+
+    # zero exponents
+    out = storch.pow(x, 0, eps=1.0e-10)
+    assert (torch.isnan(out) == False).all()
+
+    out = storch.pow(x, torch.tensor(0, **dd))
+    assert (torch.isnan(out) == False).all()
+
+    out = storch.pow(x, torch.tensor([0, 0, 0], **dd), eps=999)
+    assert (torch.isnan(out) == False).all()
+
+
+###############################################################################
+
+
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_reciprocal_fail(dtype: torch.dtype) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}

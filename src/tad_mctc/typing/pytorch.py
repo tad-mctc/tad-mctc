@@ -132,7 +132,7 @@ class TensorLike:
         self.__device = device if device is not None else get_default_device()
         self.__dtype = dtype if dtype is not None else get_default_dtype()
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
 
         if not hasattr(cls, "__slots__"):
