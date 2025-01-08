@@ -73,7 +73,10 @@ def divide(
             f"but {type(eps)} was given."
         )
 
-    y_safe = torch.where(y == 0, eps, y)
+    print(y.dtype)
+    print(x.dtype)
+    print(eps.dtype)
+    y_safe = torch.where(y != 0, y, eps)
     return torch.divide(x, y_safe, **kwargs)
 
 

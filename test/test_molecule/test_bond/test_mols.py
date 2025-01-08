@@ -42,7 +42,7 @@ def test_single(dtype: torch.dtype, name: str):
     cn = sample["cn"].to(**dd)
     ref = sample["bo"].to(**dd)
 
-    bond_order = bond.guess_bond_order(numbers, positions, cn)
+    bond_order = bond.guess_bond_order(numbers, positions, cn, kcn=7.5)
     assert bond_order.dtype == dtype
 
     mask = bond_order[bond_order > 0.3]

@@ -37,5 +37,6 @@ def test_enn(dtype: torch.dtype) -> None:
     numbers = samples["H2"]["numbers"].to(DEVICE)
     positions = samples["H2"]["positions"].to(**dd)
 
-    mol = Mol(numbers, positions)
+    mol = Mol(numbers, positions, **dd)
+    assert mol.dtype == dtype
     assert pytest.approx(1 / (2 * 0.702529)) == mol.enn().cpu()

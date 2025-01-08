@@ -37,7 +37,7 @@ def test_cache(dtype: torch.dtype) -> None:
     numbers = samples["H2"]["numbers"].to(DEVICE)
     positions = samples["H2"]["positions"].to(**dd)
 
-    mol = Mol(numbers, positions)
+    mol = Mol(numbers, positions, **dd)
 
     # "distances" and "enn" saved in cache
     mol.enn()
