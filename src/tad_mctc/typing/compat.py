@@ -105,7 +105,7 @@ elif sys.version_info >= (3, 9):
 elif sys.version_info >= (3, 8):
     # in Python 3.8, "from __future__ import annotations" only affects
     # type annotations not type aliases
-    from typing import Dict, List, Tuple, Union
+    from typing import Dict, List, Tuple, Union, FrozenSet
 
     PathLike = Union[str, Path]
     Sliceable = Union[List[Tensor], Tuple[Tensor, ...]]
@@ -113,7 +113,7 @@ elif sys.version_info >= (3, 8):
     TensorOrTensors = Union[List[Tensor], Tuple[Tensor, ...], Tensor]
     DampingFunction = Callable[[int, Tensor, Tensor, Dict[str, Tensor]], Tensor]
 
-    CacheKey = Tuple[int, str, Tuple[Any, ...], frozenset[Tuple[str, Any]]]
+    CacheKey = Tuple[int, str, Tuple[Any, ...], FrozenSet[Tuple[str, Any]]]
 else:
     vinfo = sys.version_info
     raise RuntimeError(
