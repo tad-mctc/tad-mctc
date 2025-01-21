@@ -31,7 +31,7 @@ __all__ = ["eye"]
 
 
 def eye(
-    tensor: Tensor,
+    shape: torch.Size | tuple[int, ...],
     value: float = 1.0,
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
@@ -56,10 +56,6 @@ def eye(
     Tensor
         Possibly batched identity tensor.
     """
-    identity = torch.zeros(
-        tensor.shape,
-        device=device if device is not None else tensor.device,
-        dtype=dtype if dtype is not None else tensor.dtype,
-    )
+    identity = torch.zeros(shape, device=device, dtype=dtype)
     identity.diagonal(dim1=-2, dim2=-1).fill_(value)
     return identity
