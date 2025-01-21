@@ -31,7 +31,7 @@ def test_eye_single():
     value = 1.0
     tensor = torch.empty(shape, device=DEVICE)
 
-    result = eye(shape, value=value)
+    result = eye(shape, value=value, device=DEVICE)
 
     assert result.shape == shape
     assert result.device == tensor.device
@@ -47,7 +47,7 @@ def test_eye_batch():
     value = 1.0
     tensor = torch.empty(shape, device=DEVICE)
 
-    result = eye(shape, value=value)
+    result = eye(shape, value=value, device=DEVICE)
 
     assert result.shape == shape
     assert result.device == tensor.device
