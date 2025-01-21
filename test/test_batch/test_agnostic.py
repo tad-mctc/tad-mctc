@@ -23,13 +23,15 @@ import torch
 
 from tad_mctc.batch import eye
 
+from ..conftest import DEVICE
+
 
 def test_eye_single():
     shape = (3, 3)
     value = 1.0
-    tensor = torch.empty(shape)
+    tensor = torch.empty(shape, device=DEVICE)
 
-    result = eye(tensor, value=value)
+    result = eye(shape, value=value, device=DEVICE)
 
     assert result.shape == shape
     assert result.device == tensor.device
@@ -43,9 +45,9 @@ def test_eye_single():
 def test_eye_batch():
     shape = (5, 3, 3)
     value = 1.0
-    tensor = torch.empty(shape)
+    tensor = torch.empty(shape, device=DEVICE)
 
-    result = eye(tensor, value=value)
+    result = eye(shape, value=value, device=DEVICE)
 
     assert result.shape == shape
     assert result.device == tensor.device

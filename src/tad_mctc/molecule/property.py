@@ -109,7 +109,7 @@ def inertia_moment(
     if center_pa is True:
         # trace = einsum("...ii->...", im)
         # einsum("...ij,...->...ij", eye(im), trace) - im)
-        return einsum("...ij,...kk->...ij", eye(im), im) - im
+        return einsum("...ij,...kk->...ij", eye(im.shape), im) - im
     return im
 
 
