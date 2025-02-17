@@ -120,7 +120,6 @@ def read_turbomole_fileobj(
 
 read_turbomole = create_path_reader(read_turbomole_fileobj)
 
-read_coord_fileobj = read_turbomole_fileobj
 
 read_coord = create_path_reader(read_turbomole_fileobj)
 
