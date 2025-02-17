@@ -67,7 +67,7 @@ def test_read_tblite_engrad(dtype: torch.dtype, file: str) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     p = Path(__file__).parent.resolve() / "output" / file
-    energies, gradients = read.read_tblite_engrad_from_path(p, **dd)
+    energies, gradients = read.read_tblite_engrad(p, **dd)
 
     ref_e = torch.tensor([-0.30036182118846183, -0.5810630151866734], **dd)
     ref_g = torch.tensor(

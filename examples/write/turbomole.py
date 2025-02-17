@@ -9,4 +9,4 @@ numbers = mol["numbers"]
 positions = mol["positions"]
 
 path = Path(__file__).resolve().parent / "coord"
-write.write_turbomole_to_path(path, numbers, positions)
+write.write_turbomole(path, numbers, positions)

@@ -27,12 +27,12 @@ from ...data import pse
 from ...typing import IO, Any, Tensor
 from ...units import length
 from ..checks import content_checks, shape_checks
-from .writer import create_path_writer
+from .topath import create_path_writer
 
-__all__ = ["write_xyz", "write_xyz_to_path"]
+__all__ = ["write_xyz"]
 
 
-def write_xyz(
+def write_xyz_fileobj(
     fileobj: IO[Any],
     numbers: Tensor,
     positions: Tensor,
@@ -49,7 +49,7 @@ def write_xyz(
     numbers : Tensor
         A 1D tensor containing atomic numbers or symbols.
     positions : Tensor
-        A 2D tensor of shape (n_atoms, 3) containing atomic positions in
+        A 2D tensor of shape ``(nat, 3)`` containing atomic positions in
         atomic units (bohrs).
     fmt : str, optional
         Format string for the position coordinates.
@@ -111,4 +111,4 @@ def write_xyz(
     )
 
 
-write_xyz_to_path = create_path_writer(write_xyz)
+write_xyz = create_path_writer(write_xyz_fileobj)

@@ -34,7 +34,7 @@ def test_read_atom_exception() -> None:
     p = Path(__file__).parent.resolve() / "files" / "atom.xyz"
 
     with pytest.raises(MoleculeError):
-        read.read_from_path(p, raise_padding_exception=True)
+        read.read(p, raise_padding_exception=True)
 
 
 def test_read_atom_warning() -> None:
@@ -44,7 +44,7 @@ def test_read_atom_warning() -> None:
     p = Path(__file__).parent.resolve() / "files" / "atom.xyz"
 
     with pytest.warns(MoleculeWarning):
-        read.read_from_path(p, raise_padding_exception=False)
+        read.read(p, raise_padding_exception=False)
 
 
 def test_read_atom() -> None:
@@ -53,7 +53,7 @@ def test_read_atom() -> None:
     x-coordinate to avoid a clash with zero-padding.
     """
     p = Path(__file__).parent.resolve() / "files" / "atom.xyz"
-    numbers, positions = read.read_from_path(
+    numbers, positions = read.read(
         p, raise_padding_exception=False, shift_for_last=True, shift_value=1.0
     )
 
@@ -69,7 +69,7 @@ def test_read_atom2() -> None:
     Read a single atom placed at [0.3, 0.3, 0.3].
     """
     p = Path(__file__).parent.resolve() / "files" / "atom2.xyz"
-    numbers, positions = read.read_from_path(p)
+    numbers, positions = read.read(p)
 
     ref_numbers = torch.tensor([2])
     ref_positions = torch.tensor([[0.3, 0.3, 0.3]]) * AA2AU
@@ -85,4 +85,4 @@ def test_read_fail_last_zero() -> None:
     """
     p = Path(__file__).parent.resolve() / "fail" / "lastzero.xyz"
     with pytest.raises(MoleculeError):
-        read.read_from_path(p, raise_padding_exception=True)
+        read.read(p, raise_padding_exception=True)

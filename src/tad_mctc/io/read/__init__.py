@@ -30,7 +30,6 @@ Example
 >>> numbers, positions = read.read(path)
 """
 from .dotfiles import *
-from .frompath import *
 from .orca import *
 from .qcschema import *
 from .reader import *

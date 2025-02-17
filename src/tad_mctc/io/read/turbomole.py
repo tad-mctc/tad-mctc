@@ -30,18 +30,10 @@ from ...typing import DD, IO, Any, Tensor, get_default_dtype
 from ..checks import content_checks, deflatable_check, shape_checks
 from .frompath import create_path_reader
 
-__all__ = [
-    "read_coord",
-    "read_turbomole",
-    "read_coord_from_path",
-    "read_turbomole_from_path",
-    #
-    "read_turbomole_energy",
-    "read_turbomole_energy_from_path",
-]
+__all__ = ["read_coord", "read_turbomole", "read_turbomole_energy"]
 
 
-def read_turbomole(
+def read_turbomole_fileobj(
     fileobj: IO[Any],
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
@@ -126,17 +118,16 @@ def read_turbomole(
     return numbers, positions
 
 
-read_turbomole_from_path = create_path_reader(read_turbomole)
+read_turbomole = create_path_reader(read_turbomole_fileobj)
 
-read_coord = read_turbomole
 
-read_coord_from_path = create_path_reader(read_turbomole)
+read_coord = create_path_reader(read_turbomole_fileobj)
 
 
 ################################################################################
 
 
-def read_turbomole_energy(
+def read_turbomole_energy_fileobj(
     fileobj: IO[Any],
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
@@ -178,4 +169,4 @@ def read_turbomole_energy(
     return torch.tensor(float(energy_line[1]), device=device, dtype=dtype)
 
 
-read_turbomole_energy_from_path = create_path_reader(read_turbomole_energy)
+read_turbomole_energy = create_path_reader(read_turbomole_energy_fileobj)

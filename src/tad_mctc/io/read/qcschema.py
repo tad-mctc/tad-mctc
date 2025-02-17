@@ -29,13 +29,10 @@ from ...typing import DD, IO, Any, Tensor, get_default_dtype
 from ..checks import content_checks, deflatable_check, shape_checks
 from .frompath import create_path_reader
 
-__all__ = [
-    "read_qcschema",
-    "read_qcschema_from_path",
-]
+__all__ = ["read_qcschema"]
 
 
-def read_qcschema(
+def read_qcschema_fileobj(
     fileobj: IO[Any],
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
@@ -106,4 +103,4 @@ def read_qcschema(
     return numbers, positions
 
 
-read_qcschema_from_path = create_path_reader(read_qcschema)
+read_qcschema = create_path_reader(read_qcschema_fileobj)

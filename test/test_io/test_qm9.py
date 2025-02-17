@@ -31,7 +31,7 @@ from ..conftest import DEVICE
 
 def test_read_fail() -> None:
     with pytest.raises(FileNotFoundError):
-        read.read_xyz_qm9_from_path("not found")
+        read.read_xyz_qm9("not found")
 
 
 def test_read_fail_empty() -> None:
@@ -42,7 +42,7 @@ def test_read_fail_empty() -> None:
             f.write("")
 
         with pytest.raises(ValueError):
-            read.read_xyz_qm9_from_path(filepath)
+            read.read_xyz_qm9(filepath)
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -62,8 +62,10 @@ def test_read(dtype: torch.dtype) -> None:
     # Create a temporary directory to save the file
     filepath = Path(__file__).parent / "files" / "qm9.xyz"
     with open(filepath, encoding="utf-8") as fp:
-        read_numbers, read_positions = read.read_xyz_qm9(fp, **dd)
+        read_numbers, read_positions = read.xyz.read_xyz_qm9_fileobj(fp, **dd)
 
     # Check if the read data matches the written data
+    assert read_numbers.dtype == numbers.dtype
+    assert read_numbers.shape == numbers.shape
     assert (numbers == read_numbers).all()
     assert pytest.approx(positions.cpu()) == read_positions.cpu()

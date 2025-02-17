@@ -27,14 +27,14 @@ from pathlib import Path
 import torch
 
 from ...typing import IO, Any, PathLike, Tensor
-from .qcschema import read_qcschema
-from .turbomole import read_turbomole
-from .xyz import read_xyz, read_xyz_qm9
+from .qcschema import read_qcschema_fileobj
+from .turbomole import read_turbomole_fileobj
+from .xyz import read_xyz_fileobj, read_xyz_qm9_fileobj
 
-__all__ = ["read", "read_from_path"]
+__all__ = ["read"]
 
 
-def read(
+def read_from_fileobj(
     fileobj: IO[Any],
     ftype: str,
     device: torch.device | None = None,
@@ -75,15 +75,15 @@ def read(
     fname = Path(fileobj.name).name.lower()
 
     if ftype in ("xyz", "log"):
-        numbers, positions = read_xyz(
+        numbers, positions = read_xyz_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
     elif ftype in ("qm9",):
-        numbers, positions = read_xyz_qm9(
+        numbers, positions = read_xyz_qm9_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
     elif ftype in ("tmol", "tm", "turbomole") or fname == "coord":
-        numbers, positions = read_turbomole(
+        numbers, positions = read_turbomole_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
     elif ftype in ("mol", "sdf", "gen", "pdb"):
@@ -107,7 +107,7 @@ def read(
             f"Filetype '{ftype}' (Gaussian) recognized but no reader available."
         )
     elif ftype in ("json", "qcschema"):
-        numbers, positions = read_qcschema(
+        numbers, positions = read_qcschema_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
     else:
@@ -116,7 +116,7 @@ def read(
     return numbers, positions
 
 
-def read_from_path(
+def read(
     filepath: PathLike,
     ftype: str | None = None,
     mode: str = "r",
@@ -164,7 +164,7 @@ def read_from_path(
         ftype = path.suffix.lower()[1:]
 
     with open(path, mode=mode, encoding="utf-8") as fileobj:
-        return read(
+        return read_from_fileobj(
             fileobj,
             ftype,
             device=device,

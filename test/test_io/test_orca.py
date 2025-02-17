@@ -34,7 +34,7 @@ from ..conftest import DEVICE
 def test_read_engrad_fail(file: str) -> None:
     p = Path(Path(__file__).parent.resolve(), "fail", file)
     with pytest.raises(FormatErrorORCA):
-        read.read_orca_engrad_from_path(p)
+        read.read_orca_engrad(p)
 
 
 def test_read_engrad_fail_empty() -> None:
@@ -46,7 +46,7 @@ def test_read_engrad_fail_empty() -> None:
 
         with open(filepath, encoding="utf-8") as f:
             with pytest.raises(EmptyFileError):
-                read.read_orca_engrad(f)
+                read.orca.read_orca_engrad_fileobj(f)
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -55,7 +55,7 @@ def test_read_engrad(dtype: torch.dtype, file: str) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     p = Path(__file__).parent.resolve() / "output" / file
-    e, g = read.read_orca_engrad_from_path(p, **dd)
+    e, g = read.read_orca_engrad(p, **dd)
 
     ref_e = torch.tensor(-17.271065945172, **dd)
     ref_g = torch.tensor(

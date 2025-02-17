@@ -24,7 +24,7 @@ import pytest
 import torch
 
 from tad_mctc.data.mass import ATOMIC
-from tad_mctc.molecule import inertia_moment, mass_center
+from tad_mctc.molecule import center_of_mass, inertia_moment
 from tad_mctc.typing import DD
 
 from ...conftest import DEVICE
@@ -53,7 +53,7 @@ def test_single(dtype: torch.dtype) -> None:
     assert pytest.approx(ref.cpu(), abs=1e-1) == im.cpu()
 
     # precompute center of mass
-    com = mass_center(masses, positions)
+    com = center_of_mass(masses, positions)
     pos = positions - com
 
     im = inertia_moment(masses, pos, pos_already_com=True)
@@ -121,7 +121,7 @@ def test_batch(dtype: torch.dtype) -> None:
     assert pytest.approx(ref.cpu(), abs=1e-1) == im.cpu()
 
     # precompute center of mass
-    com = mass_center(masses, positions)
+    com = center_of_mass(masses, positions)
     pos = positions - com.unsqueeze(-2)
 
     im = inertia_moment(masses, pos, pos_already_com=True)

@@ -40,3 +40,17 @@ def test_enn(dtype: torch.dtype) -> None:
     mol = Mol(numbers, positions, **dd)
     assert mol.dtype == dtype
     assert pytest.approx(1 / (2 * 0.702529)) == mol.enn().cpu()
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_mass_center(dtype: torch.dtype) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
+    numbers = samples["H2"]["numbers"].to(DEVICE)
+    positions = samples["H2"]["positions"].to(**dd)
+
+    mol = Mol(numbers, positions, **dd)
+    assert mol.dtype == dtype
+
+    ref = torch.tensor([0.0, 0.0, 0.0], **dd)
+    assert pytest.approx(ref.cpu(), abs=1e-8) == mol.com().cpu()

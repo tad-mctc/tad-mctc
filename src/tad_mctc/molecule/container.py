@@ -45,7 +45,7 @@ from ..batch import real_pairs
 from ..convert import any_to_tensor
 from ..exceptions import DeviceError, DtypeError
 from ..io.checks import dimension_check
-from ..io.read import read_chrg_from_path, read_from_path
+from ..io.read import read, read_chrg
 from ..tools import memoize
 from ..typing import NoReturn, PathLike, Self, Tensor, TensorLike
 
@@ -183,6 +183,22 @@ class Mol(TensorLike):
 
         return 0.5 * torch.sum(enn)
 
+    @memoize
+    def com(self) -> Tensor:
+        """
+        Calculate the center of mass of the molecule.
+
+        Returns
+        -------
+        Tensor
+            Center of mass.
+        """
+        from ..data.getters import get_atomic_masses
+        from .property import center_of_mass
+
+        masses = get_atomic_masses(self.numbers, **self.dd)
+        return center_of_mass(masses, self.positions)
+
     def clear_cache(self) -> None:
         """Clear the cross-instance caches of all memoized methods."""
         if hasattr(self.distances, "clear"):
@@ -291,10 +307,10 @@ class Mol(TensorLike):
             Molecule.
         """
 
-        numbers, positions = read_from_path(
+        numbers, positions = read(
             path, ftype=ftype, device=device, dtype=dtype, dtype_int=dtype_int
         )
-        chrg = read_chrg_from_path(path, device=device, dtype=dtype)
+        chrg = read_chrg(path, device=device, dtype=dtype)
 
         return cls(
             numbers,

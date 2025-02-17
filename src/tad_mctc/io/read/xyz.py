@@ -33,15 +33,10 @@ from ...units import length
 from ..checks import content_checks, deflatable_check, shape_checks
 from .frompath import create_path_reader
 
-__all__ = [
-    "read_xyz",
-    "read_xyz_qm9",
-    "read_xyz_from_path",
-    "read_xyz_qm9_from_path",
-]
+__all__ = ["read_xyz", "read_xyz_qm9"]
 
 
-def read_xyz(
+def read_xyz_fileobj(
     fileobj: IO[Any],
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
@@ -79,8 +74,8 @@ def read_xyz(
     }
     ddi: DD = {"device": device, "dtype": dtype_int}
 
-    numbers_images = []
-    positions_images = []
+    numbers_images: list[Tensor] = []
+    positions_images: list[Tensor] = []
 
     while True:
         # Stripping here also covers additional trailing new lines; otherwise,
@@ -120,15 +115,21 @@ def read_xyz(
 
     # if only one image, return its tensors directly
     if len(numbers_images) == 1:
-        return numbers_images[0], positions_images[0]
+        n = numbers_images[0]
+        p = positions_images[0]
+
+        if kwargs.get("batch_agnostic", False):
+            return n.unsqueeze(0), p.unsqueeze(0)
+
+        return n, p
 
     return pack(numbers_images), pack(positions_images)
 
 
-read_xyz_from_path = create_path_reader(read_xyz)
+read_xyz = create_path_reader(read_xyz_fileobj)
 
 
-def read_xyz_qm9(
+def read_xyz_qm9_fileobj(
     fileobj: IO[Any],
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
@@ -189,4 +190,4 @@ def read_xyz_qm9(
     return numbers, positions
 
 
-read_xyz_qm9_from_path = create_path_reader(read_xyz_qm9)
+read_xyz_qm9 = create_path_reader(read_xyz_qm9_fileobj)

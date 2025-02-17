@@ -39,9 +39,9 @@ def test_read_fail_empty(name: str) -> None:
 
         with pytest.raises(EmptyFileError):
             if name == ".CHRG":
-                read.read_chrg_from_path(filepath)
+                read.read_chrg(filepath)
             else:
-                read.read_uhf_from_path(filepath)
+                read.read_uhf(filepath)
 
 
 @pytest.mark.parametrize("name", [".CHRG", ".UHF"])
@@ -53,9 +53,9 @@ def test_read_fail_empty_not_int(name: str) -> None:
 
         with pytest.raises(FormatError):
             if name == ".CHRG":
-                read.read_chrg_from_path(filepath)
+                read.read_chrg(filepath)
             else:
-                read.read_spin_from_path(filepath)
+                read.read_spin(filepath)
 
 
 @pytest.mark.parametrize("dtype", [torch.long, torch.float, torch.double])
@@ -70,9 +70,9 @@ def test_read_chrg(dtype: torch.dtype, name: str) -> None:
 
         # also works by just giving the parent directory
         if name == ".CHRG":
-            chrg = read.read_chrg_from_path(Path(tmpdirname), **dd)
+            chrg = read.read_chrg(Path(tmpdirname), **dd)
         else:
-            chrg = read.read_spin_from_path(Path(tmpdirname), **dd)
+            chrg = read.read_spin(Path(tmpdirname), **dd)
 
         assert chrg.dtype == dtype
         assert pytest.approx(1) == chrg.cpu()
@@ -87,9 +87,9 @@ def test_read_chrg_default(dtype: torch.dtype, name: str) -> None:
         filepath = Path(tmpdirname) / name
 
         if name == ".CHRG":
-            chrg = read.read_chrg_from_path(filepath, **dd)
+            chrg = read.read_chrg(filepath, **dd)
         else:
-            chrg = read.read_spin_from_path(filepath, **dd)
+            chrg = read.read_spin(filepath, **dd)
 
         assert chrg.dtype == dtype
         assert pytest.approx(0) == chrg.cpu()
@@ -104,9 +104,9 @@ def test_read_chrg_default_2(dtype: torch.dtype, name: str) -> None:
         filepath = Path(tmpdirname)
 
         if name == ".CHRG":
-            chrg = read.read_chrg_from_path(filepath, **dd)
+            chrg = read.read_chrg(filepath, **dd)
         else:
-            chrg = read.read_spin_from_path(filepath, **dd)
+            chrg = read.read_spin(filepath, **dd)
 
         assert chrg.dtype == dtype
         assert pytest.approx(0) == chrg.cpu()
@@ -124,9 +124,9 @@ def test_read_chrg_default_3(dtype: torch.dtype, name: str) -> None:
 
         # also works by just giving the parent directory
         if name == ".CHRG":
-            chrg = read.read_chrg_from_path(filepath, **dd)
+            chrg = read.read_chrg(filepath, **dd)
         else:
-            chrg = read.read_spin_from_path(filepath, **dd)
+            chrg = read.read_spin(filepath, **dd)
 
         assert chrg.dtype == dtype
         assert pytest.approx(0) == chrg.cpu()
