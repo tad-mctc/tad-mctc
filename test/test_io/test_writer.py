@@ -17,15 +17,14 @@
 """
 Test the general file writer.
 """
+import tempfile
 from pathlib import Path
 
 import pytest
 import torch
-import tempfile
-from tad_mctc.io import write, read
 
-from ..conftest import DEVICE
 from tad_mctc.data.molecules import mols as samples
+from tad_mctc.io import read, write
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
