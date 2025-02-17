@@ -30,10 +30,10 @@ from ..batch import eye
 from ..math import einsum
 from ..typing import Tensor
 
-__all__ = ["inertia_moment", "mass_center", "rot_consts"]
+__all__ = ["inertia_moment", "center_of_mass", "rot_consts"]
 
 
-def mass_center(masses: Tensor, positions: Tensor) -> Tensor:
+def center_of_mass(masses: Tensor, positions: Tensor) -> Tensor:
     """
     Calculate the center of mass from the atomic coordinates and masses.
 
@@ -70,7 +70,7 @@ def positions_rel_com(masses: Tensor, positions: Tensor) -> Tensor:
         Cartesian coordinates relative to center of mass (shape:
         ``(..., nat, 3)``).
     """
-    com = mass_center(masses, positions)
+    com = center_of_mass(masses, positions)
     return positions - com.unsqueeze(-2)
 
 

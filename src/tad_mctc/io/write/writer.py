@@ -18,84 +18,105 @@
 I/O Write: General
 ==================
 
-General writer for file from a path.
+General writer for files to a path.
 """
 from __future__ import annotations
 
-from functools import wraps
 from pathlib import Path
 
-from ...typing import IO, Any, PathLike, Protocol, Tensor, runtime_checkable
+from ...typing import Any, PathLike, Tensor
+from .turbomole import write_turbomole_fileobj
+from .xyz import write_xyz_fileobj
 
-__all__ = ["create_path_writer"]
-
-
-@runtime_checkable
-class WriterFunction(Protocol):
-    """Type annotation for a writer function."""
-
-    def __call__(
-        self,
-        fileobj: IO[Any],
-        numbers: Tensor,
-        positions: Tensor,
-        **kwargs: Any,
-    ) -> None: ...
+__all__ = ["write"]
 
 
-@runtime_checkable
-class FileWriterFunction(Protocol):
-    """Type annotation for a file writer function."""
-
-    def __call__(
-        self,
-        filepath: PathLike,
-        numbers: Tensor,
-        positions: Tensor,
-        mode: str = "w",
-        fmt: str = "%22.15f",
-        overwrite: bool = False,
-        **kwargs: Any,
-    ) -> None: ...
-
-
-def create_path_writer(writer_function: WriterFunction) -> FileWriterFunction:
+def write(
+    filepath: PathLike,
+    numbers: Tensor,
+    positions: Tensor,
+    ftype: str | None = None,
+    mode: str = "w",
+    overwrite: bool = False,
+    **kwargs: Any,
+) -> None:
     """
-    Creates a function that writes data to a specified file path using a given writer function.
+    Write the structure to the given file path.
 
     Parameters
     ----------
-    writer_function : WriterFunction
-        The function used to write the file contents.
+    filepath : PathLike
+        File path to write the structure to.
+    numbers : Tensor
+        Tensor of atomic numbers.
+    positions : Tensor
+        Tensor of atomic positions (shape: ``(nat, 3)`` in atomic units).
+    ftype : str | None, optional
+        File type. If None, the file extension is used to infer the type.
+    mode : str, optional
+        Mode in which the file is opened. Defaults to ``"w"``.
+    overwrite : bool, optional
+        If False and the file exists, a FileExistsError is raised.
+    **kwargs : Any
+        Additional arguments for the specific writer.
 
-    Returns
-    -------
-    FileWriterFunction
-        A function that takes a file path, numbers, positions, mode, comment,
-        and format string, and writes the data to the file.
+    Raises
+    ------
+    FileExistsError
+        If the file exists and overwrite is False.
+    ValueError
+        If the file type is unknown.
+    NotImplementedError
+        If the file type is recognized but no writer is available.
     """
+    path = Path(filepath)
+    if path.exists() and not overwrite:
+        raise FileExistsError(
+            f"The file '{filepath}' already exists. "
+            "If you want to overwrite it, set `overwrite=True`."
+        )
 
-    @wraps(writer_function)
-    def write_to_path(
-        filepath: PathLike,
-        numbers: Tensor,
-        positions: Tensor,
-        mode: str = "w",
-        fmt: str = "%22.15f",
-        overwrite: bool = False,
-        **kwargs: Any,
-    ) -> None:
-        path = Path(filepath)
+    # Infer file type from file extension if not provided.
+    if ftype is None and path.suffix:
+        ftype = path.suffix.casefold()[1:]
 
-        # Check if the file already exists
-        if mode.strip() == "w":
-            if path.exists() and overwrite is False:
-                raise FileExistsError(
-                    f"The file '{filepath}' already exists. If you want to "
-                    "overwrite it, set `overwrite=True`."
-                )
+    fname = path.name.casefold()
 
-        with open(path, mode=mode, encoding="utf-8") as fileobj:
-            writer_function(fileobj, numbers, positions, fmt=fmt, **kwargs)
+    if ftype in ("xyz", "log"):
+        writer = write_xyz_fileobj
+    elif ftype in ("qm9",):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' (QM9 XYZ) recognized but no writer available."
+        )
+    elif ftype in ("tmol", "tm", "turbomole") or fname == "coord":
+        writer = write_turbomole_fileobj
+    elif ftype in ("mol", "sdf", "gen", "pdb"):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' recognized but no writer available."
+        )
+    elif ftype in ("qchem",):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' (Q-Chem) recognized but no writer available."
+        )
+    elif ftype in ("poscar", "contcar", "vasp", "crystal") or fname in (
+        "poscar",
+        "contcar",
+        "vasp",
+    ):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' (VASP/CRYSTAL) recognized but no writer available."
+        )
+    elif ftype in ("ein", "gaussian"):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' (Gaussian) recognized but no writer available."
+        )
+    elif ftype in ("json", "qcschema"):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' (QCSchema) recognized but no writer available."
+        )
+    else:
+        raise ValueError(f"Unknown filetype '{ftype}' in '{fname}'.")
 
-    return write_to_path
+    # Open the file and call the selected writer.
+    with open(path, mode=mode, encoding="utf-8") as fileobj:
+        writer(fileobj, numbers, positions, **kwargs)

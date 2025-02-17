@@ -28,10 +28,10 @@ from ...exceptions import EmptyFileError, FormatErrorORCA
 from ...typing import IO, Any, Tensor
 from .frompath import create_path_reader
 
-__all__ = ["read_orca_engrad", "read_orca_engrad_from_path"]
+__all__ = ["read_orca_engrad"]
 
 
-def read_orca_engrad(
+def read_orca_engrad_fileobj(
     fileobj: IO[Any],
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
@@ -99,4 +99,4 @@ def read_orca_engrad(
     return energy, torch.tensor(grad, device=device, dtype=dtype).reshape(-1, 3)
 
 
-read_orca_engrad_from_path = create_path_reader(read_orca_engrad)
+read_orca_engrad = create_path_reader(read_orca_engrad_fileobj)

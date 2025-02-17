@@ -36,11 +36,11 @@ sample_list = ["H2O"]
 
 def test_read_fail() -> None:
     with pytest.raises(FileNotFoundError):
-        read.read_xyz_from_path("not found")
+        read.read_xyz("not found")
 
     p = Path(__file__).parent.resolve() / "fail" / "nat-no-digit.xyz"
     with pytest.raises(FormatErrorXYZ):
-        read.read_xyz_from_path(p)
+        read.read_xyz(p)
 
 
 def test_write_fail() -> None:
@@ -56,7 +56,7 @@ def test_write_fail() -> None:
                 f.write("")
 
             # try writing to just created file
-            write.write_xyz_to_path(filepath, numbers, positions)
+            write.write_xyz(filepath, numbers, positions)
 
 
 def test_write_batch_fail() -> None:
@@ -69,25 +69,19 @@ def test_write_batch_fail() -> None:
         numbers = pack((sample["numbers"], sample["numbers"]))
         positions = sample["positions"]
         with pytest.raises(ValueError):
-            write.write_xyz_to_path(
-                filepath, numbers, positions, overwrite=True
-            )
+            write.write_xyz(filepath, numbers, positions, overwrite=True)
 
         # positions batched, numbers not
         numbers = sample["numbers"]
         positions = pack((sample["positions"], sample["positions"]))
         with pytest.raises(ValueError):
-            write.write_xyz_to_path(
-                filepath, numbers, positions, overwrite=True
-            )
+            write.write_xyz(filepath, numbers, positions, overwrite=True)
 
         # too many dimensions
         numbers = torch.rand(2, 3, 4)
         positions = torch.rand(2, 3, 4, 3)
         with pytest.raises(ValueError):
-            write.write_xyz_to_path(
-                filepath, numbers, positions, overwrite=True
-            )
+            write.write_xyz(filepath, numbers, positions, overwrite=True)
 
 
 def test_write_comment_fail() -> None:
@@ -100,12 +94,18 @@ def test_write_comment_fail() -> None:
     with pytest.raises(ValueError):
         with tempfile.TemporaryDirectory() as tmpdirname:
             fp = Path(tmpdirname) / "already_exists"
-            write.write_xyz_to_path(fp, numbers, positions, comment=comment)
+            write.write_xyz(fp, numbers, positions, comment=comment)
+
+
+##############################################################################
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("name", sample_list)
-def test_write_and_read(dtype: torch.dtype, name: str) -> None:
+@pytest.mark.parametrize("batch_agnostic", [True, False])
+def test_write_and_read(
+    dtype: torch.dtype, name: str, batch_agnostic: bool
+) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     sample = samples[name]
@@ -117,12 +117,20 @@ def test_write_and_read(dtype: torch.dtype, name: str) -> None:
         filepath = Path(tmpdirname) / f"{name}.xyz"
 
         # Write to XYZ file
-        write.write_xyz_to_path(filepath, numbers, positions)
+        write.write_xyz(filepath, numbers, positions)
 
         # Read from XYZ file
-        read_numbers, read_positions = read.read_xyz_from_path(filepath, **dd)
+        read_numbers, read_positions = read.read_xyz(
+            filepath, batch_agnostic=batch_agnostic, **dd
+        )
+
+    if batch_agnostic is True:
+        numbers = numbers.unsqueeze(0)
+        positions = positions.unsqueeze(0)
 
     # Check if the read data matches the written data
+    assert read_numbers.dtype == numbers.dtype
+    assert read_numbers.shape == numbers.shape
     assert (read_numbers == numbers).all()
     assert pytest.approx(positions.cpu()) == read_positions.cpu()
 
@@ -151,13 +159,13 @@ def test_write_and_read_batch(
         filepath = Path(tmpdirname) / "combined.xyz"
 
         # Write first structure to XYZ file
-        write.write_xyz_to_path(filepath, numbers1, positions1, mode="w")
+        write.write_xyz(filepath, numbers1, positions1, mode="w")
 
         # Append second structure to the same XYZ file
-        write.write_xyz_to_path(filepath, numbers2, positions2, mode="a")
+        write.write_xyz(filepath, numbers2, positions2, mode="a")
 
         # Read from XYZ file
-        read_numbers, read_positions = read.read_xyz_from_path(filepath, **dd)
+        read_numbers, read_positions = read.read_xyz(filepath, **dd)
 
     # Check if the read data matches the written data
     assert (read_numbers == numbers_batch).all()
@@ -191,11 +199,13 @@ def test_write_batch_and_read_batch(
         filepath = Path(tmpdirname) / "combined.xyz"
 
         # Write structure to XYZ file
-        write.write_xyz_to_path(filepath, numbers, positions, mode="w")
+        write.write_xyz(filepath, numbers, positions, mode="w")
 
         # Read from XYZ file
-        read_numbers, read_positions = read.read_xyz_from_path(filepath, **dd)
+        read_numbers, read_positions = read.read_xyz(filepath, **dd)
 
     # Check if the read data matches the written data
+    assert read_numbers.dtype == numbers.dtype
+    assert read_numbers.shape == numbers.shape
     assert (read_numbers == numbers).all()
     assert pytest.approx(positions.cpu()) == read_positions.cpu()

@@ -23,9 +23,9 @@ A convenience function to create readers that take a path instead of a stream.
 Example
 -------
 >>> from tad_mctc.io import read
->>> read_xyz_from_path = read.create_path_reader(read.read_xyz)
+>>> read_xyz = read.create_path_reader(read.read_xyz_fileobj)
 >>> path = ...
->>> numbers, positions = read_xyz_from_path(path)
+>>> numbers, positions = read_xyz(path)
 """
 from __future__ import annotations
 
@@ -62,7 +62,35 @@ class FileReaderFunction(Protocol):
         encoding: str = "utf-8",
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> Tensor | tuple[Tensor, Tensor]: ...
+        **kwargs: Any,
+    ) -> Tensor | tuple[Tensor, Tensor]:
+        """
+        Reads the file from the specified path.
+
+        Parameters
+        ----------
+        file : PathLike
+            Path of file containing the structure.
+        mode : str, optional
+            Mode in which the file is opened. Defaults to ``"r"``.
+        encoding : str, optional
+            Encoding for file. Defaults to ``"utf-8"``.
+        device : :class:`torch.device` | None, optional
+            Device to store the tensor on. Defaults to ``None``.
+        dtype : :class:`torch.dtype` | None, optional
+            Floating point data type of the tensor. Defaults to ``None``.
+
+        Returns
+        -------
+        Tensor | tuple[Tensor, Tensor]
+            Returned tensor or tensors.
+
+        Raises
+        ------
+        FileNotFoundError
+            The file specified in ``filepath`` cannot be found.
+        """
+        ...
 
 
 def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
@@ -97,13 +125,13 @@ def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
         file : PathLike
             Path of file containing the structure.
         mode : str, optional
-            Mode in which the file is opened. Defaults to `"r"`.
+            Mode in which the file is opened. Defaults to ``"r"``.
         encoding : str, optional
-            Encoding for file. Defaults to `"utf-8"`.
+            Encoding for file. Defaults to ``"utf-8"``.
         device : :class:`torch.device` | None, optional
-            Device to store the tensor on. Defaults to `None`.
+            Device to store the tensor on. Defaults to ``None``.
         dtype : :class:`torch.dtype` | None, optional
-            Floating point data type of the tensor. Defaults to `None`.
+            Floating point data type of the tensor. Defaults to ``None``.
 
         Returns
         -------
@@ -113,7 +141,7 @@ def create_path_reader(reader_function: ReaderFunction) -> FileReaderFunction:
         Raises
         ------
         FileNotFoundError
-            The file specified in `filepath` cannot be found.
+            The file specified in ``filepath`` cannot be found.
         """
         path = Path(filepath)
 
@@ -153,14 +181,37 @@ class FileReaderFunctionTensor(Protocol):
         encoding: str = "utf-8",
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> Tensor: ...
+    ) -> Tensor:
+        """
+        Reads the file from the specified path.
+
+        Parameters
+        ----------
+        file : PathLike
+            Path of file containing the structure.
+        mode : str, optional
+            Mode in which the file is opened. Defaults to ``"r"``.
+        encoding : str, optional
+            Encoding for file. Defaults to ``"utf-8"``.
+        device : :class:`torch.device` | None, optional
+            Device to store the tensor on. Defaults to ``None``.
+        dtype : :class:`torch.dtype` | None, optional
+            Floating point data type of the tensor. Defaults to ``None``.
+
+        Returns
+        -------
+        Tensor
+            Value stored in the file as tensor.
+        """
+        ...
 
 
 def create_path_reader_dotfiles(
     reader_function: ReaderFunctionTensor, name: Literal[".CHRG", ".UHF"]
 ) -> FileReaderFunctionTensor:
     """
-    Creates a function that reads data from a specified file path using a given reader function.
+    Creates a function that reads data from a specified file path using a
+    given reader function.
 
     Parameters
     ----------
@@ -194,13 +245,13 @@ def create_path_reader_dotfiles(
         file : PathLike
             Path of file containing the structure.
         mode : str, optional
-            Mode in which the file is opened. Defaults to `"r"`.
+            Mode in which the file is opened. Defaults to ``"r"``.
         encoding : str, optional
-            Encoding for file. Defaults to `"utf-8"`.
+            Encoding for file. Defaults to ``"utf-8"``.
         device : :class:`torch.device` | None, optional
-            Device to store the tensor on. Defaults to `None`.
+            Device to store the tensor on. Defaults to ``None``.
         dtype : :class:`torch.dtype` | None, optional
-            Floating point data type of the tensor. Defaults to `None`.
+            Floating point data type of the tensor. Defaults to ``None``.
 
         Returns
         -------

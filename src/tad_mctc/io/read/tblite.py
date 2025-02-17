@@ -27,7 +27,7 @@ import torch
 from ...typing import DD, IO, Any, Tensor, get_default_dtype
 from .frompath import create_path_reader
 
-__all__ = ["read_tblite_engrad", "read_tblite_engrad_from_path"]
+__all__ = ["read_tblite_engrad"]
 
 
 def _read_tblite_gfn(fileobj: IO[Any]) -> dict[str, str | float]:
@@ -50,7 +50,7 @@ def _read_tblite_gfn(fileobj: IO[Any]) -> dict[str, str | float]:
     return json_load(fileobj.read())
 
 
-def read_tblite_engrad(
+def read_tblite_engrad_fileobj(
     fileobj: IO[Any],
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
@@ -84,4 +84,4 @@ def read_tblite_engrad(
     return energies, gradient.reshape(-1, 3)
 
 
-read_tblite_engrad_from_path = create_path_reader(read_tblite_engrad)
+read_tblite_engrad = create_path_reader(read_tblite_engrad_fileobj)

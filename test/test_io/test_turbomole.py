@@ -35,7 +35,7 @@ sample_list = ["LiH", "H2O"]
 
 def test_read_fail() -> None:
     with pytest.raises(FileNotFoundError):
-        read.read_turbomole_from_path("not found")
+        read.read_turbomole("not found")
 
 
 def test_read_fail_empty() -> None:
@@ -46,7 +46,7 @@ def test_read_fail_empty() -> None:
             f.write("")
 
         with pytest.raises(FormatErrorTM):
-            read.read_turbomole_from_path(filepath)
+            read.read_turbomole(filepath)
 
 
 def test_read_fail_almost_empty() -> None:
@@ -57,14 +57,14 @@ def test_read_fail_almost_empty() -> None:
             f.write("$coord")
 
         with pytest.raises(EmptyFileError):
-            read.read_turbomole_from_path(filepath)
+            read.read_turbomole(filepath)
 
 
 def test_read_fail_format() -> None:
     # Create a temporary directory to save the file
     filepath = Path(__file__).parent.resolve() / "fail" / "coord"
     with pytest.raises(FormatErrorTM):
-        read.read_turbomole_from_path(filepath)
+        read.read_turbomole(filepath)
 
 
 def test_write_fail() -> None:
@@ -80,7 +80,7 @@ def test_write_fail() -> None:
 
         # try writing to just created file
         with pytest.raises(FileExistsError):
-            write.write_turbomole_to_path(filepath, numbers, positions)
+            write.write_turbomole(filepath, numbers, positions)
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -98,18 +98,18 @@ def test_write_and_read(dtype: torch.dtype, name: str, extra: bool) -> None:
         filepath = Path(tmpdirname) / f"{name}.coord"
 
         # Write to XYZ file
-        write.write_turbomole_to_path(filepath, numbers, positions)
+        write.write_turbomole(filepath, numbers, positions)
 
         # write something to beginning of file to test finding the coord section
         if extra is True:
             prepend_to_file(filepath, "something")
 
         # Read from XYZ file
-        read_numbers, read_positions = read.read_turbomole_from_path(
-            filepath, **dd
-        )
+        read_numbers, read_positions = read.read_turbomole(filepath, **dd)
 
     # Check if the read data matches the written data
+    assert read_numbers.dtype == numbers.dtype
+    assert read_numbers.shape == numbers.shape
     assert (read_numbers == numbers).all()
     assert pytest.approx(positions.cpu()) == read_positions.cpu()
 
@@ -137,7 +137,7 @@ def prepend_to_file(file_path: PathLike, text_to_prepend: str) -> None:
 def test_read_turbomole_energy_fail(file: str) -> None:
     p = Path(__file__).parent.resolve() / "fail" / file
     with pytest.raises(FormatErrorTM):
-        read.read_turbomole_energy_from_path(p)
+        read.read_turbomole_energy(p)
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -146,7 +146,7 @@ def test_read_turbomole_energy(dtype: torch.dtype, file: str) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     p = Path(__file__).parent.resolve() / "output" / file
-    e = read.read_turbomole_energy_from_path(p, **dd)
+    e = read.read_turbomole_energy(p, **dd)
     assert isinstance(e, torch.Tensor)
 
     ref = torch.tensor(-291.856093690170, **dd)

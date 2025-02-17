@@ -26,12 +26,12 @@ from __future__ import annotations
 from ...data import pse
 from ...typing import IO, Any, Tensor
 from ..checks import content_checks, shape_checks
-from .writer import create_path_writer
+from .topath import create_path_writer
 
-__all__ = ["write_turbomole", "write_turbomole_to_path"]
+__all__ = ["write_turbomole"]
 
 
-def write_turbomole(
+def write_turbomole_fileobj(
     fileobj: IO[Any], numbers: Tensor, positions: Tensor, **kwargs: Any
 ) -> None:
     """
@@ -70,4 +70,4 @@ def write_turbomole(
     fileobj.write("$end\n")
 
 
-write_turbomole_to_path = create_path_writer(write_turbomole)
+write_turbomole = create_path_writer(write_turbomole_fileobj)

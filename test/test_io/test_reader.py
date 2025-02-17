@@ -32,19 +32,19 @@ from ..conftest import DEVICE
 def test_fail(file: str) -> None:
     p = Path(__file__).parent.resolve() / "files" / file
     with pytest.raises(NotImplementedError):
-        read.read_from_path(p)
+        read.read(p)
 
 
 def test_fail_unknown() -> None:
     p = Path(__file__).parent.resolve() / "files" / "mol.xyz"
     with pytest.raises(ValueError):
-        read.read_from_path(p, ftype="something")
+        read.read(p, ftype="something")
 
 
 def test_fail_notfound() -> None:
     p = Path(__file__).parent.resolve() / "files" / "notfound"
     with pytest.raises(FileNotFoundError):
-        read.read_from_path(p)
+        read.read(p)
 
 
 ################################################################################
@@ -68,7 +68,7 @@ def test_types(dtype: torch.dtype, file: str) -> None:
     )
 
     ftype = None if "qm9" not in file else "qm9"
-    numbers, positions = read.read_from_path(p, ftype=ftype, **dd)
+    numbers, positions = read.read(p, ftype=ftype, **dd)
 
     assert (ref_numbers == numbers).all()
     assert pytest.approx(ref_positions.cpu()) == positions.cpu()

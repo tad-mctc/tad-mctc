@@ -28,14 +28,7 @@ from ...exceptions import EmptyFileError, FormatError
 from ...typing import IO, Any, Tensor
 from .frompath import create_path_reader_dotfiles
 
-__all__ = [
-    "read_chrg",
-    "read_chrg_from_path",
-    "read_uhf",
-    "read_uhf_from_path",
-    "read_spin",
-    "read_spin_from_path",
-]
+__all__ = ["read_chrg", "read_uhf", "read_spin"]
 
 
 def read_dotfile(
@@ -82,26 +75,27 @@ def read_dotfile(
     return torch.tensor(num, device=device, dtype=dtype)
 
 
-read_chrg = read_uhf = read_spin = read_dotfile
-
-
-read_chrg_from_path = create_path_reader_dotfiles(read_dotfile, name=".CHRG")
+read_chrg = create_path_reader_dotfiles(read_dotfile, name=".CHRG")
 """
 Read a ``.CHRG`` file.
 
 Parameters
 ----------
-fileobj : IO[Any]
-    The file-like object to read from.
+file : PathLike
+    Path of file containing the structure.
+mode : str, optional
+    Mode in which the file is opened. Defaults to ``"r"``.
+encoding : str, optional
+    Encoding for file. Defaults to ``"utf-8"``.
 device : :class:`torch.device` | None, optional
-    Device to store the tensor on. Defaults to `None`.
+    Device to store the tensor on. Defaults to ``None``.
 dtype : :class:`torch.dtype` | None, optional
-    Floating point data type of the tensor. Defaults to `None`.
+    Floating point data type of the tensor. Defaults to ``None``.
 
 Returns
 -------
 Tensor
-    Tensor of the value in the file.
+    Value stored in the file as tensor.
 
 Raises
 ------
@@ -111,23 +105,27 @@ FormatError
     File does not conform with the expected format.
 """
 
-read_uhf_from_path = create_path_reader_dotfiles(read_dotfile, name=".UHF")
+read_uhf = create_path_reader_dotfiles(read_dotfile, name=".UHF")
 """
 Read a ``.UHF`` file.
 
 Parameters
 ----------
-fileobj : IO[Any]
-    The file-like object to read from.
+file : PathLike
+    Path of file containing the structure.
+mode : str, optional
+    Mode in which the file is opened. Defaults to ``"r"``.
+encoding : str, optional
+    Encoding for file. Defaults to ``"utf-8"``.
 device : :class:`torch.device` | None, optional
-    Device to store the tensor on. Defaults to `None`.
+    Device to store the tensor on. Defaults to ``None``.
 dtype : :class:`torch.dtype` | None, optional
-    Floating point data type of the tensor. Defaults to `None`.
+    Floating point data type of the tensor. Defaults to ``None``.
 
 Returns
 -------
 Tensor
-    Tensor of the value in the file.
+    Value stored in the file as tensor.
 
 Raises
 ------
@@ -137,23 +135,27 @@ FormatError
     File does not conform with the expected format.
 """
 
-read_spin_from_path = create_path_reader_dotfiles(read_dotfile, name=".UHF")
+read_spin = create_path_reader_dotfiles(read_dotfile, name=".UHF")
 """
 Read a ``.UHF`` file.
 
 Parameters
 ----------
-fileobj : IO[Any]
-    The file-like object to read from.
+file : PathLike
+    Path of file containing the structure.
+mode : str, optional
+    Mode in which the file is opened. Defaults to ``"r"``.
+encoding : str, optional
+    Encoding for file. Defaults to ``"utf-8"``.
 device : :class:`torch.device` | None, optional
-    Device to store the tensor on. Defaults to `None`.
+    Device to store the tensor on. Defaults to ``None``.
 dtype : :class:`torch.dtype` | None, optional
-    Floating point data type of the tensor. Defaults to `None`.
+    Floating point data type of the tensor. Defaults to ``None``.
 
 Returns
 -------
 Tensor
-    Tensor of the value in the file.
+    Value stored in the file as tensor.
 
 Raises
 ------

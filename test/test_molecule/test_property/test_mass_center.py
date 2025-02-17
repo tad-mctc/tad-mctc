@@ -38,7 +38,7 @@ def test_single(dtype: torch.dtype) -> None:
 
     ref = torch.tensor([2.0 / 3, 0.0, 0.0], **dd)
 
-    com = property.mass_center(masses, positions)
+    com = property.center_of_mass(masses, positions)
     assert pytest.approx(ref.cpu()) == com.cpu()
 
 
@@ -57,7 +57,7 @@ def test_batch(dtype: torch.dtype) -> None:
 
     ref = torch.tensor([[2.0 / 3, 0.0, 0.0], [0.0, 1.0 / 3, 0.0]], **dd)
 
-    com = property.mass_center(masses, positions)
+    com = property.center_of_mass(masses, positions)
     assert pytest.approx(ref.cpu()) == com.cpu()
 
 
@@ -70,5 +70,5 @@ def test_zero(dtype: torch.dtype) -> None:
 
     ref = torch.tensor([1.0, 0.0, 0.0], **dd)
 
-    com = property.mass_center(masses, positions)
+    com = property.center_of_mass(masses, positions)
     assert pytest.approx(ref.cpu()) == com.cpu()
