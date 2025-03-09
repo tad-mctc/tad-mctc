@@ -67,6 +67,8 @@ The following dependencies are required
 - `opt_einsum <https://optimized-einsum.readthedocs.io/en/stable/>`__
 - `psutil <https://psutil.readthedocs.io/en/latest/>`__
 - `pytest <https://docs.pytest.org/>`__ (tests only)
+- `qcelemental <https://molssi.github.io/QCElemental/>`__
+- `scipy <https://scipy.org/>`__ (tests only)
 - `torch <https://pytorch.org/>`__
 
 Development

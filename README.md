@@ -140,6 +140,8 @@ The following dependencies are required
 - [opt_einsum](https://optimized-einsum.readthedocs.io/en/stable/)
 - [psutil](https://psutil.readthedocs.io/en/latest/)
 - [pytest](https://docs.pytest.org/) (tests only)
+- [qcelemental](https://molssi.github.io/QCElemental/)
+- [scipy](https://scipy.org/) (tests only)
 - [torch](https://pytorch.org/)
 
 
