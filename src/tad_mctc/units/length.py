@@ -22,7 +22,7 @@ This module contains conversions for units of length.
 """
 from __future__ import annotations
 
-from .codata import CODATA, get_constant
+from .codata import get_constant
 
 __all__ = ["AU2METER", "METER2AU", "AA2METER", "METER2AA", "AA2AU", "AU2AA"]
 
