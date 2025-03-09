@@ -25,7 +25,7 @@ import pytest
 import torch
 
 # required for generalized eigenvalue problem
-from scipy import linalg  # type: ignore
+from scipy import linalg
 
 from tad_mctc import storch
 from tad_mctc.autograd import dgradcheck

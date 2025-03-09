@@ -152,7 +152,7 @@ def read(
     Raises
     ------
     FileNotFoundError
-        File given does not exist.
+        Given file does not exist.
     """
     path = Path(filepath)
 

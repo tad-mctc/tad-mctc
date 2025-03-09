@@ -18,22 +18,26 @@
 Units: CODATA
 =============
 
-CODATA values for various physical constants.
+CODATA values for various physical constants using qcelemental.
 """
 from __future__ import annotations
 
-from scipy.constants import physical_constants
+import qcelemental as qcel
 
-__all__ = ["CODATA"]
+__all__ = ["CODATA", "get_constant"]
+
+
+CODATA = qcel.PhysicalConstantsContext("CODATA2018")
+"""CODATA values for various physical constants."""
 
 
 def get_constant(name: str) -> float:
     """
-    Get a constant from `scipy.constants.physical_constants`.
+    Get a constant from ``qcelemental.constants`` (CODATA 2018).
 
     Parameters
     ----------
-    constant_name : str
+    name : str
         Name of the constant.
 
     Returns
@@ -44,38 +48,8 @@ def get_constant(name: str) -> float:
     Raises
     ------
     KeyError
-        Name of constant not found.
+        If the constant is not found.
     """
-    if name not in physical_constants:
+    if name not in CODATA.pc.keys():
         raise KeyError(f"Constant '{name}' not found.")
-    return physical_constants[name][0]
-
-
-class CODATA:
-    """
-    CODATA values for various physical constants.
-    """
-
-    h = get_constant("Planck constant")
-    """Planck's constant"""
-
-    c = get_constant("speed of light in vacuum")
-    """Speed of light in vacuum (m/s)"""
-
-    kb = get_constant("Boltzmann constant")
-    """Boltzmann's constant"""
-
-    na = get_constant("Avogadro constant")
-    """Avogadro's number (mol^-1)"""
-
-    e = get_constant("elementary charge")
-    """Elementary charge"""
-
-    alpha = get_constant("fine-structure constant")
-    """Fine structure constant (CODATA2018)"""
-
-    me = get_constant("electron mass")
-    """Rest mass of the electron (kg)"""
-
-    bohr = get_constant("Bohr radius")
-    """Bohr radius (m)"""
+    return float(CODATA.pc[name].data)

@@ -86,7 +86,7 @@ KCALMOL2AU = 1.0 / AU2KCALMOL
 """Factor for conversion from kilo Calorie per mole to atomic units."""
 
 
-EV2JOULE = CODATA.e
+EV2JOULE = get_constant("electron volt-joule relationship")
 """
 Factor for conversion from electron volts to Joule.
 This equals the elementary charge.
@@ -122,7 +122,7 @@ AU2KELVIN = get_constant("hartree-kelvin relationship")
 """Factor for conversion from Kelvin to atomic units."""
 
 
-AU2COULOMB = CODATA.e
+AU2COULOMB = get_constant("elementary charge")
 """
 Factor for conversion from atomic units to Coulomb.
 This equals the elementary charge.

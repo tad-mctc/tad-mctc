@@ -22,12 +22,12 @@ This module contains conversions for units of length.
 """
 from __future__ import annotations
 
-from .codata import CODATA
+from .codata import get_constant
 
 __all__ = ["AU2METER", "METER2AU", "AA2METER", "METER2AA", "AA2AU", "AU2AA"]
 
 
-AU2METER = CODATA.bohr
+AU2METER = get_constant("bohr radius")
 """
 Conversion from bohr (a.u.) to meter.
 This equals: 1 bohr = 5.29177210903e-11 m.
