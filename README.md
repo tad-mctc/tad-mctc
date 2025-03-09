@@ -93,7 +93,7 @@ If you use this software, please cite the following publication
 
 ## Installation
 
-### pip
+### pip <a href="https://pypi.org/project/tad-mctc/"><img src="https://img.shields.io/pypi/v/tad-mctc" alt="PyPI Version"></a> <a href="https://pypi.org/project/tad-mctc/"><img src="https://img.shields.io/pypi/dm/tad-mctc?color=orange" alt="PyPI Downloads"></a>
 
 _tad-mctc_ can easily be installed with `pip`.
 
@@ -101,7 +101,7 @@ _tad-mctc_ can easily be installed with `pip`.
 pip install tad-mctc
 ```
 
-### conda
+### conda <a href="https://anaconda.org/conda-forge/tad-mctc"><img src="https://img.shields.io/conda/vn/conda-forge/tad-mctc.svg" alt="Conda Version"></a> <a href="https://anaconda.org/conda-forge/tad-mctc"><img src="https://img.shields.io/conda/dn/conda-forge/tad-mctc?style=flat&color=orange" alt="Conda Downloads"></a>
 
 _tad-mctc_ is also available from `conda`.
 

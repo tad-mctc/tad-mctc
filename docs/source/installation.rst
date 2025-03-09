@@ -6,7 +6,11 @@ pip
 
 .. image:: https://img.shields.io/pypi/v/tad-mctc
     :target: https://pypi.org/project/tad-mctc/
-    :alt: PyPI
+    :alt: PyPI Version
+
+.. image:: https://img.shields.io/pypi/dm/tad-mctc?color=orange
+    :target: https://pypi.org/project/tad-mctc/
+    :alt: PyPI Downloads
 
 *tad-mctc* can easily be installed with ``pip``.
 
@@ -20,6 +24,10 @@ conda
 .. image:: https://img.shields.io/conda/vn/conda-forge/tad-mctc.svg
     :target: https://anaconda.org/conda-forge/tad-mctc
     :alt: Conda Version
+
+.. image:: https://img.shields.io/conda/dn/conda-forge/tad-mctc?style=flat&color=orange
+    :target: https://anaconda.org/conda-forge/tad-mctc
+    :alt: Conda Downloads
 
 *tad-mctc* is also available from ``conda``.
 
