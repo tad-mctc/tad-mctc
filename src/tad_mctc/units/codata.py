@@ -1,6 +1,6 @@
 # This file is part of tad-mctc.
 #
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-Identifier: Apache-2.0
 # Copyright (C) 2024 Grimme Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
