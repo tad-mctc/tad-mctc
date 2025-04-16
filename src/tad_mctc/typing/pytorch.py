@@ -133,13 +133,63 @@ class TensorLike:
         self.__dtype = dtype if dtype is not None else get_default_dtype()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-
         if not hasattr(cls, "__slots__"):
             raise TypeError(
                 f"Subclasses of {cls.__name__} must define `__slots__` "
                 "make use of its functionality."
             )
+
+        super().__init_subclass__(**kwargs)
+
+    def _clone_tensorlike(
+        self,
+        *,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> Self:
+        """Helper function to clone with new device and dtype."""
+        device = device if device is not None else self.device
+        dtype = dtype if dtype is not None else self.dtype
+
+        # Create an empty instance bypassing __init__
+        new_obj = self.__class__.__new__(self.__class__)
+
+        # Copy the tensor attributes from __slots__
+        for slot in self.__slots__:
+            # Skip private attributes managed directly (like __device, __dtype)
+            if slot.startswith("__"):
+                continue
+
+            attr = getattr(self, slot)
+            if not (
+                isinstance(attr, Tensor) or issubclass(type(attr), TensorLike)
+            ):
+                continue
+
+            if attr.device == device and attr.dtype == dtype:
+                continue
+
+            # Skip if the new dtype is not in the list of allowed dtypes
+            if hasattr(attr, "allowed_dtypes"):
+                if dtype not in attr.allowed_dtypes:  # type: ignore
+                    continue
+
+                attr = attr.to(device=device, dtype=dtype)
+
+            setattr(new_obj, slot, attr)
+
+        # Manually set device and dtype
+        new_obj.override_device(device)
+        new_obj.override_dtype(dtype)
+
+        # Copy over any additional attributes
+        # (if needed, e.g. ones that are not in __slots__)
+        extra_attrs = getattr(self, "__dict__", None)
+        if extra_attrs is not None:
+            for key, value in extra_attrs.items():
+                setattr(new_obj, key, value)
+
+        return new_obj
 
     @property
     def device(self) -> torch.device:
@@ -285,19 +335,7 @@ class TensorLike:
                 f"Only '{self.allowed_dtypes}' allowed (received '{dtype}')."
             )
 
-        args = {}
-        for s in self.__slots__:
-            if s.startswith("__"):
-                continue
-
-            attr = getattr(self, s)
-            if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
-                if attr.dtype != dtype:
-                    if attr.dtype in self.allowed_dtypes:
-                        attr = attr.type(dtype)
-            args[s] = attr
-
-        return self.__class__(**args, dtype=dtype, device=self.device)
+        return self._clone_tensorlike(device=None, dtype=dtype)
 
     def to(
         self,
@@ -349,19 +387,7 @@ class TensorLike:
                 f"Only '{self.allowed_dtypes}' allowed (received '{dtype}')."
             )
 
-        args = {}
-        for s in self.__slots__:
-            if s.startswith("__"):
-                continue
-
-            attr = getattr(self, s)
-            if isinstance(attr, Tensor) or issubclass(type(attr), TensorLike):
-                if attr.device != device or attr.dtype != dtype:
-                    attr = attr.to(device=device, dtype=dtype)
-
-            args[s] = attr
-
-        return self.__class__(**args, device=device, dtype=self.dtype)
+        return self._clone_tensorlike(device=device, dtype=dtype)
 
     def cpu(self) -> Self:
         """

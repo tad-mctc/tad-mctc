@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import torch
 
+__all__ = ["__version__", "__tversion__"]
+
 
 def version_tuple(version_string: str) -> tuple[int, ...]:
     """
