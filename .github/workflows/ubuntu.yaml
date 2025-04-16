@@ -132,3 +132,4 @@ jobs:
           matrix.os == 'ubuntu-latest'
         with:
           files: ./coverage.xml # optional
+          token: ${{ secrets.CODECOV_TOKEN }}
