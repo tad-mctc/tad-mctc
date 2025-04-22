@@ -164,18 +164,20 @@ class TensorLike:
             if not (
                 isinstance(attr, Tensor) or issubclass(type(attr), TensorLike)
             ):
+                setattr(new_obj, slot, attr)
                 continue
 
             if attr.device == device and attr.dtype == dtype:
+                setattr(new_obj, slot, attr)
                 continue
 
             # Skip if the new dtype is not in the list of allowed dtypes
             if hasattr(attr, "allowed_dtypes"):
                 if dtype not in attr.allowed_dtypes:  # type: ignore
+                    setattr(new_obj, slot, attr)
                     continue
 
-                attr = attr.to(device=device, dtype=dtype)
-
+            attr = attr.to(device=device, dtype=dtype)
             setattr(new_obj, slot, attr)
 
         # Manually set device and dtype

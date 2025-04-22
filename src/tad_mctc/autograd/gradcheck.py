@@ -97,7 +97,7 @@ def _wrap_gradcheck(
     finally:
         if isinstance(diffvars, Tensor):
             diffvars.detach_()
-        else:
+        elif isinstance(diffvars, (list, tuple)):
             for diffvar in diffvars:
                 if isinstance(diffvar, Tensor):
                     diffvar.detach_()
