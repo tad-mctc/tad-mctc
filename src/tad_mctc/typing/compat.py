@@ -44,6 +44,7 @@ __all__ = [
     "Sliceable",
     "Tensor",
     "TensorOrTensors",
+    "TypeAlias",
     "TypeGuard",
     "override",
     "_wraps",
@@ -64,9 +65,9 @@ else:
 
 # Python 3.10
 if sys.version_info >= (3, 10):
-    from typing import TypeGuard
+    from typing import TypeAlias, TypeGuard
 else:
-    from typing_extensions import TypeGuard
+    from typing_extensions import TypeAlias, TypeGuard
 
 # starting with Python 3.9, type hinting generics have been moved
 # from the "typing" to the "collections" module
