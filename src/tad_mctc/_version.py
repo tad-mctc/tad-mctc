@@ -47,7 +47,10 @@ def version_tuple(version_string: str) -> tuple[int, ...]:
             "Version specification does not seem to follow the semantic "
             f"versioning scheme of MAJOR.MINOR.PATCH ({s})."
         )
-
+    
+    # Remove any trailing characters (for example: 2.8.0a0+git7482eb2)
+    s = [part[0] for part in s]
+    
     version_numbers = [int(part) for part in s[:3]]
     return tuple(version_numbers)
 

@@ -48,6 +48,7 @@ from ..io.checks import dimension_check
 from ..io.read import read, read_chrg
 from ..tools import memoize
 from ..typing import NoReturn, PathLike, Self, Tensor, TensorLike
+from ..math import einsum
 
 __all__ = ["Mol"]
 
@@ -173,7 +174,7 @@ class Mol(TensorLike):
         mask = real_pairs(self.numbers, mask_diagonal=True)
 
         numbers = self.numbers.type(self.dtype)
-        zab = torch.einsum("i,j->ij", numbers, numbers)
+        zab = einsum("i,j->ij", numbers, numbers)
 
         enn = torch.where(
             mask * (self.distances() <= cutoff),

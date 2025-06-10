@@ -111,7 +111,7 @@ def cdist_direct_expansion(x: Tensor, y: Tensor, p: int = 2) -> Tensor:
 
     # einsum is nearly twice as fast!
     if p == 2:
-        distances = torch.einsum("...ijk,...ijk->...ij", diff, diff)
+        distances = einsum("...ijk,...ijk->...ij", diff, diff)
     else:
         distances = torch.sum(torch.pow(diff, p), -1)
 
