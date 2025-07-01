@@ -28,8 +28,8 @@ from tad_mctc.data.getters import (
     get_atomic_masses,
     get_ecore,
     get_hardness,
-    get_zvalence,
     get_vdw_pairwise,
+    get_zvalence,
 )
 from tad_mctc.units import GMOL2AU
 
