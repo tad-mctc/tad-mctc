@@ -211,6 +211,7 @@ def _load_vdw_rad_pairwise(
     path = Path(__file__).parent / "vdw-pairwise.pt"
 
     tensor = torch.load(path, **kwargs)
+    print(tensor.shape)
     return tensor.to(dtype) if tensor.dtype is not dtype else tensor
 
 

@@ -37,44 +37,6 @@ from ..math import einsum  # as in your original file
 from .elemental import sqrt as ssqrt
 
 
-def _dbg(tag: str, t: torch.Tensor) -> None:
-    """Print a few layout properties of `t` without breaking autograd."""
-    print(
-        f"{tag:<8}"
-        f" shape={str(tuple(t.shape)):<12}"
-        f" stride={str(tuple(t.stride())):<12}"
-        f" contig={t.is_contiguous()}"
-        f" view={'yes' if t._base is not None else 'no' :<3}"
-    )
-
-
-def _euclidean_dist_quadratic_expansion(
-    x: torch.Tensor, y: torch.Tensor
-) -> torch.Tensor:
-    eps = torch.tensor(torch.finfo(x.dtype).eps, device=x.device, dtype=x.dtype)
-
-    print("=" * 70)
-    _dbg("x", x)
-    _dbg("y", y)
-
-    # ───────────────────────── view-creating einsums ──────────────────────────
-    xnorm = einsum("...ij,...ij->...i", x, x)
-    ynorm = einsum("...ij,...ij->...i", y, y)
-    # xnorm = (x ** 2).sum(-1)
-    # ynorm = (y ** 2).sum(-1)
-    _dbg("xnorm", xnorm)  # non-contiguous view
-    _dbg("ynorm", ynorm)
-
-    # continue as usual, no extra backward pass
-    n = xnorm.unsqueeze(-1) + ynorm.unsqueeze(-2)
-    prod = x @ y.mT
-    out = ssqrt(n - 2.0 * prod, eps=eps)
-
-    _dbg("out", out)
-    print("=" * 70)
-    return out
-
-
 def euclidean_dist_quadratic_expansion(x: Tensor, y: Tensor) -> Tensor:
     """
     Computation of euclidean distance matrix via quadratic expansion (sum of

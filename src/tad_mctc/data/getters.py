@@ -26,10 +26,8 @@ from __future__ import annotations
 import torch
 
 from ..typing import Tensor
-from ..units import GMOL2AU
-from . import mass, zeff
 
-__all__ = ["get_atomic_masses", "get_ecore", "get_zvalence"]
+__all__ = ["get_atomic_masses", "get_ecore", "get_zvalence", "get_hardness"]
 
 
 def get_atomic_masses(
@@ -60,7 +58,11 @@ def get_atomic_masses(
     Tensor
         Atomic masses.
     """
-    m = mass.ATOMIC(device=device, dtype=dtype)[numbers]
+    # pylint: disable=import-outside-toplevel
+    from ..units import GMOL2AU
+    from .mass import ATOMIC
+
+    m = ATOMIC(device=device, dtype=dtype)[numbers]
     return m * GMOL2AU if atomic_units is True else m
 
 
@@ -88,7 +90,10 @@ def get_zvalence(
     Tensor
         Charges of valence shell of atoms.
     """
-    return zeff.ZVALENCE(device=device, dtype=dtype)[numbers]
+    # pylint: disable=import-outside-toplevel
+    from .zeff import ZVALENCE
+
+    return ZVALENCE(device=device, dtype=dtype)[numbers]
 
 
 def get_ecore(
@@ -115,4 +120,68 @@ def get_ecore(
     Tensor
         Number of core electrons.
     """
-    return zeff.ECORE(device=device, dtype=dtype)[numbers]
+    # pylint: disable=import-outside-toplevel
+    from .zeff import ECORE
+
+    return ECORE(device=device, dtype=dtype)[numbers]
+
+
+def get_hardness(
+    numbers: Tensor,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+) -> Tensor:
+    """
+    Get hardness for all ``numbers``.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+    device : :class:`torch.device` | None, optional
+        Device to store the tensor. If ``None`` (default), the default device
+        is used.
+    dtype : :class:`torch.dtype`, optional
+        Data type of the tensor. If ``None`` (default), the default dtype
+        is used.
+
+    Returns
+    -------
+    Tensor
+        Hardness values.
+    """
+    # pylint: disable=import-outside-toplevel
+    from .hardness import GAM
+
+    return GAM(device=device, dtype=dtype)[numbers]
+
+
+def get_vdw_pairwise(
+    numbers: Tensor,
+    device: torch.device | None = None,
+    dtype: torch.dtype = torch.double,
+) -> Tensor:
+    """
+    Get pair-wise van-der-Waals radii.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+    device : :class:`torch.device` | None, optional
+        Device to store the tensor. If ``None`` (default), the default device
+        is used.
+    dtype : :class:`torch.dtype`, optional
+        Data type of the tensor. If ``None`` (default), the default dtype
+        is used.
+
+    Returns
+    -------
+    Tensor
+        Pair-wise van-der-Waals radii.
+    """
+    from .radii import VDW_PAIRWISE
+
+    a = VDW_PAIRWISE(device=device, dtype=dtype)
+    print(a.shape)
+    return a[numbers.unsqueeze(-1), numbers.unsqueeze(-2)]
