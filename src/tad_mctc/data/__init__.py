@@ -30,6 +30,7 @@ atomic numbers.
 """
 from .en import *
 from .getters import *
+from .hardness import *
 from .mass import *
 from .pse import *
 from .radii import *

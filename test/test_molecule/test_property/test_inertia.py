@@ -36,7 +36,7 @@ def test_single(dtype: torch.dtype) -> None:
 
     # H2 along z-axis
     numbers = torch.tensor([1, 1], device=DEVICE)
-    masses = ATOMIC.to(**dd)[numbers]
+    masses = ATOMIC(**dd)[numbers]
     positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]], **dd)
 
     # diagonal, with zeros for the z-axis (rotation axis), non-zero for x and y
@@ -99,7 +99,7 @@ def test_batch(dtype: torch.dtype) -> None:
         **dd,
     )
 
-    masses = ATOMIC.to(**dd)[numbers]
+    masses = ATOMIC(**dd)[numbers]
 
     ref = torch.tensor(
         [

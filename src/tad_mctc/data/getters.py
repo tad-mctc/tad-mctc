@@ -61,7 +61,7 @@ def get_atomic_masses(
     Tensor
         Atomic masses.
     """
-    m = mass.ATOMIC.to(device=device, dtype=dtype)[numbers]
+    m = mass.ATOMIC(device=device, dtype=dtype)[numbers]
     return m * GMOL2AU if atomic_units is True else m
 
 
@@ -89,7 +89,7 @@ def get_zvalence(
     Tensor
         Charges of valence shell of atoms.
     """
-    return zeff.ZVALENCE.to(device=device, dtype=dtype)[numbers]
+    return zeff.ZVALENCE(device=device, dtype=dtype)[numbers]
 
 
 def get_ecore(
@@ -116,4 +116,4 @@ def get_ecore(
     Tensor
         Number of core electrons.
     """
-    return zeff.ECORE.to(device=device, dtype=dtype)[numbers]
+    return zeff.ECORE(device=device, dtype=dtype)[numbers]

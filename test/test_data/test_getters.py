@@ -24,6 +24,7 @@ from unittest.mock import patch
 import pytest
 import torch
 
+from tad_mctc.data import ATOMIC, ECORE, ZVALENCE
 from tad_mctc.data.getters import get_atomic_masses, get_ecore, get_zvalence
 from tad_mctc.units import GMOL2AU
 
@@ -44,7 +45,13 @@ def mock_zeff_tensor():
 
 
 def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
-    with patch("tad_mctc.data.mass.ATOMIC", new=mock_mass_tensor):
+    ATOMIC.cache_clear()
+
+    # monkey-patch ATOMIC so every call returns our fake tensor
+    with patch(
+        "tad_mctc.data.mass.ATOMIC",
+        side_effect=lambda dtype=torch.float64, device=None: mock_mass_tensor,
+    ):
         # Test in atomic units
         masses = get_atomic_masses(atomic_numbers)
         ref = mock_mass_tensor[atomic_numbers] * GMOL2AU
@@ -57,12 +64,22 @@ def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
 
 
 def test_get_zvalence(atomic_numbers, mock_zeff_tensor):
-    with patch("tad_mctc.data.zeff.ZVALENCE", new=mock_zeff_tensor):
+    ZVALENCE.cache_clear()
+
+    with patch(
+        "tad_mctc.data.zeff.ZVALENCE",
+        side_effect=lambda dtype=torch.long, device=None: mock_zeff_tensor,
+    ):
         ref = mock_zeff_tensor[atomic_numbers]
         assert pytest.approx(ref.cpu()) == get_zvalence(atomic_numbers).cpu()
 
 
 def test_get_ecore(atomic_numbers, mock_zeff_tensor):
-    with patch("tad_mctc.data.zeff.ECORE", new=mock_zeff_tensor):
+    ECORE.cache_clear()
+
+    with patch(
+        "tad_mctc.data.zeff.ECORE",
+        side_effect=lambda dtype=torch.long, device=None: mock_zeff_tensor,
+    ):
         ref = mock_zeff_tensor[atomic_numbers]
         assert pytest.approx(ref.cpu()) == get_ecore(atomic_numbers).cpu()

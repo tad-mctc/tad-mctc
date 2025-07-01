@@ -43,7 +43,7 @@ Test the calculation of the rotational constants.
 #     sample = samples[name]
 #     numbers = sample["numbers"].to(DEVICE)
 #     positions = sample["positions"].to(**dd)
-#     masses = ATOMIC.to(**dd)[numbers]
+#     masses = ATOMIC(**dd)[numbers]
 
 #     ref = torch.tensor([2.0 / 3, 0.0, 0.0], **dd)
 #     a = property.rot_consts(masses, positions)

@@ -42,7 +42,7 @@ def test_single(dtype: torch.dtype, name: str) -> None:
     numbers = sample["numbers"].to(DEVICE)
     positions = sample["positions"].to(**dd)
 
-    rcov = radii.COV_D3.to(**dd)[numbers]
+    rcov = radii.COV_D3(**dd)[numbers]
     cutoff = torch.tensor(30.0, **dd)
     ref = sample["cn_eeq"].to(**dd)
 

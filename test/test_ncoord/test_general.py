@@ -34,8 +34,7 @@ from tad_mctc.ncoord import (
     exp_count,
     gfn2_count,
 )
-from tad_mctc.ncoord.typing import CNFunction, CNGradFunction
-from tad_mctc.typing import DD, CountingFunction
+from tad_mctc.typing import DD, CNFunction, CNGradFunction, CountingFunction
 
 from ..conftest import DEVICE
 
@@ -76,9 +75,9 @@ def test_grad_fail(
     # rcov wrong shape
     with pytest.raises(ValueError):
         rcov = torch.tensor([1.0], **dd)
-        function(numbers, positions, counting_function=cfunc, rcov=rcov)
+        function(numbers, positions, dcounting_function=cfunc, rcov=rcov)
 
     # wrong numbers
     with pytest.raises(ValueError):
         numbers = torch.tensor([1], device=DEVICE)
-        function(numbers, positions, counting_function=cfunc)
+        function(numbers, positions, dcounting_function=cfunc)
