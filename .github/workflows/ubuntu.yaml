@@ -55,6 +55,7 @@ jobs:
             "2.4.1",
             "2.5.1",
             "2.6.0",
+            "2.7.1",
           ]
         exclude:
           # Check latest versions here: https://download.pytorch.org/whl/torch/
@@ -85,6 +86,10 @@ jobs:
             torch-version: "2.5.1"
           - python-version: "3.8"
             torch-version: "2.6.0"
+          - python-version: "3.8"
+            torch-version: "2.7.0"
+          - python-version: "3.8"
+            torch-version: "2.7.1"
 
     runs-on: ${{ matrix.os }}
 
