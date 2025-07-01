@@ -20,13 +20,17 @@ Data: Electronegativities
 
 Pauling electronegativities, used for the covalent coordination number.
 """
+from __future__ import annotations
+
+from functools import lru_cache
+
 import torch
 
 __all__ = ["PAULING"]
 
 
 # fmt: off
-PAULING = torch.tensor([
+_PAULING = [
     0.00,  # None
     2.20,3.00,  # H,He
     0.98,1.57,2.04,2.55,3.04,3.44,3.98,4.50,  # Li-Ne
@@ -53,6 +57,18 @@ PAULING = torch.tensor([
     1.50,1.50,1.50,1.50,  # Rf-
     1.50,1.50,1.50,1.50,1.50,  # Rf-Cn
     1.50,1.50,1.50,1.50,1.50,1.50  # Nh-Og
-])
+]
 # fmt: on
 """Pauling electronegativities, used for the covalent coordination number."""
+
+
+@lru_cache(maxsize=None)
+def PAULING(
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
+) -> torch.Tensor:
+    """
+    Pauling electronegativities, used for the covalent coordination number.
+    """
+    return torch.tensor(
+        _PAULING, dtype=dtype, device=device, requires_grad=False
+    )

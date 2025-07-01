@@ -29,10 +29,12 @@ import torch
 from torch import Tensor
 
 from ..exceptions import DtypeError
-from .builtin import Any, NoReturn, TypedDict
-from .compat import Self
+from .builtin import Any, NoReturn, Protocol, TypedDict
+from .compat import CountingFunction, Self
 
 __all__ = [
+    "CNFunction",
+    "CNGradFunction",
     "DD",
     "MockTensor",
     "Molecule",
@@ -101,7 +103,7 @@ class MockTensor(Tensor):
         return self._device
 
     @device.setter
-    def device(self, value: Any) -> None:
+    def device(self, value: Any) -> None:  # type: ignore
         self._device = value
 
 
@@ -420,3 +422,49 @@ class TensorLike:
             take.
         """
         return (torch.float16, torch.float32, torch.float64)
+
+
+class CNFunction(Protocol):
+    """
+    Type annotation for coordination number function.
+    """
+
+    def __call__(
+        self,
+        numbers: Tensor,
+        positions: Tensor,
+        *,
+        counting_function: CountingFunction,
+        rcov: Tensor | None = None,
+        en: Tensor | None = None,
+        cutoff: Tensor | None = None,
+        kcn: float = 7.5,
+        **kwargs: Any,
+    ) -> Tensor:
+        """
+        Calculate the coordination number of each atom in the system.
+        """
+        ...
+
+
+class CNGradFunction(Protocol):
+    """
+    Type annotation for coordination number function.
+    """
+
+    def __call__(
+        self,
+        numbers: Tensor,
+        positions: Tensor,
+        *,
+        dcounting_function: CountingFunction,
+        rcov: Tensor | None = None,
+        en: Tensor | None = None,
+        cutoff: Tensor | None = None,
+        kcn: float = 7.5,
+        **kwargs: Any,
+    ) -> Tensor:
+        """
+        Calculate the coordination number gradient of each atom in the system.
+        """
+        ...

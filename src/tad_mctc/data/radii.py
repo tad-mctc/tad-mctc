@@ -20,14 +20,21 @@ Data: Radii
 
 Covalent radii.
 """
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+
 import torch
 
+from .._version import __tversion__
+from ..typing import Any, Tensor
 from ..units import length
 
-__all__ = ["ATOMIC", "COV_D3", "VDW_D3"]
+__all__ = ["ATOMIC", "COV_D3", "VDW_D3", "VDW_PAIRWISE"]
 
 # fmt: off
-ATOMIC = length.AA2AU * torch.tensor([
+_ATOMIC = [
     0.00,  # dummy
     0.32,0.37,  # H,He
     1.30,0.99,0.84,0.75,0.71,0.64,0.60,0.62,  # Li-Ne
@@ -52,12 +59,40 @@ ATOMIC = length.AA2AU * torch.tensor([
     1.61,1.57,1.49,1.43,1.41,  # Lr-
     1.34,1.29,1.28,1.21,1.22,   # -Cn
     1.36,1.43,1.62,1.75,1.65,1.57,  # Nh-Og
-])
+]
 """Atomic radii."""
 # fmt: on
 
+
+@lru_cache(maxsize=None)
+def ATOMIC(
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
+) -> Tensor:
+    """
+    Atomic radii.
+
+    Parameters
+    ----------
+    dtype : torch.dtype, optional
+        Floating point precision for tensor. Defaults to `torch.double`.
+    device : Optional[torch.device], optional
+        Device of tensor. Defaults to None.
+
+    Returns
+    -------
+    Tensor
+        Atomic radii.
+    """
+    return length.AA2AU * torch.tensor(
+        _ATOMIC, dtype=dtype, device=device, requires_grad=False
+    )
+
+
+##############################################################################
+
+
 # fmt: off
-COV_2009 = length.AA2AU * torch.tensor([
+_COV_2009 = [
     0.00,  # None
     0.32,0.46,  # H,He
     1.20,0.94,0.77,0.75,0.71,0.63,0.64,0.67,  # Li-Ne
@@ -82,7 +117,7 @@ COV_2009 = length.AA2AU * torch.tensor([
     1.45,1.41,1.34,1.29,1.27,  # Lr-
     1.21,1.16,1.15,1.09,1.22,  # -Cn
     1.36,1.43,1.46,1.58,1.48,1.57  # Nh-Og
-])
+]
 # fmt: on
 """
 Covalent radii (taken from Pyykko and Atsumi, Chem. Eur. J. 15, 2009, 188-197).
@@ -90,12 +125,24 @@ Values for metals decreased by 10 %.
 """
 
 
-COV_D3 = 4.0 / 3.0 * COV_2009
-"""D3 covalent radii used to construct the coordination number"""
+@lru_cache(maxsize=None)
+def COV_D3(
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
+) -> Tensor:
+    """
+    Covalent radii (taken from Pyykko and Atsumi, Chem. Eur. J. 15, 2009,
+    188-197). Values for metals decreased by 10 %.
+    """
+
+    t = torch.tensor(_COV_2009, dtype=dtype, device=device, requires_grad=False)
+    return length.AA2AU * 4.0 / 3.0 * t
+
+
+##############################################################################
 
 
 # fmt: off
-VDW_D3 = length.AA2AU * torch.tensor([
+_VDW_D3 = [
     0.00000,                            # dummy value
     1.09155, 0.86735, 1.74780, 1.54910, # H-Be
     1.60800, 1.45515, 1.31125, 1.24085, # B-O
@@ -121,6 +168,56 @@ VDW_D3 = length.AA2AU * torch.tensor([
     1.93220, 1.86080, 2.53980, 2.46470, # At-Ra
     2.35215, 2.21260, 2.22970, 2.19785, # Ac-U
     2.17695, 2.21705                    # Np-Pu
-])
+]
 """D3 pairwise van-der-Waals radii (only homoatomic pairs present here)"""
 # fmt: on
+
+
+@lru_cache(maxsize=None)
+def VDW_D3(
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
+) -> Tensor:
+    """D3 pairwise van-der-Waals radii (only homoatomic pairs present here)"""
+    return length.AA2AU * torch.tensor(
+        _VDW_D3, dtype=dtype, device=device, requires_grad=False
+    )
+
+
+##############################################################################
+
+
+def _load_vdw_rad_pairwise(
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
+) -> Tensor:
+    """
+    Load reference VDW radii from file.
+
+    Parameters
+    ----------
+    dtype : torch.dtype, optional
+        Floating point precision for tensor. Defaults to `torch.double`.
+    device : Optional[torch.device], optional
+        Device of tensor. Defaults to None.
+
+    Returns
+    -------
+    Tensor
+        VDW radii.
+    """
+    kwargs: dict[str, Any] = {"map_location": device, "mmap": True}
+    if __tversion__ > (1, 12, 1):  # pragma: no cover
+        kwargs["weights_only"] = True
+
+    path = Path(__file__).parent / "vdw-pairwise.pt"
+
+    tensor = torch.load(path, **kwargs)
+    print(tensor.shape)
+    return tensor.to(dtype) if tensor.dtype is not dtype else tensor
+
+
+@lru_cache(maxsize=None)
+def VDW_PAIRWISE(
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
+) -> Tensor:
+    """Pair-wise Van-der-Waals radii."""
+    return _load_vdw_rad_pairwise(dtype=dtype, device=device)

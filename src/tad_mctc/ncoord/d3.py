@@ -81,7 +81,7 @@ def cn_d3(
         cutoff = torch.tensor(defaults.CUTOFF_D3, **dd)
 
     if rcov is None:
-        rcov = radii.COV_D3.to(**dd)[numbers]
+        rcov = radii.COV_D3(**dd)[numbers]
     else:
         rcov = rcov.to(**dd)
 
@@ -159,7 +159,7 @@ def cn_d3_gradient(
         cutoff = torch.tensor(defaults.CUTOFF_D3, **dd)
 
     if rcov is None:
-        rcov = radii.COV_D3.to(**dd)[numbers]
+        rcov = radii.COV_D3(**dd)[numbers]
     else:
         rcov = rcov.to(**dd)
 

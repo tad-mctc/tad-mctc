@@ -42,8 +42,8 @@ def test_single(dtype: torch.dtype, name: str) -> None:
     numbers = sample["numbers"].to(DEVICE)
     positions = sample["positions"].to(**dd)
 
-    rcov = radii.COV_D3.to(**dd)[numbers]
-    eneg = en.PAULING.to(**dd)[numbers]
+    rcov = radii.COV_D3(**dd)[numbers]
+    eneg = en.PAULING(**dd)[numbers]
     cutoff = torch.tensor(30.0, **dd)
     ref = sample["cn_d4"].to(**dd)
 

@@ -85,12 +85,12 @@ def cn_d4(
         cutoff = torch.tensor(defaults.CUTOFF_D4, **dd)
 
     if rcov is None:
-        rcov = radii.COV_D3.to(**dd)[numbers]
+        rcov = radii.COV_D3(**dd)[numbers]
     else:
         rcov = rcov.to(**dd)
 
     if en is None:
-        en = eneg.PAULING.to(**dd)[numbers]
+        en = eneg.PAULING(**dd)[numbers]
     else:
         en = en.to(**dd)
 

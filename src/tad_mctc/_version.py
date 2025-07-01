@@ -19,6 +19,8 @@ Module containing the version string.
 """
 from __future__ import annotations
 
+import re
+
 import torch
 
 __all__ = ["__version__", "__tversion__"]
@@ -47,6 +49,9 @@ def version_tuple(version_string: str) -> tuple[int, ...]:
             "Version specification does not seem to follow the semantic "
             f"versioning scheme of MAJOR.MINOR.PATCH ({s})."
         )
+
+    # Remove any trailing characters (for example: 2.8.0a0+git7482eb2)
+    s = [re.split("[a-zA-Z]", p)[0] for p in s]
 
     version_numbers = [int(part) for part in s[:3]]
     return tuple(version_numbers)

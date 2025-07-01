@@ -6,6 +6,7 @@
 
    en
    getters
+   hardness
    mass
    molecules
    pse

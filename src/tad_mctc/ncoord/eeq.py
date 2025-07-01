@@ -86,7 +86,7 @@ def cn_eeq(
         cutoff = torch.tensor(defaults.CUTOFF_EEQ, **dd)
 
     if rcov is None:
-        rcov = radii.COV_D3.to(**dd)[numbers]
+        rcov = radii.COV_D3(**dd)[numbers]
     else:
         rcov = rcov.to(**dd)
 

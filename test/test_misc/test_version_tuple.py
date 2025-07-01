@@ -31,9 +31,14 @@ def test_valid_version_strings():
         10,
         20,
         30,
-    ), "Multi-digit version numbers"
+    ), "Multi-digit numbers"
     assert version_tuple("1.2.3-alpha") == (1, 2, 3), "Pre-release version"
     assert version_tuple("1.2.3+build.4") == (1, 2, 3), "Build metadata"
+    assert version_tuple("1.2.3a0+git7482eb2") == (
+        1,
+        2,
+        3,
+    ), "Pre-release with git hash"
     assert version_tuple("1.2.3_20210304") == (
         1,
         2,

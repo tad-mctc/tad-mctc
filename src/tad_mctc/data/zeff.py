@@ -23,13 +23,17 @@ This module contains the following constants:
 - effective nuclear charges from the def2-ECPs (DFT-D4 reference polarizibilities)
 - charge of the valence shell (dipole moment in GFN)
 """
+from __future__ import annotations
+
+from functools import lru_cache
+
 import torch
 
 __all__ = ["ECORE", "ZEFF", "ZVALENCE"]
 
 
 # fmt: off
-ECORE = torch.tensor([
+_ECORE = [
      0,                                                         # dummy
      0,  0,                                                     # 1-2
      2,  2,  2,  2,  2,  2,  2,  2,                             # 3-10
@@ -42,11 +46,21 @@ ECORE = torch.tensor([
     54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, 54, # 57-71
     68, 68, 68, 68, 68, 68, 68, 68,                             # 72-79
     78, 78, 78, 78, 78, 78, 78,                                 # 80-86
-])
+]
 """Number of core electrons of all atoms."""
+# fmt: on
 
 
-ZEFF = torch.tensor([
+@lru_cache(maxsize=None)
+def ECORE(
+    device: torch.device | None = None, dtype: torch.dtype = torch.int8
+) -> torch.Tensor:
+    """Number of core electrons."""
+    return torch.tensor(_ECORE, dtype=dtype, device=device, requires_grad=False)
+
+
+# fmt: off
+_ZEFF = [
      0,                                                      # None
      1,                                                 2,   # H-He
      3, 4,                               5, 6, 7, 8, 9,10,   # Li-Ne
@@ -58,11 +72,21 @@ ZEFF = torch.tensor([
     # just copy and paste from above
      9,10,11,30,31,32,33,34,35,36,37,38,39,40,41,42,43,      # Fr-Lr
     12,13,14,15,16,17,18,19,20,21,22,23,24,25,26             # Rf-Og
-])
+]
 """Effective nuclear charges."""
+# fmt: on
 
 
-ZVALENCE = torch.tensor([
+@lru_cache(maxsize=None)
+def ZEFF(
+    device: torch.device | None = None, dtype: torch.dtype = torch.int8
+) -> torch.Tensor:
+    """Effective nuclear charges from the def2-ECPs."""
+    return torch.tensor(_ZEFF, dtype=dtype, device=device, requires_grad=False)
+
+
+# fmt: off
+_ZVALENCE = [
     0,                                                         # dummy
     1,  2,                                                     # 1-2
     1,  2,  3,  4,  5,  6,  7,  8,                             # 3-10
@@ -75,6 +99,16 @@ ZVALENCE = torch.tensor([
     3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, # 56-71
     4,  5,  6,  7,  8,  9, 10, 11,                             # 72-79
     2,  3,  4,  5,  6,  7,  8,                                 # 80-86
-])
+]
 """Charge of the valence shell."""
 # fmt: on
+
+
+@lru_cache(maxsize=None)
+def ZVALENCE(
+    device: torch.device | None = None, dtype: torch.dtype = torch.int8
+) -> torch.Tensor:
+    """Charge of the valence shell."""
+    return torch.tensor(
+        _ZVALENCE, dtype=dtype, device=device, requires_grad=False
+    )

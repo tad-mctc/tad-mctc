@@ -31,6 +31,12 @@ from .elemental import sqrt as ssqrt
 __all__ = ["cdist"]
 
 
+import torch
+
+from ..math import einsum  # as in your original file
+from .elemental import sqrt as ssqrt
+
+
 def euclidean_dist_quadratic_expansion(x: Tensor, y: Tensor) -> Tensor:
     """
     Computation of euclidean distance matrix via quadratic expansion (sum of
@@ -69,6 +75,9 @@ def euclidean_dist_quadratic_expansion(x: Tensor, y: Tensor) -> Tensor:
     # using einsum is slightly faster than `torch.pow(x, 2).sum(-1)`
     xnorm = einsum("...ij,...ij->...i", x, x)
     ynorm = einsum("...ij,...ij->...i", y, y)
+
+    # xnorm = (x ** 2).sum(-1)
+    # ynorm = (y ** 2).sum(-1)
 
     n = xnorm.unsqueeze(-1) + ynorm.unsqueeze(-2)
 
@@ -111,7 +120,7 @@ def cdist_direct_expansion(x: Tensor, y: Tensor, p: int = 2) -> Tensor:
 
     # einsum is nearly twice as fast!
     if p == 2:
-        distances = torch.einsum("...ijk,...ijk->...ij", diff, diff)
+        distances = einsum("...ijk,...ijk->...ij", diff, diff)
     else:
         distances = torch.sum(torch.pow(diff, p), -1)
 
