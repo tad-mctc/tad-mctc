@@ -20,6 +20,8 @@ Data: Electronegativities
 
 Pauling electronegativities, used for the covalent coordination number.
 """
+from __future__ import annotations
+
 from functools import lru_cache
 
 import torch
@@ -62,7 +64,7 @@ _PAULING = [
 
 @lru_cache(maxsize=None)
 def PAULING(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
 ) -> torch.Tensor:
     """
     Pauling electronegativities, used for the covalent coordination number.

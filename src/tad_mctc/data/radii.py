@@ -20,6 +20,8 @@ Data: Radii
 
 Covalent radii.
 """
+from __future__ import annotations
+
 from functools import lru_cache
 from pathlib import Path
 
@@ -64,7 +66,7 @@ _ATOMIC = [
 
 @lru_cache(maxsize=None)
 def ATOMIC(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
 ) -> Tensor:
     """
     Atomic radii.
@@ -125,7 +127,7 @@ Values for metals decreased by 10 %.
 
 @lru_cache(maxsize=None)
 def COV_D3(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
 ) -> Tensor:
     """
     Covalent radii (taken from Pyykko and Atsumi, Chem. Eur. J. 15, 2009,
@@ -173,7 +175,7 @@ _VDW_D3 = [
 
 @lru_cache(maxsize=None)
 def VDW_D3(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
 ) -> Tensor:
     """D3 pairwise van-der-Waals radii (only homoatomic pairs present here)"""
     return length.AA2AU * torch.tensor(
@@ -185,7 +187,7 @@ def VDW_D3(
 
 
 def _load_vdw_rad_pairwise(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
 ) -> Tensor:
     """
     Load reference VDW radii from file.
@@ -214,7 +216,7 @@ def _load_vdw_rad_pairwise(
 
 @lru_cache(maxsize=None)
 def VDW_PAIRWISE(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
 ) -> Tensor:
     """Pair-wise Van-der-Waals radii."""
     return _load_vdw_rad_pairwise(dtype=dtype, device=device)

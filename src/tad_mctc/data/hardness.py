@@ -23,6 +23,8 @@ Element-specific chemical hardnesses.
 Used in DFT-D4, for example, for the charge scaling function to extrapolate
 the C6 coefficients.
 """
+from __future__ import annotations
+
 from functools import lru_cache
 
 import torch

@@ -128,7 +128,7 @@ https://www.angelo.edu/faculty/kboudrea/periodic/structure_mass.htm.
 
 @lru_cache(maxsize=None)
 def ATOMIC(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
 ) -> torch.Tensor:
     """
     Isotope-averaged atom masses in atomic units (in g/mol) from

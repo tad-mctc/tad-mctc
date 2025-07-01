@@ -23,6 +23,8 @@ This module contains the following constants:
 - effective nuclear charges from the def2-ECPs (DFT-D4 reference polarizibilities)
 - charge of the valence shell (dipole moment in GFN)
 """
+from __future__ import annotations
+
 from functools import lru_cache
 
 import torch
@@ -46,15 +48,18 @@ _ECORE = [
     78, 78, 78, 78, 78, 78, 78,                                 # 80-86
 ]
 """Number of core electrons of all atoms."""
+# fmt: on
+
 
 @lru_cache(maxsize=None)
 def ECORE(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.int8
 ) -> torch.Tensor:
     """Number of core electrons."""
     return torch.tensor(_ECORE, dtype=dtype, device=device, requires_grad=False)
 
 
+# fmt: off
 _ZEFF = [
      0,                                                      # None
      1,                                                 2,   # H-He
@@ -69,15 +74,18 @@ _ZEFF = [
     12,13,14,15,16,17,18,19,20,21,22,23,24,25,26             # Rf-Og
 ]
 """Effective nuclear charges."""
+# fmt: on
+
 
 @lru_cache(maxsize=None)
 def ZEFF(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.int8
 ) -> torch.Tensor:
     """Effective nuclear charges from the def2-ECPs."""
     return torch.tensor(_ZEFF, dtype=dtype, device=device, requires_grad=False)
 
 
+# fmt: off
 _ZVALENCE = [
     0,                                                         # dummy
     1,  2,                                                     # 1-2
@@ -98,7 +106,7 @@ _ZVALENCE = [
 
 @lru_cache(maxsize=None)
 def ZVALENCE(
-    dtype: torch.dtype = torch.double, device: torch.device | None = None
+    device: torch.device | None = None, dtype: torch.dtype = torch.int8
 ) -> torch.Tensor:
     """Charge of the valence shell."""
     return torch.tensor(
