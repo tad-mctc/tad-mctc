@@ -171,17 +171,8 @@ def test_load(dtype: torch.dtype) -> None:
         ZVALENCE,
     )
 
-    vdw_pairwise = VDW_PAIRWISE(dtype=dtype)
-    assert vdw_pairwise.dtype == dtype
-
-    vdw_d3 = VDW_D3(dtype=dtype)
-    assert vdw_d3.dtype == dtype
-
-    zeff = ZEFF(dtype=dtype)
-    assert zeff.dtype == dtype
-
-    zvalence = ZVALENCE(dtype=dtype)
-    assert zvalence.dtype == dtype
+    atomic = ATOMIC(dtype=dtype)
+    assert atomic.dtype == dtype
 
     ecore = ECORE(dtype=dtype)
     assert ecore.dtype == dtype
@@ -189,5 +180,14 @@ def test_load(dtype: torch.dtype) -> None:
     gam = GAM(dtype=dtype)
     assert gam.dtype == dtype
 
-    atomic = ATOMIC(dtype=dtype)
-    assert atomic.dtype == dtype
+    vdw_d3 = VDW_D3(dtype=dtype)
+    assert vdw_d3.dtype == dtype
+
+    vdw_pairwise = VDW_PAIRWISE(dtype=dtype)
+    assert vdw_pairwise.dtype == dtype
+
+    zeff = ZEFF(dtype=dtype)
+    assert zeff.dtype == dtype
+
+    zvalence = ZVALENCE(dtype=dtype)
+    assert zvalence.dtype == dtype

@@ -204,14 +204,13 @@ def _load_vdw_rad_pairwise(
     Tensor
         VDW radii.
     """
-    kwargs: dict[str, Any] = {"map_location": device, "mmap": True}
+    kwargs: dict[str, Any] = {"map_location": device}
     if __tversion__ > (1, 12, 1):  # pragma: no cover
         kwargs["weights_only"] = True
 
     path = Path(__file__).parent / "vdw-pairwise.pt"
 
     tensor = torch.load(path, **kwargs)
-    print(tensor.shape)
     return tensor.to(dtype) if tensor.dtype is not dtype else tensor
 
 
