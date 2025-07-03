@@ -38,7 +38,7 @@ def cn_eeq(
     numbers: Tensor,
     positions: Tensor,
     *,
-    counting_function: CountingFunction = erf_count,
+    counting_function: CountingFunction | None = None,
     rcov: Tensor | None = None,
     cutoff: Tensor | float | int | None = defaults.CUTOFF_EEQ,
     cn_max: Tensor | float | int | None = defaults.CUTOFF_EEQ_MAX,
@@ -89,6 +89,9 @@ def cn_eeq(
         rcov = radii.COV_D3(**dd)[numbers]
     else:
         rcov = rcov.to(**dd)
+
+    if counting_function is None:
+        counting_function = erf_count
 
     if numbers.shape != rcov.shape:
         raise ValueError(

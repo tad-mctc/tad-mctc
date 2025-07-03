@@ -56,7 +56,7 @@ def get_atomic_masses(
     Returns
     -------
     Tensor
-        Atomic masses.
+        Atomic masses of shape ``(..., nat)``.
     """
     # pylint: disable=import-outside-toplevel
     from ..units import GMOL2AU
@@ -88,7 +88,7 @@ def get_zvalence(
     Returns
     -------
     Tensor
-        Charges of valence shell of atoms.
+        Charges of valence shell of atoms of shape ``(..., nat)``.
     """
     # pylint: disable=import-outside-toplevel
     from .zeff import ZVALENCE
@@ -118,7 +118,7 @@ def get_ecore(
     Returns
     -------
     Tensor
-        Number of core electrons.
+        Number of core electrons of shape ``(..., nat)``.
     """
     # pylint: disable=import-outside-toplevel
     from .zeff import ECORE
@@ -148,7 +148,7 @@ def get_hardness(
     Returns
     -------
     Tensor
-        Hardness values.
+        Hardness values of shape ``(..., nat)``.
     """
     # pylint: disable=import-outside-toplevel
     from .hardness import GAM
@@ -178,10 +178,9 @@ def get_vdw_pairwise(
     Returns
     -------
     Tensor
-        Pair-wise van-der-Waals radii.
+        Pair-wise van-der-Waals radii of shape ``(..., nat, nat)``.
     """
     from .radii import VDW_PAIRWISE
 
     a = VDW_PAIRWISE(device=device, dtype=dtype)
-    print(a.shape)
     return a[numbers.unsqueeze(-1), numbers.unsqueeze(-2)]

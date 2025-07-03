@@ -157,3 +157,37 @@ def test_get_vdw_pairwise(atomic_numbers, mock_vdw_pairwise_tensor):
         assert (
             pytest.approx(ref.cpu()) == get_vdw_pairwise(atomic_numbers).cpu()
         )
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_load(dtype: torch.dtype) -> None:
+    from tad_mctc.data import (
+        ATOMIC,
+        ECORE,
+        GAM,
+        VDW_D3,
+        VDW_PAIRWISE,
+        ZEFF,
+        ZVALENCE,
+    )
+
+    atomic = ATOMIC(dtype=dtype)
+    assert atomic.dtype == dtype
+
+    ecore = ECORE(dtype=dtype)
+    assert ecore.dtype == dtype
+
+    gam = GAM(dtype=dtype)
+    assert gam.dtype == dtype
+
+    vdw_d3 = VDW_D3(dtype=dtype)
+    assert vdw_d3.dtype == dtype
+
+    vdw_pairwise = VDW_PAIRWISE(dtype=dtype)
+    assert vdw_pairwise.dtype == dtype
+
+    zeff = ZEFF(dtype=dtype)
+    assert zeff.dtype == dtype
+
+    zvalence = ZVALENCE(dtype=dtype)
+    assert zvalence.dtype == dtype

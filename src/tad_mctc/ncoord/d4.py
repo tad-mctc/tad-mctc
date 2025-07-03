@@ -40,7 +40,7 @@ def cn_d4(
     numbers: Tensor,
     positions: Tensor,
     *,
-    counting_function: CountingFunction = erf_count,
+    counting_function: CountingFunction | None = None,
     rcov: Tensor | None = None,
     en: Tensor | None = None,
     cutoff: Tensor | None = None,
@@ -93,6 +93,9 @@ def cn_d4(
         en = eneg.PAULING(**dd)[numbers]
     else:
         en = en.to(**dd)
+
+    if counting_function is None:
+        counting_function = erf_count
 
     if numbers.shape != rcov.shape:
         raise ValueError(

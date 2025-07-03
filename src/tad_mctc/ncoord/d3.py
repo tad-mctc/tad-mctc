@@ -38,7 +38,7 @@ def cn_d3(
     numbers: Tensor,
     positions: Tensor,
     *,
-    counting_function: CountingFunction = exp_count,
+    counting_function: CountingFunction | None = None,
     rcov: Tensor | None = None,
     cutoff: Tensor | None = None,
     **kwargs: Any,
@@ -84,6 +84,9 @@ def cn_d3(
         rcov = radii.COV_D3(**dd)[numbers]
     else:
         rcov = rcov.to(**dd)
+
+    if counting_function is None:
+        counting_function = exp_count
 
     if numbers.shape != rcov.shape:
         raise ValueError(
