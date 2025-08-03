@@ -25,11 +25,10 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any, TypeVar
 
 import torch
 from torch import Tensor
-
-from .builtin import Any, TypeVar
 
 __all__ = [
     "CacheKey",
@@ -46,6 +45,7 @@ __all__ = [
     "TensorOrTensors",
     "TypeAlias",
     "TypeGuard",
+    "Unpack",
     "override",
     "_wraps",
 ]
@@ -59,9 +59,9 @@ else:
 
 # Python 3.11
 if sys.version_info >= (3, 11):
-    from typing import Self
+    from typing import Self, Unpack
 else:
-    from typing_extensions import Self
+    from typing_extensions import Self, Unpack
 
 # Python 3.10
 if sys.version_info >= (3, 10):

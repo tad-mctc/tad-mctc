@@ -110,6 +110,7 @@ def test_eighb_standard_single() -> None:
         a = _symrng((10, 10), dd)
 
         w_ref = linalg.eigh(tensor_to_numpy(a))[0]
+        w_ref = numpy_to_tensor(w_ref, **dd)
 
         factor = torch.tensor(1e-12, **dd)
         w_calc, v_calc = storch.linalg.eighb(a, factor=factor, aux=False)
@@ -135,7 +136,10 @@ def test_eighb_standard_batch() -> None:
         a_batch = pack(a)
 
         w_ref = pack(
-            [torch.tensor(linalg.eigh(tensor_to_numpy(i))[0], **dd) for i in a]
+            [
+                numpy_to_tensor(linalg.eigh(tensor_to_numpy(i))[0], **dd)
+                for i in a
+            ]
         )
 
         w_calc = storch.linalg.eighb(a_batch)[0]
@@ -158,6 +162,7 @@ def test_eighb_general_single(direct_inverse: bool) -> None:
         b = symmetrizef(torch.eye(10, **dd) * _rng((10,), dd))
 
         w_ref = linalg.eigh(tensor_to_numpy(a), tensor_to_numpy(b))[0]
+        w_ref = numpy_to_tensor(w_ref, **dd)
 
         schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
         for scheme in schemes:
@@ -188,7 +193,7 @@ def test_eighb_general_batch() -> None:
 
         w_ref = pack(
             [
-                torch.tensor(
+                numpy_to_tensor(
                     linalg.eigh(tensor_to_numpy(i), tensor_to_numpy(j))[0], **dd
                 )
                 for i, j in zip(a, b)

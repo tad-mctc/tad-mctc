@@ -31,7 +31,7 @@ import torch
 from ..typing import Any, Callable, Tensor
 from .compat import jacrev_compat as jacrev
 
-__all__ = ["hessian"]
+__all__ = ["hessian", "hess_fn_rev"]
 
 
 def hessian(
@@ -95,3 +95,29 @@ def hessian(
         # _jac = torch.func.vmap(_jac, in_dims=dims)
 
     return _jac(*inputs)  # type: ignore
+
+
+def hess_fn_rev(
+    f: Callable[..., Tensor], argnums: tuple[int] | int = 0
+) -> Callable:
+    """
+    Return the Hessian function using reverse-mode autodiff twice.
+    (Functorch's `hessian` uses forward and backward mode, but forward is
+    not implemented for our custom autograd functions.)
+
+    Parameters
+    ----------
+    f : Callable[[Any], Tensor]
+        The function whose result is differentiated.
+    argnums : int or tuple[int], optional
+        The variable w.r.t. which will be differentiated. Defaults to 0.
+
+    Returns
+    -------
+    Callable
+        A function that computes the Hessian of `f` with respect to the
+        specified argument(s).
+    """
+    return torch.func.jacrev(
+        torch.func.jacrev(f, argnums=argnums), argnums=argnums
+    )
