@@ -76,11 +76,6 @@ def mock_vdw_pairwise_tensor():
 
 
 def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
-    # clear the cache on *the original* loader
-    from tad_mctc.data.mass import ATOMIC as _ATOMIC_LOADER
-
-    _ATOMIC_LOADER.cache_clear()
-
     # patch the name that `get_atomic_masses()` dereferences
     with patch(
         "tad_mctc.data.mass.ATOMIC",
@@ -99,11 +94,6 @@ def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
 
 
 def test_get_zvalence(atomic_numbers, mock_zeff_tensor):
-    # clear the cache on *the original* loader
-    from tad_mctc.data.zeff import ZVALENCE as _ZVALENCE_LOADER
-
-    _ZVALENCE_LOADER.cache_clear()
-
     with patch(
         "tad_mctc.data.zeff.ZVALENCE",
         side_effect=lambda dtype=torch.long, device=None: mock_zeff_tensor,
@@ -113,11 +103,6 @@ def test_get_zvalence(atomic_numbers, mock_zeff_tensor):
 
 
 def test_get_ecore(atomic_numbers, mock_zeff_tensor):
-    # clear the cache on *the original* loader
-    from tad_mctc.data.zeff import ECORE as _ECORE_LOADER
-
-    _ECORE_LOADER.cache_clear()
-
     with patch(
         "tad_mctc.data.zeff.ECORE",
         side_effect=lambda dtype=torch.long, device=None: mock_zeff_tensor,
@@ -127,11 +112,6 @@ def test_get_ecore(atomic_numbers, mock_zeff_tensor):
 
 
 def test_get_hardness(atomic_numbers, mock_hardness_tensor):
-    # clear the cache on *the original* loader
-    from tad_mctc.data.hardness import GAM as _GAM_LOADER
-
-    _GAM_LOADER.cache_clear()
-
     with patch(
         "tad_mctc.data.hardness.GAM",
         side_effect=lambda dtype=torch.float64, device=None: mock_hardness_tensor,
@@ -141,11 +121,6 @@ def test_get_hardness(atomic_numbers, mock_hardness_tensor):
 
 
 def test_get_vdw_pairwise(atomic_numbers, mock_vdw_pairwise_tensor):
-    # clear the cache on *the original* loader
-    from tad_mctc.data.radii import VDW_PAIRWISE as _VDW_PAIRWISE_LOADER
-
-    _VDW_PAIRWISE_LOADER.cache_clear()
-
     # patch the name that `get_vdw_pairwise()` dereferences
     with patch(
         "tad_mctc.data.radii.VDW_PAIRWISE",

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import torch
 
+from .._version import __tversion__
 from ..typing import Tensor
 
 __all__ = ["is_gradtracking", "is_batched", "is_functorch_tensor"]
@@ -34,6 +35,10 @@ __all__ = ["is_gradtracking", "is_batched", "is_functorch_tensor"]
 def is_gradtracking(x: Tensor) -> bool:
     """
     Check if the input tensor is a grad tracking tensor.
+
+    Note
+    ----
+    Defaults to ``False`` for versions of PyTorch before 2.0.0.
 
     Parameters
     ----------
@@ -45,7 +50,9 @@ def is_gradtracking(x: Tensor) -> bool:
     bool
         ``True`` if the tensor is a grad tracking tensor, ``False`` otherwise.
     """
-    return torch._C._functorch.is_gradtrackingtensor(x)
+    if __tversion__ >= (2, 0, 0):
+        return torch._C._functorch.is_gradtrackingtensor(x)
+    return False
 
 
 def is_batched(x: Tensor) -> bool:
@@ -55,6 +62,10 @@ def is_batched(x: Tensor) -> bool:
     Only checks the first wrapper layer, i.e., grad-tracking tensors can
     obscure the batched nature of a tensor. Unwrap the tensor first to check
     the underlying tensor.
+
+    Note
+    ----
+    Defaults to ``False`` for versions of PyTorch before 2.0.0.
 
     Parameters
     ----------
@@ -66,12 +77,18 @@ def is_batched(x: Tensor) -> bool:
     bool
         ``True`` if the tensor is a batched tensor, ``False`` otherwise.
     """
-    return torch._C._functorch.is_batchedtensor(x)
+    if __tversion__ >= (2, 0, 0):
+        return torch._C._functorch.is_batchedtensor(x)
+    return False
 
 
 def is_functorch_tensor(x: Tensor) -> bool:
     """
     Check if the input tensor is a functorch tensor.
+
+    Note
+    ----
+    Defaults to ``False`` for versions of PyTorch before 2.0.0.
 
     Parameters
     ----------
@@ -83,4 +100,6 @@ def is_functorch_tensor(x: Tensor) -> bool:
     bool
         ``True`` if the tensor is a functorch tensor, ``False`` otherwise.
     """
-    return is_gradtracking(x) or is_batched(x)
+    if __tversion__ >= (2, 0, 0):
+        return is_gradtracking(x) or is_batched(x)
+    return False
