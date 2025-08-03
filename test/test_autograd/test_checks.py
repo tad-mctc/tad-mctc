@@ -24,6 +24,7 @@ from tad_mctc._version import __tversion__
 from tad_mctc.autograd import is_batched, is_functorch_tensor, is_gradtracking
 
 
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_is_gradtracking_true(monkeypatch):
     """Should return True when torch._C._functorch.is_gradtrackingtensor is True."""
     dummy = object()
@@ -35,6 +36,7 @@ def test_is_gradtracking_true(monkeypatch):
     assert is_gradtracking(dummy) is True  # type: ignore[arg-type]
 
 
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_is_gradtracking_false(monkeypatch):
     """Should return False when torch._C._functorch.is_gradtrackingtensor is False."""
     dummy = object()
@@ -46,6 +48,7 @@ def test_is_gradtracking_false(monkeypatch):
     assert is_gradtracking(dummy) is False  # type: ignore[arg-type]
 
 
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_is_batched_true(monkeypatch):
     """Should return True when torch._C._functorch.is_batchedtensor is True."""
     dummy = object()
@@ -57,6 +60,7 @@ def test_is_batched_true(monkeypatch):
     assert is_batched(dummy) is True  # type: ignore[arg-type]
 
 
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_is_batched_false(monkeypatch):
     """Should return False when torch._C._functorch.is_batchedtensor is False."""
     dummy = object()
@@ -68,6 +72,7 @@ def test_is_batched_false(monkeypatch):
     assert is_batched(dummy) is False  # type: ignore[arg-type]
 
 
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 @pytest.mark.parametrize(
     "grad_val, batched_val, expected",
     [
