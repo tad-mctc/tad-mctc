@@ -49,7 +49,7 @@ def test_hessian(dtype: torch.dtype) -> None:
     assert pytest.approx(2 * A.cpu()) == hessian_matrix.cpu()
 
 
-@pytest.mark.skipif(__tversion__ < (1, 13, 0), reason="Requires torch>=1.13.0")
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 def test_hessian_rev(dtype: torch.dtype) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}

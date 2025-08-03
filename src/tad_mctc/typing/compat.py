@@ -59,15 +59,15 @@ else:
 
 # Python 3.11
 if sys.version_info >= (3, 11):
-    from typing import Self
+    from typing import Self, Unpack
 else:
-    from typing_extensions import Self
+    from typing_extensions import Self, Unpack
 
 # Python 3.10
 if sys.version_info >= (3, 10):
-    from typing import TypeAlias, TypeGuard, Unpack
+    from typing import TypeAlias, TypeGuard
 else:
-    from typing_extensions import TypeAlias, TypeGuard, Unpack
+    from typing_extensions import TypeAlias, TypeGuard
 
 # starting with Python 3.9, type hinting generics have been moved
 # from the "typing" to the "collections" module

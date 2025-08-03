@@ -20,6 +20,7 @@ Test hessian.
 import pytest
 import torch
 
+from tad_mctc._version import __tversion__
 from tad_mctc.autograd import is_batched, is_functorch_tensor, is_gradtracking
 
 
@@ -98,6 +99,7 @@ def test_is_functorch_tensor(monkeypatch, grad_val, batched_val, expected):
 ###############################################################################
 
 
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_plain_tensor_behavior():
     # A plain torch.Tensor should not be seen as grad-tracking or batched
     t = torch.tensor([1.0, 2.0, 3.0])
@@ -106,6 +108,7 @@ def test_plain_tensor_behavior():
     assert is_functorch_tensor(t) is False
 
 
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_gradtracking_tensor_via_grad():
     # grad(f) returns a grad-tracking tensor when applied
     def f(x: torch.Tensor) -> torch.Tensor:
@@ -119,6 +122,7 @@ def test_gradtracking_tensor_via_grad():
     _ = torch.func.jacrev(f)(t)
 
 
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_batched_tensor_via_vmap():
     # vmap wraps a tensor into a batched tensor
     def f(x: torch.Tensor) -> torch.Tensor:
@@ -132,6 +136,7 @@ def test_batched_tensor_via_vmap():
     _ = torch.func.vmap(f)(t)
 
 
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_grad_and_batched_tensor():
     # Combine grad + vmap to get a tensor that is both
     def f(x):
