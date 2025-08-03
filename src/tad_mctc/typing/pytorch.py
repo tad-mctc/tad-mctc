@@ -25,11 +25,12 @@ tensor-like behavior (`.to` and `.type` methods) to classes.
 """
 from __future__ import annotations
 
+from typing import Any, NoReturn, Protocol, TypedDict
+
 import torch
 from torch import Tensor
 
 from ..exceptions import DtypeError
-from .builtin import Any, NoReturn, Protocol, TypedDict
 from .compat import CountingFunction, Self
 
 __all__ = [

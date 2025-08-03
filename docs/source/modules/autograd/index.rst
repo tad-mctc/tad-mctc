@@ -5,6 +5,7 @@
 .. toctree::
 
    batched
+   checks
    compat
    gradcheck
    hessian

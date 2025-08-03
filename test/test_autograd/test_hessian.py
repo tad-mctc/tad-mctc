@@ -20,7 +20,8 @@ Test hessian.
 import pytest
 import torch
 
-from tad_mctc.autograd import hessian
+from tad_mctc._version import __tversion__
+from tad_mctc.autograd import hess_fn_rev, hessian
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
@@ -43,6 +44,29 @@ def test_hessian(dtype: torch.dtype) -> None:
 
     # Calculate the Hessian using the `hessian` function
     hessian_matrix = hessian(quadratic, (A, x), argnums=1)
+
+    # Expected Hessian for the quadratic function is 2A
+    assert pytest.approx(2 * A.cpu()) == hessian_matrix.cpu()
+
+
+@pytest.mark.skipif(__tversion__ < (1, 13, 0), reason="Requires torch>=1.13.0")
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+def test_hessian_rev(dtype: torch.dtype) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+    # Create a test input
+    A = torch.tensor([[3.0, 2.0], [2.0, 3.0]], **dd)
+    x = torch.tensor([1.0, 2.0], requires_grad=True, **dd)
+
+    def quadratic(A: Tensor, x: Tensor) -> Tensor:
+        """
+        A simple quadratic function for testing.
+        f(x) = x^T A x, where A is a constant matrix.
+        The Hessian of this function is 2A.
+        """
+        return x @ A @ x
+
+    # Calculate the Hessian using the `hessian` function
+    hessian_matrix = hess_fn_rev(quadratic, argnums=1)(A, x)
 
     # Expected Hessian for the quadratic function is 2A
     assert pytest.approx(2 * A.cpu()) == hessian_matrix.cpu()

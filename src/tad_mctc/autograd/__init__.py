@@ -24,6 +24,7 @@ includes:
 - Hessians
 """
 from .batched import *
+from .checks import *
 from .gradcheck import *
 from .hessian import *
 from .internals import *

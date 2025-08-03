@@ -25,11 +25,10 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any, TypeVar
 
 import torch
 from torch import Tensor
-
-from .builtin import Any, TypeVar
 
 __all__ = [
     "CacheKey",
@@ -46,6 +45,7 @@ __all__ = [
     "TensorOrTensors",
     "TypeAlias",
     "TypeGuard",
+    "Unpack",
     "override",
     "_wraps",
 ]
@@ -65,9 +65,9 @@ else:
 
 # Python 3.10
 if sys.version_info >= (3, 10):
-    from typing import TypeAlias, TypeGuard
+    from typing import TypeAlias, TypeGuard, Unpack
 else:
-    from typing_extensions import TypeAlias, TypeGuard
+    from typing_extensions import TypeAlias, TypeGuard, Unpack
 
 # starting with Python 3.9, type hinting generics have been moved
 # from the "typing" to the "collections" module
