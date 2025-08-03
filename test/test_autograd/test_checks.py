@@ -27,7 +27,7 @@ from tad_mctc._version import __tversion__
 from tad_mctc.autograd import checks
 
 
-def test_torch_to_np_below_1_13_0():
+def test_dummy():
     import tad_mctc._version
 
     torch_version = tad_mctc._version.__tversion__
