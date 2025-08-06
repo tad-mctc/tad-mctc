@@ -194,11 +194,30 @@ class Mol(TensorLike):
         Tensor
             Center of mass.
         """
+        # pylint: disable=import-outside-toplevel
         from ..data.getters import get_atomic_masses
         from .property import center_of_mass
 
         masses = get_atomic_masses(self.numbers, **self.dd)
         return center_of_mass(masses, self.positions)
+
+    @memoize
+    def mass(self, atomic_units: bool = False) -> Tensor:
+        """
+        Calculate the total mass of the molecule.
+
+        Returns
+        -------
+        Tensor
+            Total mass.
+        """
+        # pylint: disable=import-outside-toplevel
+        from ..data.getters import get_atomic_masses
+
+        masses = get_atomic_masses(
+            self.numbers, atomic_units=atomic_units, **self.dd
+        )
+        return torch.sum(masses)
 
     def clear_cache(self) -> None:
         """Clear the cross-instance caches of all memoized methods."""
