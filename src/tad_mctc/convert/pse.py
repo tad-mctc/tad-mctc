@@ -62,4 +62,4 @@ def number_to_symbol(numbers: Tensor) -> list[str]:
     list[str]
         Element symbols corresponding to the given atomic numbers.
     """
-    return [pse.Z2S[n] for n in numbers.cpu().tolist()]
+    return [pse.Z2S[n] for n in torch.atleast_1d(numbers).cpu().tolist()]
