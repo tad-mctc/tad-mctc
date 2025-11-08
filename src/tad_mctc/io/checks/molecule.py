@@ -50,6 +50,7 @@ from __future__ import annotations
 import torch
 
 from ... import storch
+from ...autograd import is_functorch_tensor
 from ...batch import deflate, real_pairs
 from ...data import pse
 from ...exceptions import MoleculeError, MoleculeWarning
@@ -91,6 +92,10 @@ def coldfusion_check(
     MoleculeError
         Interatomic distances are too close.
     """
+    # vmap does not allow data-dependent control flow
+    if is_functorch_tensor(numbers) or is_functorch_tensor(positions):
+        return True
+
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
 
     mask = real_pairs(numbers, mask_diagonal=True)
@@ -144,8 +149,11 @@ def content_checks(
     MoleculeError
         Atomic number too large or too small.
     """
-    if numbers.max() > max_element:
-        raise MoleculeError(f"Atomic number larger than {max_element} found.")
+    if not is_functorch_tensor(numbers):
+        if numbers.max() > max_element:
+            raise MoleculeError(
+                f"Atomic number larger than {max_element} found."
+            )
 
     if allow_batched is False:
         if numbers.min() < 1:

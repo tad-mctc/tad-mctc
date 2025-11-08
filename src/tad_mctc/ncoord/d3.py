@@ -54,7 +54,7 @@ def cn_d3(
     positions : Tensor
         Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
     counting_function : CountingFunction, optional
-        Calculate weight for pairs. Defaults to
+        Counting function for CN. Defaults to
         :func:`tad_mctc.ncoord.count.exp_count`.
     rcov : Tensor | None, optional
         Covalent radii for each species. Defaults to ``None``.
@@ -100,6 +100,52 @@ def cn_d3(
             f"with atomic numbers ({numbers.shape})."
         )
 
+    return _cn_d3(
+        numbers,
+        positions,
+        counting_function=counting_function,
+        rcov=rcov,
+        cutoff=cutoff,
+        **kwargs,
+    )
+
+
+def _cn_d3(
+    numbers: Tensor,
+    positions: Tensor,
+    *,
+    counting_function: CountingFunction,
+    rcov: Tensor,
+    cutoff: Tensor,
+    **kwargs: Any,
+) -> Tensor:
+    """
+    Compute the D3 fractional coordination (exponential counting function)
+    without any checks.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+    positions : Tensor
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    counting_function : CountingFunction
+        Counting function for CN.
+    rcov : Tensor
+        Covalent radii for each species (shape: ``(..., nat)``).
+    cutoff : Tensor
+        Real-space cutoff.
+    kwargs : dict[str, Any]
+        Pass-through arguments for counting function. For example, ``kcn``,
+        the steepness of the counting function, which defaults to
+        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
+
+    Returns
+    -------
+    Tensor
+        Coordination numbers for all atoms (shape: ``(..., nat)``).
+    """
+    dd: DD = {"device": positions.device, "dtype": positions.dtype}
     eps = torch.tensor(torch.finfo(positions.dtype).eps, **dd)
 
     mask = real_pairs(numbers, mask_diagonal=True)

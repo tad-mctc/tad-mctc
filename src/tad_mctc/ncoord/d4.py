@@ -57,7 +57,7 @@ def cn_d4(
     positions : Tensor
         Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
     counting_function : CountingFunction
-        Calculate weight for pairs. Defaults to
+        Counting function for CN. Defaults to
         :func:`tad_mctc.ncoord.count.erf_count`.
     rcov : Tensor | None, optional
         Covalent radii for each species. Defaults to ``None``.
@@ -109,6 +109,60 @@ def cn_d4(
             f"with atomic numbers ({numbers.shape})."
         )
 
+    return _cn_d4(
+        numbers,
+        positions,
+        counting_function=counting_function,
+        rcov=rcov,
+        en=en,
+        cutoff=cutoff,
+        **kwargs,
+    )
+
+
+def _cn_d4(
+    numbers: Tensor,
+    positions: Tensor,
+    *,
+    counting_function: CountingFunction,
+    rcov: Tensor,
+    en: Tensor,
+    cutoff: Tensor,
+    **kwargs: Any,
+) -> Tensor:
+    """
+    Compute the D4 fractional coordination number without any checks.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+    positions : Tensor
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    counting_function : CountingFunction
+        Counting function for CN.
+    rcov : Tensor
+        Covalent radii for each species (shape: ``(..., nat)``).
+    en : Tensor
+        Electronegativities for all atoms.
+    cutoff : Tensor
+        Real-space cutoff.
+    kwargs : dict[str, Any]
+        Pass-through arguments for counting function. For example, ``kcn``.
+        the steepness of the counting function.
+
+    Returns
+    -------
+    Tensor
+        Coordination numbers for all atoms (shape: ``(..., nat)``).
+
+    Raises
+    ------
+    ValueError
+        If shape mismatch between ``numbers``, ``positions`` and
+        ``rcov`` is detected.
+    """
+    dd: DD = {"device": positions.device, "dtype": positions.dtype}
     eps = torch.tensor(torch.finfo(positions.dtype).eps, **dd)
 
     mask = real_pairs(numbers, mask_diagonal=True)

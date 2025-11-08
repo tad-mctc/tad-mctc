@@ -105,6 +105,62 @@ def cn_eeq(
             f"with atomic numbers ({numbers.shape})."
         )
 
+    return _cn_eeq(
+        numbers,
+        positions,
+        counting_function=counting_function,
+        rcov=rcov,
+        cutoff=cutoff,
+        cn_max=cn_max,
+        weight=None,
+        **kwargs,
+    )
+
+
+def _cn_eeq(
+    numbers: Tensor,
+    positions: Tensor,
+    *,
+    counting_function: CountingFunction,
+    rcov: Tensor,
+    cutoff: Tensor | float | int,
+    cn_max: Tensor | float | int | None,
+    **kwargs: Any,
+) -> Tensor:
+    """
+    Compute fractional coordination number using an exponential counting
+    function without any checks.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+    positions : Tensor
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    counting_function : CountingFunction
+        Counting function for CN
+    rcov : Tensor
+        Covalent radii for each species (shape: ``(..., nat)``).
+    cutoff : Tensor | float | int
+        Real-space cutoff.
+    cn_max : Tensor | float | int | None
+        Maximum coordination number.
+    kwargs : dict[str, Any]
+        Pass-through arguments for counting function. For example, ``kcn``,
+        the steepness of the counting function.
+
+    Returns
+    -------
+    Tensor
+        Coordination numbers for all atoms (shape: ``(..., nat)``).
+
+    Raises
+    ------
+    ValueError
+        If shape mismatch between ``numbers``, ``positions`` and
+        ``rcov`` is detected.
+    """
+    dd: DD = {"device": positions.device, "dtype": positions.dtype}
     eps = torch.tensor(torch.finfo(positions.dtype).eps, **dd)
 
     mask = real_pairs(numbers, mask_diagonal=True)
