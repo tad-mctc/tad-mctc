@@ -26,19 +26,20 @@ tensor-like behavior (`.to` and `.type` methods) to classes.
 
 from __future__ import annotations
 
-from typing import Any, NoReturn, Protocol, TypedDict
+from typing import Any, ClassVar, NoReturn, Protocol, TypedDict, cast
 
 import torch
 from torch import Tensor
 
 from ..exceptions import DtypeError
-from .compat import CountingFunction, Self
+from .compat import CountingFunction, Self, TypeVar
 
 __all__ = [
     "CNFunction",
     "CNGradFunction",
     "DD",
     "MockTensor",
+    "ModuleLike",
     "Molecule",
     "get_default_device",
     "get_default_dtype",
@@ -424,6 +425,150 @@ class TensorLike:
             take.
         """
         return (torch.float16, torch.float32, torch.float64)
+
+
+##############################################################################
+
+ModuleLikeType = TypeVar("ModuleLikeType", bound="ModuleLike")
+
+
+class ModuleLike(torch.nn.Module):
+    """nn.Module with TensorLike-style helpers."""
+
+    _ALLOWED_DTYPES: ClassVar[tuple[torch.dtype, ...]] = (
+        torch.float16,
+        torch.float32,
+        torch.float64,
+    )
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    ######################################################################
+    # Convenience properties
+
+    @property
+    def device(self) -> torch.device:
+        """Device inferred from the first registered buffer."""
+        return self._reference_tensor().device
+
+    @device.setter
+    def device(self, *_: Any) -> NoReturn:
+        raise AttributeError("Move object to device using the `.to` method")
+
+    @property
+    def dtype(self) -> torch.dtype:
+        """Floating point dtype inferred from the first registered buffer."""
+        return self._reference_tensor().dtype
+
+    @dtype.setter
+    def dtype(self, *_: Any) -> NoReturn:
+        raise AttributeError("Change object dtype using the `.type` method")
+
+    @property
+    def dd(self) -> DD:
+        """Shortcut combining device and dtype."""
+        return {"device": self.device, "dtype": self.dtype}
+
+    @dd.setter
+    def dd(self, *_: Any) -> NoReturn:
+        raise AttributeError(
+            "Change object dtype/device using the `.type` and `.to` methods."
+        )
+
+    @property
+    def allowed_dtypes(self) -> tuple[torch.dtype, ...]:
+        """Collection of dtypes supported by the model."""
+        return self._ALLOWED_DTYPES
+
+    ######################################################################
+    # Type / device conversion hooks
+
+    def type(
+        self: ModuleLikeType, dst_type: torch.dtype | str
+    ) -> ModuleLikeType:
+        dtype = self._coerce_dtype(dst_type)
+        self._validate_requested_dtype(dtype)
+        return cast(ModuleLikeType, super().type(dst_type))
+
+    def to(self: ModuleLikeType, *args: Any, **kwargs: Any) -> ModuleLikeType:
+        dtype = self._extract_dtype_from_to(args, kwargs)
+        self._validate_requested_dtype(dtype)
+        return cast(ModuleLikeType, super().to(*args, **kwargs))
+
+    ######################################################################
+    # Internal helpers
+
+    def _reference_tensor(self) -> torch.Tensor:
+        try:
+            return next(self.buffers(recurse=False))
+        except StopIteration as exc:  # pragma: no cover - defensive
+            raise RuntimeError(
+                f"{self.__class__.__name__} must register at least one buffer "
+                f"to expose device/dtype."
+            ) from exc
+
+    def _validate_requested_dtype(
+        self,
+        dtype: torch.dtype | None,
+    ) -> None:
+        if dtype is None:
+            return
+        if dtype not in self.allowed_dtypes:
+            raise ValueError(
+                f"Only dtypes {self.allowed_dtypes} are supported "
+                f"(received '{dtype}')."
+            )
+
+    @staticmethod
+    def _extract_dtype_from_to(
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> torch.dtype | None:
+        if "dtype" in kwargs and kwargs["dtype"] is not None:
+            return kwargs["dtype"]
+
+        for arg in args:
+            dtype = ModuleLike._coerce_dtype(arg)
+            if dtype is not None:
+                return dtype
+        return None
+
+    @staticmethod
+    def _coerce_dtype(value: Any) -> torch.dtype | None:
+        if isinstance(value, torch.dtype):
+            return value
+        if isinstance(value, torch.Tensor):
+            return value.dtype
+        if isinstance(value, str):
+            name = value.split(".", maxsplit=1)[-1]
+            mapping = {
+                "HalfTensor": torch.float16,
+                "FloatTensor": torch.float32,
+                "DoubleTensor": torch.float64,
+                "BFloat16Tensor": torch.bfloat16,
+            }
+            return mapping.get(name, None)
+        return None
+
+    @staticmethod
+    def _validate_tensor_devices(
+        tensors: tuple[torch.Tensor, ...],
+        device: torch.device,
+    ) -> None:
+        if any(tensor.device != device for tensor in tensors):
+            raise RuntimeError("All tensors must be on the same device!")
+
+    @staticmethod
+    def _validate_tensor_dtypes(
+        tensors: tuple[torch.Tensor, ...],
+        dtype: torch.dtype,
+    ) -> None:
+        if any(tensor.dtype != dtype for tensor in tensors):
+            raise RuntimeError("All tensors must have the same dtype!")
+
+
+##############################################################################
 
 
 class CNFunction(Protocol):
