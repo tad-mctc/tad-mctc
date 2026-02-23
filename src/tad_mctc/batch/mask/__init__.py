@@ -20,6 +20,7 @@ Batch Utility: Masks
 
 Functions for creating masks that discern between padding and actual values.
 """
+
 from .atoms import real_atoms
 from .pairs import real_pairs
 from .triples import real_triples

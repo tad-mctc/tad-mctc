@@ -17,6 +17,7 @@
 """
 Test the XYZ file reader and writer.
 """
+
 import tempfile
 from pathlib import Path
 

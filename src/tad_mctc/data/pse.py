@@ -21,6 +21,7 @@ Data: Periodic Table
 Dictionaries of the Periodic Systems of Elements (PSE) with mappings from
 atomic number to symbols and vice versa.
 """
+
 from __future__ import annotations
 
 __all__ = ["S2Z", "Z2S", "MAX_ELEMENT"]

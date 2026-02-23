@@ -21,6 +21,7 @@ Coordination number: DFT-D4
 Calculation of DFT-D4 coordination number. Includes electronegativity-
 dependent term.
 """
+
 from __future__ import annotations
 
 import torch

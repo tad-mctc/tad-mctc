@@ -17,6 +17,7 @@
 """
 Test cdist safeop version.
 """
+
 from __future__ import annotations
 
 import numpy as np

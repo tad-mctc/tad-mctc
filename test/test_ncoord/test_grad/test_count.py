@@ -18,6 +18,7 @@
 Test derivative (w.r.t. positions) of the exponential and error counting
 functions used for the coordination number within the EEQ model and D4.
 """
+
 from __future__ import annotations
 
 import numpy as np

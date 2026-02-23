@@ -20,6 +20,7 @@ Batch Utility: Masks
 
 Functions for creating masks that discern between padding and actual values.
 """
+
 from __future__ import annotations
 
 import torch

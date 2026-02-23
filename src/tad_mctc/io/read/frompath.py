@@ -27,6 +27,7 @@ Example
 >>> path = ...
 >>> numbers, positions = read_xyz(path)
 """
+
 from __future__ import annotations
 
 from pathlib import Path

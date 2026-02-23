@@ -23,6 +23,7 @@ This module contains PyTorch-related type annotations.
 Most importantly, the `TensorLike` base class is defined, which brings
 tensor-like behavior (`.to` and `.type` methods) to classes.
 """
+
 from __future__ import annotations
 
 from typing import Any, NoReturn, Protocol, TypedDict

@@ -20,6 +20,7 @@ I/O Checks: Shape
 
 This module contains shape checkers for the inputs passed to the reader/writer.
 """
+
 from __future__ import annotations
 
 from ...typing import Tensor

@@ -17,6 +17,7 @@
 """
 Test getters for atomic data.
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch

@@ -17,6 +17,7 @@
 """
 Test error handling in coordination number calculation.
 """
+
 from __future__ import annotations
 
 import pytest

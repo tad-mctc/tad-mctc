@@ -20,6 +20,7 @@ Units: Time
 
 This module contains conversions for units of time.
 """
+
 from __future__ import annotations
 
 from .codata import get_constant

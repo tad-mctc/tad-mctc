@@ -17,6 +17,7 @@
 """
 Test conversion of version string to tuple.
 """
+
 from __future__ import annotations
 
 import pytest

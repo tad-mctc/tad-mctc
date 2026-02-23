@@ -17,6 +17,7 @@
 """
 Test the check for deflating (padding clash).
 """
+
 from pathlib import Path
 
 import pytest

@@ -20,6 +20,7 @@ I/O Read: CHRG/UHF
 
 Reader for the `.CHRG` and `.UHF` files.
 """
+
 from __future__ import annotations
 
 import torch

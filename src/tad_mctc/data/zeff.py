@@ -23,6 +23,7 @@ This module contains the following constants:
 - effective nuclear charges from the def2-ECPs (DFT-D4 reference polarizibilities)
 - charge of the valence shell (dipole moment in GFN)
 """
+
 from __future__ import annotations
 
 import torch

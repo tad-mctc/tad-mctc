@@ -21,6 +21,7 @@ I/O Read: XYZ
 Reader for standard XYZ files.
 See https://en.wikipedia.org/wiki/XYZ_file_format.
 """
+
 from __future__ import annotations
 
 import torch

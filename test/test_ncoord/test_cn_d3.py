@@ -17,6 +17,7 @@
 """
 Test calculation of DFT-D3 coordination number.
 """
+
 from __future__ import annotations
 
 import pytest

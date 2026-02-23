@@ -17,6 +17,7 @@
 """
 Test bond order functionality for random examples.
 """
+
 import pytest
 import torch
 

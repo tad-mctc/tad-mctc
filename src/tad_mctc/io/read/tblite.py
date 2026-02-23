@@ -20,6 +20,7 @@ I/O Read: tblite
 
 Reader for tblite output files.
 """
+
 from __future__ import annotations
 
 import torch

@@ -20,6 +20,7 @@ I/O Read: General
 
 General reader for file from a path.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

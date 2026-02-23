@@ -21,6 +21,7 @@ Data: Getter Functions
 This module only contains some convenience functions for collecting constants
 for a given set of atomic numbers.
 """
+
 from __future__ import annotations
 
 import torch

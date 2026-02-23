@@ -20,6 +20,7 @@ Coordination number: DFT-D3
 
 Calculation of coordination number for DFT-D3.
 """
+
 from __future__ import annotations
 
 import torch

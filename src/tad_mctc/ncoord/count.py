@@ -27,6 +27,7 @@ the Grimme group. This includes the following counting functions:
 Additionally, the analytical derivatives for the counting functions are also
 provided and can be used for checking the autograd results.
 """
+
 from __future__ import annotations
 
 from math import pi, sqrt

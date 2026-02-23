@@ -29,6 +29,7 @@ Example
 >>> path = "mol.xyz"
 >>> numbers, positions = read.read(path)
 """
+
 from .dotfiles import *
 from .orca import *
 from .qcschema import *

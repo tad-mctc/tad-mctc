@@ -20,6 +20,7 @@ I/O Write: General
 
 General writer for file from a path.
 """
+
 from __future__ import annotations
 
 from functools import wraps

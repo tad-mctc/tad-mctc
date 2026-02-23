@@ -24,6 +24,7 @@ Note
 ----
 Batched Hessians are not supported yet (via `vmap`).
 """
+
 from __future__ import annotations
 
 import torch

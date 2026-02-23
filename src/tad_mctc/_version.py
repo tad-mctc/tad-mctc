@@ -17,6 +17,7 @@
 """
 Module containing the version string.
 """
+
 from __future__ import annotations
 
 import re

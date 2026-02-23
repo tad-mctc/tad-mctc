@@ -30,6 +30,7 @@ Example
 >>> memory_tensor(size, dtype)
 0.03814697265625
 """
+
 from __future__ import annotations
 
 import torch
