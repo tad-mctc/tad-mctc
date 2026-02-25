@@ -39,7 +39,13 @@ class Refs(TypedDict):
     """DFT-D4 coordination number"""
 
     cn_eeq: Tensor
-    """DFT-D4 coordination number"""
+    """EEQ coordination number."""
+
+    cn_gfn2: Tensor
+    """GFN2-xTB coordination number."""
+
+    cn_eeq_en: Tensor
+    """Electronegativity-weighted EEQ coordination number."""
 
 
 class Record(Molecule, Refs):
@@ -151,6 +157,8 @@ refs: dict[str, Refs] = {
             [],
             dtype=torch.double,
         ),
+        "cn_gfn2": torch.tensor([], dtype=torch.float64),
+        "cn_eeq_en": torch.tensor([], dtype=torch.float64),
     },
     "PbH4-BiH3": {
         "cn_d3": torch.tensor(
@@ -169,6 +177,8 @@ refs: dict[str, Refs] = {
         "dcn3dr": torch.tensor([], dtype=torch.float64),
         "cn_d4": torch.tensor([], dtype=torch.float64),
         "cn_eeq": torch.tensor([], dtype=torch.float64),
+        "cn_gfn2": torch.tensor([], dtype=torch.float64),
+        "cn_eeq_en": torch.tensor([], dtype=torch.float64),
     },
     "C6H5I-CH3SH": {
         "cn_d3": torch.tensor(
@@ -196,6 +206,8 @@ refs: dict[str, Refs] = {
         "dcn3dr": torch.tensor([], dtype=torch.float64),
         "cn_d4": torch.tensor([], dtype=torch.float64),
         "cn_eeq": torch.tensor([], dtype=torch.float64),
+        "cn_gfn2": torch.tensor([], dtype=torch.float64),
+        "cn_eeq_en": torch.tensor([], dtype=torch.float64),
     },
     "MB16_43_01": {
         "cn_d3": torch.tensor(
@@ -1033,6 +1045,48 @@ refs: dict[str, Refs] = {
             ],
             dtype=torch.double,
         ),
+        "cn_gfn2": torch.tensor(
+            [
+                4.11453659059991,
+                0.932058998762811,
+                2.03554597140311,
+                1.42227835389358,
+                1.12812426574031,
+                1.05491602558828,
+                1.52709064704269,
+                1.95070367247232,
+                3.83759889196540,
+                1.09388314007182,
+                1.07090773695340,
+                2.00285254082830,
+                4.36400837813955,
+                3.83469860546080,
+                3.91542517673963,
+                5.58571682419960,
+            ],
+            dtype=torch.double,
+        ),
+        "cn_eeq_en": torch.tensor(
+            [
+                6.49835771218084,
+                -9.24780426380943e-02,
+                -3.19404023806046,
+                -7.26463405313327e-01,
+                -1.92171552979195,
+                6.71703342153316e-01,
+                -6.47861832477202e-01,
+                -2.56263447944906,
+                -3.28660571935921,
+                8.86404306801211e-01,
+                6.65084753274741e-01,
+                -2.51172025807030,
+                4.24336914659746e-01,
+                2.98914644571775,
+                -2.72992153136905,
+                5.53840756174106,
+            ],
+            dtype=torch.double,
+        ),
     },
     "MB16_43_02": {
         "cn_d3": torch.tensor([], dtype=torch.float64),
@@ -1079,6 +1133,8 @@ refs: dict[str, Refs] = {
             ],
             dtype=torch.double,
         ),
+        "cn_gfn2": torch.tensor([], dtype=torch.float64),
+        "cn_eeq_en": torch.tensor([], dtype=torch.float64),
     },
     "MB16_43_03": {
         "cn_d3": torch.tensor([], dtype=torch.float64),
@@ -1108,6 +1164,8 @@ refs: dict[str, Refs] = {
             [],
             dtype=torch.double,
         ),
+        "cn_gfn2": torch.tensor([], dtype=torch.float64),
+        "cn_eeq_en": torch.tensor([], dtype=torch.float64),
     },
 }
 

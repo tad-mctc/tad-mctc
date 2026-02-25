@@ -1,6 +1,6 @@
 # This file is part of tad-mctc.
 #
-# SPDX-Identifier: Apache-2.0
+# SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2024 Grimme Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,43 +15,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test calculation of EEQ coordination number.
+Test calculation of GFN2-xTB coordination number.
 """
-
 from __future__ import annotations
 
 import pytest
 import torch
 
 from tad_mctc.batch import pack
-from tad_mctc.data import radii
-from tad_mctc.ncoord import coordination_number, defaults
-from tad_mctc.ncoord.count import erf_count
-from tad_mctc.typing import DD, Tensor
+from tad_mctc.ncoord import cn_gfn2 as get_cn
+from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
 from .samples import samples
 
-sample_list = ["MB16_43_01", "MB16_43_02"]
-
-
-def _eeq_reference(
-    numbers: Tensor,
-    positions: Tensor,
-    *,
-    dd: DD,
-    cn_max: Tensor | float | int | None = None,
-) -> Tensor:
-    rcov = radii.COV_D3(**dd)[numbers]
-    cutoff = torch.tensor(defaults.CUTOFF_EEQ, **dd)
-    return coordination_number(
-        numbers,
-        positions,
-        counting_function=erf_count,
-        rcov=rcov,
-        cutoff=cutoff,
-        cn_max=cn_max,
-    )
+sample_list = ["MB16_43_01"]
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -62,25 +40,10 @@ def test_single(dtype: torch.dtype, name: str) -> None:
     sample = samples[name]
     numbers = sample["numbers"].to(DEVICE)
     positions = sample["positions"].to(**dd)
+    ref = sample["cn_gfn2"].to(**dd)
 
-    ref = sample["cn_eeq"].to(**dd)
-
-    cn = _eeq_reference(numbers, positions, dd=dd)
+    cn = get_cn(numbers, positions)
     assert pytest.approx(ref.cpu()) == cn.cpu()
-
-
-@pytest.mark.parametrize("dtype", [torch.float, torch.double])
-@pytest.mark.parametrize("cn_max", [49, 51.0, torch.tensor(49)])
-def test_single_cnmax(dtype: torch.dtype, cn_max: int | float | Tensor) -> None:
-    dd: DD = {"device": DEVICE, "dtype": dtype}
-
-    sample = samples["MB16_43_01"]
-    numbers = sample["numbers"].to(DEVICE)
-    positions = sample["positions"].to(**dd)
-
-    ref = sample["cn_eeq"].to(**dd)
-    cn = _eeq_reference(numbers, positions, dd=dd, cn_max=cn_max)
-    assert pytest.approx(ref.cpu(), abs=1e-5) == cn.cpu()
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -104,10 +67,10 @@ def test_batch(dtype: torch.dtype, name1: str, name2: str) -> None:
     )
     ref = pack(
         (
-            sample1["cn_eeq"].to(**dd),
-            sample2["cn_eeq"].to(**dd),
+            sample1["cn_gfn2"].to(**dd),
+            sample2["cn_gfn2"].to(**dd),
         )
     )
 
-    cn = _eeq_reference(numbers, positions, dd=dd)
+    cn = get_cn(numbers, positions)
     assert pytest.approx(ref.cpu()) == cn.cpu()

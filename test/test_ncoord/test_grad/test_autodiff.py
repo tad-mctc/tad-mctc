@@ -47,7 +47,6 @@ def gradchecker(
     dtype: torch.dtype,
     name: str,
     cnf: CNFunction,
-    count_function: CountingFunction,
 ) -> tuple[
     Callable[[Tensor], Tensor],  # autograd function
     Tensor,  # differentiable variables
@@ -62,7 +61,7 @@ def gradchecker(
     positions.requires_grad_(True)
 
     def func(pos: Tensor) -> Tensor:
-        return cnf(numbers, pos, counting_function=count_function)
+        return cnf(numbers, pos)
 
     return func, positions
 
@@ -71,18 +70,16 @@ def gradchecker(
 @pytest.mark.parametrize("dtype", [torch.double])
 @pytest.mark.parametrize("name", sample_list)
 @pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq])
-@pytest.mark.parametrize("count_function", [exp_count, erf_count, gfn2_count])
 def test_gradcheck(
     dtype: torch.dtype,
     name: str,
     cn_function: CNFunction,
-    count_function: CountingFunction,
 ) -> None:
     """
     Check a single analytical gradient of parameters against numerical
     gradient from `torch.autograd.gradcheck`.
     """
-    func, diffvars = gradchecker(dtype, name, cn_function, count_function)
+    func, diffvars = gradchecker(dtype, name, cn_function)
     assert dgradcheck(func, diffvars, atol=tol)
 
 
@@ -90,18 +87,14 @@ def test_gradcheck(
 @pytest.mark.parametrize("dtype", [torch.double])
 @pytest.mark.parametrize("name", sample_list)
 @pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq])
-@pytest.mark.parametrize("count_function", [exp_count, erf_count, gfn2_count])
 def test_gradgradcheck(
-    dtype: torch.dtype,
-    name: str,
-    cn_function: CNFunction,
-    count_function: CountingFunction,
+    dtype: torch.dtype, name: str, cn_function: CNFunction
 ) -> None:
     """
     Check a single analytical gradient of parameters against numerical
     gradient from `torch.autograd.gradgradcheck`.
     """
-    func, diffvars = gradchecker(dtype, name, cn_function, count_function)
+    func, diffvars = gradchecker(dtype, name, cn_function)
     assert dgradgradcheck(func, diffvars, atol=tol)
 
 
@@ -110,7 +103,6 @@ def gradchecker_batch(
     name1: str,
     name2: str,
     cnf: CNFunction,
-    count_function: CountingFunction,
 ) -> tuple[
     Callable[[Tensor], Tensor],  # autograd function
     Tensor,  # differentiable variables
@@ -135,7 +127,7 @@ def gradchecker_batch(
     positions = positions.requires_grad_(True)
 
     def func(pos: Tensor) -> Tensor:
-        return cnf(numbers, pos, counting_function=count_function)
+        return cnf(numbers, pos)
 
     return func, positions
 
@@ -145,21 +137,14 @@ def gradchecker_batch(
 @pytest.mark.parametrize("name1", ["SiH4"])
 @pytest.mark.parametrize("name2", sample_list)
 @pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq])
-@pytest.mark.parametrize("count_function", [exp_count, erf_count, gfn2_count])
 def test_gradcheck_batch(
-    dtype: torch.dtype,
-    name1: str,
-    name2: str,
-    cn_function: CNFunction,
-    count_function: CountingFunction,
+    dtype: torch.dtype, name1: str, name2: str, cn_function: CNFunction
 ) -> None:
     """
     Check a single analytical gradient of parameters against numerical
     gradient from `torch.autograd.gradcheck`.
     """
-    func, diffvars = gradchecker_batch(
-        dtype, name1, name2, cn_function, count_function
-    )
+    func, diffvars = gradchecker_batch(dtype, name1, name2, cn_function)
     assert dgradcheck(func, diffvars, atol=tol)
 
 
@@ -168,19 +153,12 @@ def test_gradcheck_batch(
 @pytest.mark.parametrize("name1", ["SiH4"])
 @pytest.mark.parametrize("name2", sample_list)
 @pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq])
-@pytest.mark.parametrize("count_function", [exp_count, erf_count, gfn2_count])
 def test_gradgradcheck_batch(
-    dtype: torch.dtype,
-    name1: str,
-    name2: str,
-    cn_function: CNFunction,
-    count_function: CountingFunction,
+    dtype: torch.dtype, name1: str, name2: str, cn_function: CNFunction
 ) -> None:
     """
     Check a single analytical gradient of parameters against numerical
     gradient from `torch.autograd.gradgradcheck`.
     """
-    func, diffvars = gradchecker_batch(
-        dtype, name1, name2, cn_function, count_function
-    )
+    func, diffvars = gradchecker_batch(dtype, name1, name2, cn_function)
     assert dgradgradcheck(func, diffvars, atol=tol)

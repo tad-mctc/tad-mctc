@@ -24,7 +24,6 @@ import pytest
 import torch
 
 from tad_mctc.batch import pack
-from tad_mctc.data import radii
 from tad_mctc.ncoord import cn_d3 as get_cn
 from tad_mctc.typing import DD
 
@@ -43,11 +42,9 @@ def test_single(dtype: torch.dtype, name: str) -> None:
     numbers = sample["numbers"].to(DEVICE)
     positions = sample["positions"].to(**dd)
 
-    rcov = radii.COV_D3(**dd)[numbers]
-    cutoff = torch.tensor(30.0, **dd)
     ref = sample["cn_d3"].to(**dd)
 
-    cn = get_cn(numbers, positions, rcov=rcov, cutoff=cutoff)
+    cn = get_cn(numbers, positions)
     assert pytest.approx(ref.cpu()) == cn.cpu()
 
 

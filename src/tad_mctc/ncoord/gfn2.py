@@ -15,30 +15,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Coordination number: DFT-D4
-===========================
+Coordination number: GFN2-xTB
+=============================
 
-Calculation of DFT-D4 coordination number. Includes electronegativity-
-dependent term.
+Calculation of the double-exponential coordination number used in GFN2-xTB.
 """
-
 from __future__ import annotations
 
 import torch
 
-from ..data import en as eneg
 from ..data import radii
 from ..typing import DD, Tensor
 from . import defaults
 from .common import coordination_number
-from .count import erf_count
+from .count import gfn2_count
 
-__all__ = ["cn_d4"]
+__all__ = ["cn_gfn2"]
 
 
-def cn_d4(numbers: Tensor, positions: Tensor) -> Tensor:
+def cn_gfn2(numbers: Tensor, positions: Tensor) -> Tensor:
     """
-    Compute the D4 fractional coordination number.
+    Compute the double-exponential (GFN2-xTB) coordination number.
 
     Parameters
     ----------
@@ -46,27 +43,19 @@ def cn_d4(numbers: Tensor, positions: Tensor) -> Tensor:
         Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
         Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
-
     Returns
     -------
     Tensor
         Coordination numbers for all atoms (shape: ``(..., nat)``).
     """
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
-    cutoff = torch.tensor(defaults.CUTOFF_D4, **dd)
+    cutoff = torch.tensor(defaults.CUTOFF_GFN2, **dd)
     rcov = radii.COV_D3(**dd)[numbers]
-    en = eneg.PAULING(**dd)[numbers]
-
-    endiff = torch.abs(en.unsqueeze(-2) - en.unsqueeze(-1))
-    weight = defaults.D4_K4 * torch.exp(
-        -((endiff + defaults.D4_K5) ** 2.0) / defaults.D4_K6
-    )
 
     return coordination_number(
         numbers,
         positions,
-        counting_function=erf_count,
+        counting_function=gfn2_count,
         rcov=rcov,
         cutoff=cutoff,
-        pair_weight=weight,
     )

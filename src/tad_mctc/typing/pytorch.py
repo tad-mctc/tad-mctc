@@ -502,7 +502,7 @@ class ModuleLike(torch.nn.Module):
     def _reference_tensor(self) -> torch.Tensor:
         try:
             return next(self.buffers(recurse=False))
-        except StopIteration as exc:  # pragma: no cover - defensive
+        except StopIteration as exc:  # pragma: no cover
             raise RuntimeError(
                 f"{self.__class__.__name__} must register at least one buffer "
                 f"to expose device/dtype."

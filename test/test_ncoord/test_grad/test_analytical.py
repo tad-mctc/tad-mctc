@@ -44,25 +44,11 @@ from ..utils import numgrad
 sample_list = ["SiH4", "PbH4-BiH3", "MB16_43_01"]
 
 
-@pytest.mark.parametrize(
-    "function",
-    [
-        (cn_d3, cn_d3_gradient),
-    ],
-)
-@pytest.mark.parametrize(
-    "cfunc",
-    [
-        (exp_count, dexp_count),
-        (erf_count, derf_count),
-        (gfn2_count, dgfn2_count),
-    ],
-)
+@pytest.mark.parametrize("function", [(cn_d3, cn_d3_gradient)])
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("name", sample_list)
 def test_single(
     function: tuple[CNFunction, CNGradFunction],
-    cfunc: tuple[CountingFunction, CountingFunction],
     dtype: torch.dtype,
     name: str,
 ) -> None:
@@ -74,10 +60,8 @@ def test_single(
     positions = sample["positions"].to(**dd)
     cutoff = torch.tensor(50, **dd)
 
-    numdr = numgrad(function[0], cfunc[0], numbers, positions)
-    dcndr = function[1](
-        numbers, positions, dcounting_function=cfunc[1], cutoff=cutoff
-    )
+    numdr = numgrad(function[0], numbers, positions)
+    dcndr = function[1](numbers, positions)
 
     # the same atom gets masked in the PyTorch implementation
     mask = real_pairs(numbers, mask_diagonal=True).unsqueeze(-1)
@@ -86,26 +70,12 @@ def test_single(
     assert pytest.approx(dcndr.cpu(), abs=tol) == numdr.cpu()
 
 
-@pytest.mark.parametrize(
-    "function",
-    [
-        (cn_d3, cn_d3_gradient),
-    ],
-)
-@pytest.mark.parametrize(
-    "cfunc",
-    [
-        (exp_count, dexp_count),
-        (erf_count, derf_count),
-        (gfn2_count, dgfn2_count),
-    ],
-)
+@pytest.mark.parametrize("function", [(cn_d3, cn_d3_gradient)])
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("name1", ["SiH4"])
 @pytest.mark.parametrize("name2", sample_list)
 def test_batch(
     function: tuple[CNFunction, CNGradFunction],
-    cfunc: tuple[CountingFunction, CountingFunction],
     dtype: torch.dtype,
     name1: str,
     name2: str,
@@ -128,8 +98,8 @@ def test_batch(
         )
     )
 
-    numdr = numgrad(function[0], cfunc[0], numbers, positions)
-    dcndr = function[1](numbers, positions, dcounting_function=cfunc[1])
+    numdr = numgrad(function[0], numbers, positions)
+    dcndr = function[1](numbers, positions)
 
     # the same atom gets masked in the PyTorch implementation
     mask = real_pairs(numbers, mask_diagonal=True).unsqueeze(-1)

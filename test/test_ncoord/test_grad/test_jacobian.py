@@ -48,19 +48,10 @@ sample_list = ["SiH4", "PbH4-BiH3", "MB16_43_01"]
 
 
 @pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq])
-@pytest.mark.parametrize(
-    "cfunc",
-    [
-        (exp_count, dexp_count),
-        (erf_count, derf_count),
-        (gfn2_count, dgfn2_count),
-    ],
-)
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("name", sample_list)
 def test_single(
     function: CNFunction,
-    cfunc: tuple[CountingFunction, CountingFunction],
     dtype: torch.dtype,
     name: str,
 ) -> None:
@@ -72,10 +63,10 @@ def test_single(
     positions = sample["positions"].to(**dd)
 
     # numerical gradient as ref
-    numdr = numgrad(function, cfunc[0], numbers, positions)
+    numdr = numgrad(function, numbers, positions)
 
     def wrapper(pos: Tensor) -> Tensor:
-        return function(numbers, pos, counting_function=cfunc[0])
+        return function(numbers, pos)
 
     pos = positions.detach().clone().requires_grad_(True)
     jac: Tensor = jacrev(wrapper)(pos)  # type: ignore
@@ -83,20 +74,11 @@ def test_single(
 
 
 @pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq])
-@pytest.mark.parametrize(
-    "cfunc",
-    [
-        (exp_count, dexp_count),
-        (erf_count, derf_count),
-        (gfn2_count, dgfn2_count),
-    ],
-)
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("name1", ["SiH4"])
 @pytest.mark.parametrize("name2", sample_list)
 def test_batch(
     function: CNFunction,
-    cfunc: tuple[CountingFunction, CountingFunction],
     dtype: torch.dtype,
     name1: str,
     name2: str,
@@ -120,10 +102,10 @@ def test_batch(
     )
 
     # numerical gradient as ref
-    numdr = numgrad(function, cfunc[0], numbers, positions)
+    numdr = numgrad(function, numbers, positions)
 
     def wrapper(num: Tensor, pos: Tensor) -> Tensor:
-        return function(num, pos, counting_function=cfunc[0])
+        return function(num, pos)
 
     pos = positions.detach().clone().requires_grad_(True)
     jac: Tensor = bjacrev(wrapper, argnums=1)(numbers, pos)  # type: ignore

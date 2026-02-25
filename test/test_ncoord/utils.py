@@ -6,14 +6,13 @@ from __future__ import annotations
 
 import torch
 
-from tad_mctc.typing import CNFunction, CountingFunction, Tensor
+from tad_mctc.typing import Callable, Tensor
 
 __all__ = ["numgrad"]
 
 
 def numgrad(
-    function: CNFunction,
-    cf: CountingFunction,
+    function: Callable[[Tensor, Tensor], Tensor],
     numbers: Tensor,
     positions: Tensor,
 ) -> Tensor:
@@ -29,10 +28,10 @@ def numgrad(
     for i in range(nat):
         for j in range(3):
             pos[..., i, j] += step
-            cnr = function(numbers, pos, counting_function=cf)
+            cnr = function(numbers, pos)
 
             pos[..., i, j] -= 2 * step
-            cnl = function(numbers, pos, counting_function=cf)
+            cnl = function(numbers, pos)
 
             pos[..., i, j] += step
             gradient[..., :, i, j] = 0.5 * (cnr - cnl) / step

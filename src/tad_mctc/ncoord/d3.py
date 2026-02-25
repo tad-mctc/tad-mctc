@@ -30,22 +30,16 @@ from ..batch import real_pairs
 from ..data import radii
 from ..typing import DD, Any, CountingFunction, Tensor
 from . import defaults
+from .common import coordination_number
 from .count import dexp_count, exp_count
 
 __all__ = ["cn_d3", "cn_d3_gradient"]
 
 
-def cn_d3(
-    numbers: Tensor,
-    positions: Tensor,
-    *,
-    counting_function: CountingFunction | None = None,
-    rcov: Tensor | None = None,
-    cutoff: Tensor | None = None,
-    **kwargs: Any,
-) -> Tensor:
+def cn_d3(numbers: Tensor, positions: Tensor) -> Tensor:
     """
-    Compute the D3 fractional coordination (exponential counting function).
+    Compute the D3 fractional coordination number using the default parameters
+    described in :mod:`tad_mctc.ncoord.defaults`.
 
     Parameters
     ----------
@@ -53,112 +47,23 @@ def cn_d3(
         Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
         Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
-    counting_function : CountingFunction, optional
-        Counting function for CN. Defaults to
-        :func:`tad_mctc.ncoord.count.exp_count`.
-    rcov : Tensor | None, optional
-        Covalent radii for each species. Defaults to ``None``.
-    cutoff : Tensor | None, optional
-        Real-space cutoff. Defaults to ``None``.
-    kwargs : dict[str, Any]
-        Pass-through arguments for counting function. For example, ``kcn``,
-        the steepness of the counting function, which defaults to
-        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
 
     Returns
     -------
     Tensor
         Coordination numbers for all atoms (shape: ``(..., nat)``).
-
-    Raises
-    ------
-    ValueError
-        If shape mismatch between ``numbers``, ``positions`` and
-        ``rcov`` is detected.
     """
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
+    cutoff = torch.tensor(defaults.CUTOFF_D3, **dd)
+    rcov = radii.COV_D3(**dd)[numbers]
 
-    if cutoff is None:
-        cutoff = torch.tensor(defaults.CUTOFF_D3, **dd)
-
-    if rcov is None:
-        rcov = radii.COV_D3(**dd)[numbers]
-    else:
-        rcov = rcov.to(**dd)
-
-    if counting_function is None:
-        counting_function = exp_count
-
-    if numbers.shape != rcov.shape:
-        raise ValueError(
-            f"Shape of covalent radii {rcov.shape} is not consistent with "
-            f"({numbers.shape})."
-        )
-    if numbers.shape != positions.shape[:-1]:
-        raise ValueError(
-            f"Shape of positions ({positions.shape[:-1]}) is not consistent "
-            f"with atomic numbers ({numbers.shape})."
-        )
-
-    return _cn_d3(
+    return coordination_number(
         numbers,
         positions,
-        counting_function=counting_function,
+        counting_function=exp_count,
         rcov=rcov,
         cutoff=cutoff,
-        **kwargs,
     )
-
-
-def _cn_d3(
-    numbers: Tensor,
-    positions: Tensor,
-    *,
-    counting_function: CountingFunction,
-    rcov: Tensor,
-    cutoff: Tensor,
-    **kwargs: Any,
-) -> Tensor:
-    """
-    Compute the D3 fractional coordination (exponential counting function)
-    without any checks.
-
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
-    positions : Tensor
-        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
-    counting_function : CountingFunction
-        Counting function for CN.
-    rcov : Tensor
-        Covalent radii for each species (shape: ``(..., nat)``).
-    cutoff : Tensor
-        Real-space cutoff.
-    kwargs : dict[str, Any]
-        Pass-through arguments for counting function. For example, ``kcn``,
-        the steepness of the counting function, which defaults to
-        :data:`tad_mctc.ncoord.defaults.KCN_D3`.
-
-    Returns
-    -------
-    Tensor
-        Coordination numbers for all atoms (shape: ``(..., nat)``).
-    """
-    dd: DD = {"device": positions.device, "dtype": positions.dtype}
-    eps = torch.tensor(torch.finfo(positions.dtype).eps, **dd)
-
-    mask = real_pairs(numbers, mask_diagonal=True)
-    distances = torch.where(mask, storch.cdist(positions, positions, p=2), eps)
-
-    rc = rcov.unsqueeze(-2) + rcov.unsqueeze(-1)
-    cf = torch.where(
-        mask * (distances <= cutoff),
-        counting_function(distances, rc, **kwargs),
-        torch.tensor(0.0, **dd),
-    )
-
-    return torch.sum(cf, dim=-1)
 
 
 def cn_d3_gradient(

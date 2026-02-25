@@ -25,7 +25,7 @@ import pytest
 import torch
 
 from tad_mctc.batch import pack, real_pairs
-from tad_mctc.ncoord import cn_d3, cn_d3_gradient, dexp_count, exp_count
+from tad_mctc.ncoord import cn_d3, cn_d3_gradient, dexp_count
 from tad_mctc.typing import DD
 
 from ...conftest import DEVICE
@@ -49,7 +49,7 @@ def test_single(dtype: torch.dtype, name: str) -> None:
     ref = ref.reshape(numbers.shape[0], numbers.shape[0], 3)
 
     dcndr = cn_d3_gradient(numbers, positions, dcounting_function=dexp_count)
-    numdr = numgrad(cn_d3, exp_count, numbers, positions)
+    numdr = numgrad(cn_d3, numbers, positions)
 
     # the same atom gets masked in the PyTorch implementation
     mask = real_pairs(numbers, mask_diagonal=True).unsqueeze(-1)
@@ -95,7 +95,7 @@ def test_batch(dtype: torch.dtype, name1: str, name2: str) -> None:
     )
 
     dcndr = cn_d3_gradient(numbers, positions, dcounting_function=dexp_count)
-    numdr = numgrad(cn_d3, exp_count, numbers, positions)
+    numdr = numgrad(cn_d3, numbers, positions)
 
     # the same atom gets masked in the PyTorch implementation
     mask = real_pairs(numbers, mask_diagonal=True).unsqueeze(-1)

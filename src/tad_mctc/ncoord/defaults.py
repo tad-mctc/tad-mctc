@@ -31,6 +31,9 @@ __all__ = [
     "CUTOFF_D4",
     "CUTOFF_EEQ",
     "CUTOFF_EEQ_MAX",
+    "CUTOFF_EEQBC",
+    "CUTOFF_GFN2",
+    "KCN_EEQ_EN",
     "KCN_D4",
     "D4_K4",
     "D4_K5",
@@ -42,6 +45,9 @@ KCN_EEQ = 7.5
 
 KCN_D3 = 16.0
 """Steepness of counting function in GFN1."""
+
+KCN_EEQ_EN = 2.60
+"""Steepness of counting function in the EN-weighted EEQ model (2.60)."""
 
 KA = 10.0
 """Steepness of first counting function in GFN2."""
@@ -64,6 +70,12 @@ CUTOFF_EEQ = 25.0
 
 CUTOFF_EEQ_MAX = 8.0
 """Maximum coordination number (8.0)."""
+
+CUTOFF_EEQBC = 25.0
+"""Coordination number cutoff within EEQBC (25.0)."""
+
+CUTOFF_GFN2 = 25.0
+"""Coordination number cutoff within GFN2-xTB (25.0)."""
 
 
 KCN_D4 = 7.5
