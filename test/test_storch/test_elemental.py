@@ -17,6 +17,7 @@
 """
 Test elemental safeops.
 """
+
 from __future__ import annotations
 
 import pytest

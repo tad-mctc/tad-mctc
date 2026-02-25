@@ -18,6 +18,7 @@
 Tests taken from TBMaLT.
 https://github.com/tbmalt/tbmalt/blob/development/tests/unittests/test_maths.py
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -96,10 +97,10 @@ def test_eighb_fail() -> None:
 
     a = symmetrizef(numpy_to_tensor(np.random.rand(10, 10), **dd))
     with pytest.raises(ValueError):
-        storch.linalg.eighb(a, broadening_method="unknown")  # type:ignore
+        storch.linalg.eighb(a, broadening_method="unknown")  # type: ignore
 
     with pytest.raises(ValueError):
-        storch.linalg.eighb(a, b=a, scheme="unknown")  # type:ignore
+        storch.linalg.eighb(a, b=a, scheme="unknown")  # type: ignore
 
 
 def test_eighb_standard_single() -> None:
@@ -208,7 +209,7 @@ def test_eighb_general_batch() -> None:
         schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
         for scheme in schemes:
             for aux in aux_settings:
-                (w_calc, _) = storch.linalg.eighb(
+                w_calc, _ = storch.linalg.eighb(
                     a_batch, b_batch, scheme=scheme, aux=aux, is_posdef=True
                 )
 

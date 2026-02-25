@@ -20,6 +20,7 @@ Data: Masses
 
 This module contains masses.
 """
+
 from __future__ import annotations
 
 import torch

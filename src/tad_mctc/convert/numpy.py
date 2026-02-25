@@ -20,6 +20,7 @@ Conversion: numpy
 
 This module contains safe functions for numpy and pytorch interconversion.
 """
+
 from __future__ import annotations
 
 import numpy as np

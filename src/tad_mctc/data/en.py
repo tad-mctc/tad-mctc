@@ -20,6 +20,7 @@ Data: Electronegativities
 
 Pauling electronegativities, used for the covalent coordination number.
 """
+
 from __future__ import annotations
 
 import torch

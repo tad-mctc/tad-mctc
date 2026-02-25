@@ -17,6 +17,7 @@
 """
 Test calculation of DFT-D4 coordination number.
 """
+
 from __future__ import annotations
 
 import pytest

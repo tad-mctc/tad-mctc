@@ -17,6 +17,7 @@
 """
 Test the JSON/QCSchema file reader.
 """
+
 import tempfile
 from pathlib import Path
 

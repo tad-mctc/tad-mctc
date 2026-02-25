@@ -20,6 +20,7 @@ Units: Energy
 
 This module contains conversions for units of energy.
 """
+
 from __future__ import annotations
 
 from .codata import CODATA, get_constant

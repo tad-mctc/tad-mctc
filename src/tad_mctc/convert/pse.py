@@ -21,6 +21,7 @@ Conversion: PSE
 Mapping of the Periodic Systems of Elements (PSE) from atomic number to symbols
 and vice versa.
 """
+
 from __future__ import annotations
 
 import torch

@@ -17,6 +17,7 @@
 """
 Test interconversion of atomic symbols and numbers.
 """
+
 import torch
 
 from tad_mctc import convert

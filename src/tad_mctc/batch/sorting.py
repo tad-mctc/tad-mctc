@@ -23,6 +23,7 @@ Batch Utility: Sorting
 
 Sort a packed ``tensor`` while ignoring any padding values.
 """
+
 from __future__ import annotations
 
 import torch

@@ -20,6 +20,7 @@ Coordination number: EEQ
 
 Calculation of coordination number for the EEQ model.
 """
+
 from __future__ import annotations
 
 import torch

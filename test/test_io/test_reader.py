@@ -17,6 +17,7 @@
 """
 Test the general file reader.
 """
+
 from pathlib import Path
 
 import pytest

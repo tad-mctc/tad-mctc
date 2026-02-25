@@ -20,6 +20,7 @@ Units: Spectroscopy
 
 This module contains conversions for units used in spectroscopy.
 """
+
 from __future__ import annotations
 
 from .codata import CODATA

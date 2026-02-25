@@ -44,6 +44,7 @@ a constant if a clash is detected
 
 For more details and examples, check `test/test_io/test_deflatable.py`.
 """
+
 from __future__ import annotations
 
 import torch

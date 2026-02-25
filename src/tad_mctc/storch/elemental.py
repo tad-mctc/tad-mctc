@@ -20,6 +20,7 @@ SafeOps: Elementary Functions
 
 Safe versions of elementary functions like `sqrt` or `abs`.
 """
+
 from __future__ import annotations
 
 import torch

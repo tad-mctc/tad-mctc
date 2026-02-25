@@ -20,6 +20,7 @@ Units: Mass
 
 This module contains conversions for units of mass.
 """
+
 from __future__ import annotations
 
 from .codata import CODATA, get_constant

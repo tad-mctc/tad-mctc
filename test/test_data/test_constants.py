@@ -17,6 +17,7 @@
 """
 Test physical constants.
 """
+
 from __future__ import annotations
 
 import pytest

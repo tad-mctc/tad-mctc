@@ -21,6 +21,7 @@ I/O Write: XYZ
 Writer for standard XYZ files.
 See https://en.wikipedia.org/wiki/XYZ_file_format.
 """
+
 from __future__ import annotations
 
 from ...data import pse
