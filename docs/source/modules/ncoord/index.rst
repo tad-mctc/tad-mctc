@@ -4,9 +4,10 @@
 
 .. toctree::
 
+   common
    count
    d3
    d4
    defaults
    eeq
-   typing
+   gfn2
