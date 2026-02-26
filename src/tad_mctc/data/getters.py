@@ -64,7 +64,7 @@ def get_atomic_masses(
     from .mass import ATOMIC
 
     m = ATOMIC(device=device, dtype=dtype)[numbers]
-    return m * GMOL2AU if atomic_units is True else m
+    return m if atomic_units is True else m / GMOL2AU
 
 
 def get_zvalence(

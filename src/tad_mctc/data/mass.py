@@ -31,7 +31,7 @@ __all__ = ["ATOMIC"]
 
 
 def ATOMIC(
-    device: torch.device | None = None, dtype: torch.dtype = torch.double
+    device: torch.device | None = None, dtype: torch.dtype | None = torch.double
 ) -> torch.Tensor:
     """
     Isotope-averaged atom masses in atomic units (in g/mol) from
@@ -49,6 +49,8 @@ def ATOMIC(
     Tensor
         Atomic masses in atomic units.
     """
+    if dtype is None:
+        dtype = torch.double
 
     _ATOMIC = [
         0.0,  # dummy

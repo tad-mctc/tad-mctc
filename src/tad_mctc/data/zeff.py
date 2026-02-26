@@ -32,9 +32,12 @@ __all__ = ["ECORE", "ZEFF", "ZVALENCE"]
 
 
 def ECORE(
-    device: torch.device | None = None, dtype: torch.dtype = torch.int8
+    device: torch.device | None = None, dtype: torch.dtype | None = torch.int8
 ) -> torch.Tensor:
     """Number of core electrons."""
+    if dtype is None:
+        dtype = torch.int8
+
     # fmt: off
     _ECORE = [
         0,                                                         # dummy
@@ -56,9 +59,11 @@ def ECORE(
 
 
 def ZEFF(
-    device: torch.device | None = None, dtype: torch.dtype = torch.int8
+    device: torch.device | None = None, dtype: torch.dtype | None = torch.int8
 ) -> torch.Tensor:
     """Effective nuclear charges from the def2-ECPs."""
+    if dtype is None:
+        dtype = torch.int8
 
     # fmt: off
     _ZEFF = [
@@ -80,9 +85,11 @@ def ZEFF(
 
 
 def ZVALENCE(
-    device: torch.device | None = None, dtype: torch.dtype = torch.int8
+    device: torch.device | None = None, dtype: torch.dtype | None = torch.int8
 ) -> torch.Tensor:
     """Charge of the valence shell."""
+    if dtype is None:
+        dtype = torch.int8
 
     # fmt: off
     _ZVALENCE = [

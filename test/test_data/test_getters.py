@@ -82,12 +82,12 @@ def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
         "tad_mctc.data.mass.ATOMIC",
         side_effect=lambda dtype=torch.float64, device=None: mock_mass_tensor,
     ):
-        ref = mock_mass_tensor[atomic_numbers] * GMOL2AU
+        ref = mock_mass_tensor[atomic_numbers]
         assert (
             pytest.approx(ref.cpu()) == get_atomic_masses(atomic_numbers).cpu()
         )
 
-        ref_no_au = mock_mass_tensor[atomic_numbers]
+        ref_no_au = mock_mass_tensor[atomic_numbers] / GMOL2AU
         assert (
             pytest.approx(ref_no_au.cpu())
             == get_atomic_masses(atomic_numbers, atomic_units=False).cpu()

@@ -116,7 +116,7 @@ def test_eighb_standard_single() -> None:
         factor = torch.tensor(1e-12, **dd)
         w_calc, v_calc = storch.linalg.eighb(a, factor=factor, aux=False)
 
-        mae_w = torch.max(torch.abs(w_calc.cpu() - w_ref))
+        mae_w = torch.max(torch.abs(w_calc - w_ref))
         mae_v = torch.max(torch.abs((v_calc @ v_calc.T).fill_diagonal_(0)))
 
         dev_str = torch.device("cpu") if DEVICE is None else DEVICE
@@ -171,7 +171,7 @@ def test_eighb_general_single(direct_inverse: bool) -> None:
                 a, b, scheme=scheme, direct_inv=direct_inverse
             )
 
-            mae_w = torch.max(torch.abs(w_calc.cpu() - w_ref))
+            mae_w = torch.max(torch.abs(w_calc - w_ref))
             mae_v = torch.max(torch.abs((v_calc @ v_calc.T).fill_diagonal_(0)))
 
             dev_str = torch.device("cpu") if DEVICE is None else DEVICE
