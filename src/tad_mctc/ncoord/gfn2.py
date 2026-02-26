@@ -20,6 +20,7 @@ Coordination number: GFN2-xTB
 
 Calculation of the double-exponential coordination number used in GFN2-xTB.
 """
+
 from __future__ import annotations
 
 import torch

@@ -20,6 +20,7 @@ Coordination number: Common helpers
 
 Generic building blocks that mirror the container-based design of mctc-lib.
 """
+
 from __future__ import annotations
 
 import torch

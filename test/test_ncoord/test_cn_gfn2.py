@@ -17,6 +17,7 @@
 """
 Test calculation of GFN2-xTB coordination number.
 """
+
 from __future__ import annotations
 
 import pytest
