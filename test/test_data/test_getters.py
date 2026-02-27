@@ -79,7 +79,7 @@ def mock_vdw_pairwise_tensor():
 def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
     # patch the name that `get_atomic_masses()` dereferences
     with patch(
-        "tad_mctc.data.mass.ATOMIC",
+        "tad_mctc.data.mass.ATOMIC_MASS",
         side_effect=lambda dtype=torch.float64, device=None: mock_mass_tensor,
     ):
         ref = mock_mass_tensor[atomic_numbers]
@@ -94,6 +94,20 @@ def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
         )
 
 
+def test_get_atomic_radii(atomic_numbers, mock_mass_tensor):
+    # patch the name that `get_atomic_radii()` dereferences
+    with patch(
+        "tad_mctc.data.radii.ATOMIC_RADII",
+        side_effect=lambda dtype=torch.float64, device=None: mock_mass_tensor,
+    ):
+        ref = mock_mass_tensor[atomic_numbers]
+        from tad_mctc.data.getters import get_atomic_radii
+
+        assert (
+            pytest.approx(ref.cpu()) == get_atomic_radii(atomic_numbers).cpu()
+        )
+
+
 def test_get_zvalence(atomic_numbers, mock_zeff_tensor):
     with patch(
         "tad_mctc.data.zeff.ZVALENCE",
@@ -103,7 +117,7 @@ def test_get_zvalence(atomic_numbers, mock_zeff_tensor):
         assert pytest.approx(ref.cpu()) == get_zvalence(atomic_numbers).cpu()
 
 
-def test_get_ecore(atomic_numbers, mock_zeff_tensor):
+def test_get_ecore(atomic_numbers, mock_zeff_tensor) -> None:
     with patch(
         "tad_mctc.data.zeff.ECORE",
         side_effect=lambda dtype=torch.long, device=None: mock_zeff_tensor,
@@ -112,7 +126,7 @@ def test_get_ecore(atomic_numbers, mock_zeff_tensor):
         assert pytest.approx(ref.cpu()) == get_ecore(atomic_numbers).cpu()
 
 
-def test_get_hardness(atomic_numbers, mock_hardness_tensor):
+def test_get_hardness(atomic_numbers, mock_hardness_tensor) -> None:
     with patch(
         "tad_mctc.data.hardness.GAM",
         side_effect=lambda dtype=torch.float64, device=None: mock_hardness_tensor,
@@ -121,7 +135,7 @@ def test_get_hardness(atomic_numbers, mock_hardness_tensor):
         assert pytest.approx(ref.cpu()) == get_hardness(atomic_numbers).cpu()
 
 
-def test_get_vdw_pairwise(atomic_numbers, mock_vdw_pairwise_tensor):
+def test_get_vdw_pairwise(atomic_numbers, mock_vdw_pairwise_tensor) -> None:
     # patch the name that `get_vdw_pairwise()` dereferences
     with patch(
         "tad_mctc.data.radii.VDW_PAIRWISE",
@@ -135,10 +149,11 @@ def test_get_vdw_pairwise(atomic_numbers, mock_vdw_pairwise_tensor):
         )
 
 
-@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def test_load(dtype: torch.dtype) -> None:
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64, None])
+def test_load(dtype: torch.dtype | None) -> None:
     from tad_mctc.data import (
-        ATOMIC,
+        ATOMIC_MASS,
+        ATOMIC_RADII,
         ECORE,
         GAM,
         VDW_D3,
@@ -147,23 +162,26 @@ def test_load(dtype: torch.dtype) -> None:
         ZVALENCE,
     )
 
-    atomic = ATOMIC(dtype=dtype)
-    assert atomic.dtype == dtype
+    atomic = ATOMIC_MASS(dtype=dtype)
+    assert atomic.dtype == dtype or dtype is None
+
+    atomic = ATOMIC_RADII(dtype=dtype)
+    assert atomic.dtype == dtype or dtype is None
 
     ecore = ECORE(dtype=dtype)
-    assert ecore.dtype == dtype
+    assert ecore.dtype == dtype or dtype is None
 
     gam = GAM(dtype=dtype)
-    assert gam.dtype == dtype
+    assert gam.dtype == dtype or dtype is None
 
     vdw_d3 = VDW_D3(dtype=dtype)
-    assert vdw_d3.dtype == dtype
+    assert vdw_d3.dtype == dtype or dtype is None
 
     vdw_pairwise = VDW_PAIRWISE(dtype=dtype)
-    assert vdw_pairwise.dtype == dtype
+    assert vdw_pairwise.dtype == dtype or dtype is None
 
     zeff = ZEFF(dtype=dtype)
-    assert zeff.dtype == dtype
+    assert zeff.dtype == dtype or dtype is None
 
     zvalence = ZVALENCE(dtype=dtype)
-    assert zvalence.dtype == dtype
+    assert zvalence.dtype == dtype or dtype is None

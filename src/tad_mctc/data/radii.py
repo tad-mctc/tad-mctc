@@ -31,11 +31,11 @@ from .._version import __tversion__
 from ..typing import Any, Tensor
 from ..units import length
 
-__all__ = ["ATOMIC", "COV_D3", "VDW_D3", "VDW_PAIRWISE"]
+__all__ = ["ATOMIC_RADII", "COV_D3", "VDW_D3", "VDW_PAIRWISE"]
 
 
-def ATOMIC(
-    device: torch.device | None = None, dtype: torch.dtype = torch.double
+def ATOMIC_RADII(
+    device: torch.device | None = None, dtype: torch.dtype | None = torch.double
 ) -> Tensor:
     """
     Atomic radii.
@@ -52,6 +52,8 @@ def ATOMIC(
     Tensor
         Atomic radii.
     """
+    if dtype is None:
+        dtype = torch.double
 
     # fmt: off
     _ATOMIC = [
@@ -135,9 +137,11 @@ def COV_D3(
 
 
 def VDW_D3(
-    device: torch.device | None = None, dtype: torch.dtype = torch.double
+    device: torch.device | None = None, dtype: torch.dtype | None = torch.double
 ) -> Tensor:
     """D3 pairwise van-der-Waals radii (only homoatomic pairs present here)"""
+    if dtype is None:
+        dtype = torch.double
 
     # fmt: off
     _VDW_D3 = [
@@ -178,7 +182,7 @@ def VDW_D3(
 
 
 def _load_vdw_rad_pairwise(
-    device: torch.device | None = None, dtype: torch.dtype = torch.double
+    device: torch.device | None = None, dtype: torch.dtype | None = torch.double
 ) -> Tensor:
     """
     Load reference VDW radii from file.
@@ -195,6 +199,9 @@ def _load_vdw_rad_pairwise(
     Tensor
         VDW radii.
     """
+    if dtype is None:
+        dtype = torch.double
+
     kwargs: dict[str, Any] = {"map_location": device}
     if __tversion__ > (1, 12, 1):  # pragma: no cover
         kwargs["weights_only"] = True
@@ -206,7 +213,7 @@ def _load_vdw_rad_pairwise(
 
 
 def VDW_PAIRWISE(
-    device: torch.device | None = None, dtype: torch.dtype = torch.double
+    device: torch.device | None = None, dtype: torch.dtype | None = torch.double
 ) -> Tensor:
     """
     Pair-wise Van-der-Waals radii.

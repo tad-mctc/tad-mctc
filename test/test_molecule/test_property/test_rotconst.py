@@ -23,7 +23,7 @@ Test the calculation of the rotational constants.
 # import pytest
 # import torch
 
-# from tad_mctc.data.mass import ATOMIC
+# from tad_mctc.data.mass import ATOMIC_MASS
 # from tad_mctc.data.molecules import mols as samples
 # from tad_mctc.molecule import property
 # from tad_mctc.typing import DD
@@ -43,7 +43,7 @@ Test the calculation of the rotational constants.
 #     sample = samples[name]
 #     numbers = sample["numbers"].to(DEVICE)
 #     positions = sample["positions"].to(**dd)
-#     masses = ATOMIC(**dd)[numbers]
+#     masses = ATOMIC_MASS(**dd)[numbers]
 
 #     ref = torch.tensor([2.0 / 3, 0.0, 0.0], **dd)
 #     a = property.rot_consts(masses, positions)

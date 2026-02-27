@@ -27,10 +27,10 @@ import torch
 
 from ..units.mass import GMOL2AU
 
-__all__ = ["ATOMIC"]
+__all__ = ["ATOMIC_MASS"]
 
 
-def ATOMIC(
+def ATOMIC_MASS(
     device: torch.device | None = None, dtype: torch.dtype | None = torch.double
 ) -> torch.Tensor:
     """

@@ -61,10 +61,40 @@ def get_atomic_masses(
     """
     # pylint: disable=import-outside-toplevel
     from ..units import GMOL2AU
-    from .mass import ATOMIC
+    from .mass import ATOMIC_MASS
 
-    m = ATOMIC(device=device, dtype=dtype)[numbers]
+    m = ATOMIC_MASS(device=device, dtype=dtype)[numbers]
     return m if atomic_units is True else m / GMOL2AU
+
+
+def get_atomic_radii(
+    numbers: Tensor,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+) -> Tensor:
+    """
+    Get atomic radii for all ``numbers``.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+    device : :class:`torch.device` | None, optional
+        Device to store the tensor. If ``None`` (default), the default device
+        is used.
+    dtype : :class:`torch.dtype`, optional
+        Data type of the tensor. If ``None`` (default), the default dtype
+        is used.
+
+    Returns
+    -------
+    Tensor
+        Atomic radii of shape ``(..., nat)``.
+    """
+    # pylint: disable=import-outside-toplevel
+    from .radii import ATOMIC_RADII
+
+    return ATOMIC_RADII(device=device, dtype=dtype)[numbers]
 
 
 def get_zvalence(

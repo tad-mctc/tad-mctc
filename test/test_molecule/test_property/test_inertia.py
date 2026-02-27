@@ -23,7 +23,7 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tad_mctc.data.mass import ATOMIC
+from tad_mctc.data.mass import ATOMIC_MASS
 from tad_mctc.molecule import center_of_mass, inertia_moment
 from tad_mctc.typing import DD
 
@@ -36,7 +36,7 @@ def test_single(dtype: torch.dtype) -> None:
 
     # H2 along z-axis
     numbers = torch.tensor([1, 1], device=DEVICE)
-    masses = ATOMIC(**dd)[numbers]
+    masses = ATOMIC_MASS(**dd)[numbers]
     positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]], **dd)
 
     # diagonal, with zeros for the z-axis (rotation axis), non-zero for x and y
@@ -99,7 +99,7 @@ def test_batch(dtype: torch.dtype) -> None:
         **dd,
     )
 
-    masses = ATOMIC(**dd)[numbers]
+    masses = ATOMIC_MASS(**dd)[numbers]
 
     ref = torch.tensor(
         [

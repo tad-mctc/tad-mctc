@@ -21,6 +21,7 @@ Test the checks for the numbers and positions given to the reader and writer.
 import pytest
 import torch
 
+from tad_mctc._version import __tversion__
 from tad_mctc.exceptions import MoleculeError, MoleculeWarning
 from tad_mctc.io import checks
 
@@ -131,3 +132,69 @@ def test_dimensions_fail() -> None:
     positions = torch.tensor([0.0, 0.0, 0.0])
     with pytest.raises(RuntimeError):
         checks.dimension_check(positions, min_ndim=2)
+
+
+###############################################################################
+# functorch short-circuit branches
+###############################################################################
+
+
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
+def test_coldfusion_functorch_via_jacrev() -> None:
+    """
+    Inside torch.func.jacrev, positions is a grad-tracking functorch tensor.
+    coldfusion_check must short-circuit and return True rather than raising,
+    even though the atoms are far too close to pass normally.
+    """
+    numbers = torch.tensor([1, 2])
+    positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1e-10]])
+
+    def f(pos: torch.Tensor) -> torch.Tensor:
+        assert checks.coldfusion_check(numbers, pos) is True
+        return pos.sum()
+
+    _ = torch.func.jacrev(f)(positions_close)
+
+
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
+def test_coldfusion_functorch_via_vmap() -> None:
+    """
+    Inside torch.func.vmap, numbers is a batched functorch tensor.
+    coldfusion_check must short-circuit on numbers before ever inspecting
+    positions, so dangerously-close atoms do not raise.
+    """
+    numbers_batch = torch.tensor([[1, 2], [1, 2]], dtype=torch.long)
+    positions_close = torch.tensor(
+        [
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 1e-10]],
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 1e-10]],
+        ]
+    )
+
+    def f(nums: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
+        assert checks.coldfusion_check(nums, pos) is True
+        return pos.sum()
+
+    _ = torch.func.vmap(f)(numbers_batch, positions_close)
+
+
+@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
+def test_content_functorch_via_vmap() -> None:
+    """
+    Inside torch.func.vmap, numbers is a batched functorch tensor.
+    `content_checks` must skip the max-element guard so that an oversized atomic
+    number in one batch element does not raise.
+    """
+    numbers_batch = torch.tensor([[1, 2], [1, 999]], dtype=torch.long)
+    positions_batch = torch.tensor(
+        [
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 1.5]],
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 1.5]],
+        ]
+    )
+
+    def f(nums: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
+        assert checks.content_checks(nums, pos) is True
+        return pos.sum()
+
+    _ = torch.func.vmap(f)(numbers_batch, positions_batch)

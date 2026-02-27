@@ -66,14 +66,12 @@ def test_coordination_number_custom_counting(cfunc: CountingFunction) -> None:
     positions = torch.tensor(
         [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=torch.float64
     )
-    rcov = torch.tensor([1.0, 1.0], dtype=torch.float64)
     cutoff = torch.tensor(5.0, dtype=torch.float64)
 
     res = coordination_number(
         numbers,
         positions,
         counting_function=cfunc,
-        rcov=rcov,
         cutoff=cutoff,
     )
     assert torch.isfinite(res).all()
