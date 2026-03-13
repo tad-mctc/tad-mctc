@@ -34,7 +34,7 @@ from tad_mctc.ncoord import (
     exp_count,
     gfn2_count,
 )
-from tad_mctc.typing import DD, Callable, CNFunction, CountingFunction, Tensor
+from tad_mctc.typing import DD, Callable, CNFunction, Tensor
 
 from ...conftest import DEVICE
 from ..samples import samples
