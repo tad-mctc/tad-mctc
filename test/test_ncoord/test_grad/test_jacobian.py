@@ -31,12 +31,6 @@ from tad_mctc.ncoord import (
     cn_d3,
     cn_d4,
     cn_eeq,
-    derf_count,
-    dexp_count,
-    dgfn2_count,
-    erf_count,
-    exp_count,
-    gfn2_count,
 )
 from tad_mctc.typing import DD, CNFunction, Tensor
 
