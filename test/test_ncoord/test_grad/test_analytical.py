@@ -58,7 +58,6 @@ def test_single(
     sample = samples[name]
     numbers = sample["numbers"].to(DEVICE)
     positions = sample["positions"].to(**dd)
-    cutoff = torch.tensor(50, **dd)
 
     numdr = numgrad(function[0], numbers, positions)
     dcndr = function[1](numbers, positions)
