@@ -38,6 +38,8 @@ on:
 
 jobs:
   main:
+    environment: testing
+
     strategy:
       fail-fast: false
       matrix:
