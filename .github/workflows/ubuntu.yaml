@@ -129,12 +129,39 @@ jobs:
         env:
           TOXENV: ${{ env.TOXENV }}
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@7f8b4b4bde536c465e797be725718b88c5d95e0e # 5.1.1
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
         if: >
           matrix.python-version == '3.11' &&
           matrix.torch-version == '2.6.0' &&
           matrix.os == 'ubuntu-latest'
         with:
-          files: ./coverage.xml # optional
+          name: coverage-data
+          path: ./coverage.xml
+          retention-days: 1 # We only need this temporarily to pass to the next job
+
+  # Step 2: Create a dedicated job for the upload
+  upload_coverage:
+    name: Upload to Codecov
+    needs: main
+    runs-on: ubuntu-latest
+    environment: codecov
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-data
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@7f8b4b4bde536c465e797be725718b88c5d95e0e # 5.1.1
+        with:
+          files: ./coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
