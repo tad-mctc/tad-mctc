@@ -35,6 +35,7 @@ from ..exceptions import DtypeError
 from .compat import CountingFunction, Self, TypeVar
 
 __all__ = [
+    "CNFunc",
     "CNFunction",
     "CNGradFunction",
     "DD",
@@ -571,9 +572,26 @@ class ModuleLike(torch.nn.Module):
 ##############################################################################
 
 
+class CNFunc(Protocol):
+    """
+    Type annotation for a specific coordination number function.
+    """
+
+    def __call__(
+        self,
+        numbers: Tensor,
+        positions: Tensor,
+        counting_function: CountingFunction,
+    ) -> Tensor:
+        """
+        Calculate the coordination number of each atom in the system.
+        """
+        ...
+
+
 class CNFunction(Protocol):
     """
-    Type annotation for coordination number function.
+    Type annotation for general coordination number function.
     """
 
     def __call__(

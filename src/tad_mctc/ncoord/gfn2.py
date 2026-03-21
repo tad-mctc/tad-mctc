@@ -26,7 +26,7 @@ from __future__ import annotations
 import torch
 
 from ..data import radii
-from ..typing import DD, Tensor
+from ..typing import DD, CountingFunction, Tensor
 from . import defaults
 from .common import coordination_number
 from .count import gfn2_count
@@ -34,7 +34,11 @@ from .count import gfn2_count
 __all__ = ["cn_gfn2"]
 
 
-def cn_gfn2(numbers: Tensor, positions: Tensor) -> Tensor:
+def cn_gfn2(
+    numbers: Tensor,
+    positions: Tensor,
+    counting_function: CountingFunction = gfn2_count,
+) -> Tensor:
     """
     Compute the double-exponential (GFN2-xTB) coordination number.
 
@@ -44,6 +48,11 @@ def cn_gfn2(numbers: Tensor, positions: Tensor) -> Tensor:
         Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
         Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    counting_function : CountingFunction, optional
+        Counting function used for the GFN2-xTB coordination number.
+        Defaults to the GFN2-xTB counting function
+        :func:`tad_mctc.ncoord.count.gfn2_count`.
+
     Returns
     -------
     Tensor
@@ -56,7 +65,7 @@ def cn_gfn2(numbers: Tensor, positions: Tensor) -> Tensor:
     return coordination_number(
         numbers,
         positions,
-        counting_function=gfn2_count,
+        counting_function=counting_function,
         rcov=rcov,
         cutoff=cutoff,
     )

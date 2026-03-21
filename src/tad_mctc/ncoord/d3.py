@@ -36,7 +36,11 @@ from .count import dexp_count, exp_count
 __all__ = ["cn_d3", "cn_d3_gradient"]
 
 
-def cn_d3(numbers: Tensor, positions: Tensor) -> Tensor:
+def cn_d3(
+    numbers: Tensor,
+    positions: Tensor,
+    counting_function: CountingFunction = exp_count,
+) -> Tensor:
     """
     Compute the D3 fractional coordination number using the default parameters
     described in :mod:`tad_mctc.ncoord.defaults`.
@@ -47,6 +51,10 @@ def cn_d3(numbers: Tensor, positions: Tensor) -> Tensor:
         Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
         Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    counting_function : CountingFunction, optional
+        Counting function used for the DFT-D3 coordination number.
+        Defaults to the exponential counting function
+        :func:`tad_mctc.ncoord.count.exp_count`.
 
     Returns
     -------
@@ -60,7 +68,7 @@ def cn_d3(numbers: Tensor, positions: Tensor) -> Tensor:
     return coordination_number(
         numbers,
         positions,
-        counting_function=exp_count,
+        counting_function=counting_function,
         rcov=rcov,
         cutoff=cutoff,
     )
