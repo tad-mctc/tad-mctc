@@ -25,16 +25,7 @@ import pytest
 import torch
 
 from tad_mctc.batch import pack, real_pairs
-from tad_mctc.ncoord import (  # cn_d4,; cn_d4_gradient,; cn_eeq,; cn_eeq_gradient,
-    cn_d3,
-    cn_d3_gradient,
-    derf_count,
-    dexp_count,
-    dgfn2_count,
-    erf_count,
-    exp_count,
-    gfn2_count,
-)
+from tad_mctc.ncoord import cn_d3, cn_d3_gradient
 from tad_mctc.typing import DD, CNFunction, CNGradFunction
 
 from ...conftest import DEVICE
