@@ -90,12 +90,6 @@ def coordination_number(
             f"with atomic numbers ({numbers.shape})."
         )
 
-    cutoff_tensor = (
-        cutoff.to(**dd)
-        if isinstance(cutoff, torch.Tensor)
-        else torch.tensor(cutoff, **dd)
-    )
-
     mask = real_pairs(numbers, mask_diagonal=True)
     eps = torch.tensor(torch.finfo(positions.dtype).eps, **dd)
     distances = torch.where(mask, storch.cdist(positions, positions, p=2), eps)
@@ -106,7 +100,17 @@ def coordination_number(
     if pair_weight is not None:
         counts = pair_weight.to(**dd) * counts
 
-    valid = mask & (distances <= cutoff_tensor)
+    if cutoff is not None:
+        cutoff_tensor = (
+            cutoff.to(**dd)
+            if isinstance(cutoff, torch.Tensor)
+            else torch.tensor(cutoff, **dd)
+        )
+
+        valid = mask & (distances <= cutoff_tensor)
+    else:
+        valid = mask
+
     zero = torch.tensor(0.0, **dd)
     cf = torch.where(valid, counts, zero)
     cn = torch.sum(cf, dim=-1)

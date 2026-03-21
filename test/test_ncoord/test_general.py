@@ -78,6 +78,45 @@ def test_coordination_number_custom_counting(cfunc: CountingFunction) -> None:
 
 
 @pytest.mark.parametrize("cfunc", [erf_count, exp_count, gfn2_count])
+def test_cutoff_none_vs_finite(cfunc: CountingFunction) -> None:
+    """
+    With a tight cutoff shorter than the interatomic distance the pair
+    contribution must be exactly zero. ``cutoff=None`` disables the distance
+    gate entirely, so the counting-function result flows through unmasked.
+
+    ``exp_count`` is strictly positive for any finite distance (its value
+    asymptotes to ``exp(-kcn) ≈ 1e-7`` rather than to exactly zero), which
+    allows asserting a strict inequality between the two cases.
+    """
+    numbers = torch.tensor([1, 1], dtype=torch.long)
+    positions = torch.tensor(
+        [[0.0, 0.0, 0.0], [100.0, 0.0, 0.0]], dtype=torch.float64
+    )
+
+    # Cutoff strictly smaller than the 100 Bohr interatomic distance
+    tight_cutoff = torch.tensor(50.0, dtype=torch.float64)
+
+    cn_no_cutoff = coordination_number(
+        numbers, positions, counting_function=cfunc
+    )
+    cn_with_cutoff = coordination_number(
+        numbers, positions, counting_function=cfunc, cutoff=tight_cutoff
+    )
+
+    # tight_cutoff (50 Bohr) < distance (100 Bohr) -> pair excluded, CN == 0
+    assert torch.all(cn_with_cutoff == 0.0)
+
+    # cutoff=None -> pair is not distance-gated; result is finite
+    assert torch.all(cn_no_cutoff >= 0.0)
+    assert torch.all(torch.isfinite(cn_no_cutoff))
+
+    # exp_count never reaches exactly zero for finite distances, so the
+    # no-cutoff CN must strictly exceed the zeroed tight-cutoff result
+    if cfunc is exp_count:
+        assert torch.all(cn_no_cutoff > cn_with_cutoff)
+
+
+@pytest.mark.parametrize("cfunc", [erf_count, exp_count, gfn2_count])
 def test_coordination_number_shape_fail(cfunc: CountingFunction) -> None:
     numbers = torch.tensor([1, 1], dtype=torch.long)
     positions = torch.tensor(
