@@ -28,7 +28,7 @@ import torch
 
 from ..data import en as eneg
 from ..data import radii
-from ..typing import DD, Tensor
+from ..typing import DD, CountingFunction, Tensor
 from . import defaults
 from .common import coordination_number
 from .count import erf_count
@@ -36,7 +36,11 @@ from .count import erf_count
 __all__ = ["cn_d4"]
 
 
-def cn_d4(numbers: Tensor, positions: Tensor) -> Tensor:
+def cn_d4(
+    numbers: Tensor,
+    positions: Tensor,
+    counting_function: CountingFunction = erf_count,
+) -> Tensor:
     """
     Compute the D4 fractional coordination number.
 
@@ -46,6 +50,10 @@ def cn_d4(numbers: Tensor, positions: Tensor) -> Tensor:
         Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
         Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    counting_function : CountingFunction, optional
+        Counting function used for the DFT-D4 coordination number.
+        Defaults to the error function counting function
+        :func:`tad_mctc.ncoord.count.erf_count`.
 
     Returns
     -------
@@ -65,7 +73,7 @@ def cn_d4(numbers: Tensor, positions: Tensor) -> Tensor:
     return coordination_number(
         numbers,
         positions,
-        counting_function=erf_count,
+        counting_function=counting_function,
         rcov=rcov,
         cutoff=cutoff,
         pair_weight=weight,

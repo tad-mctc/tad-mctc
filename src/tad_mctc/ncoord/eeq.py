@@ -27,7 +27,7 @@ import torch
 
 from ..data import en as eneg
 from ..data import radii
-from ..typing import DD, Tensor
+from ..typing import DD, CountingFunction, Tensor
 from . import defaults
 from .common import coordination_number, cut_coordination_number
 from .count import erf_count
@@ -35,7 +35,11 @@ from .count import erf_count
 __all__ = ["cn_eeq", "cn_eeq_en", "cut_coordination_number"]
 
 
-def cn_eeq(numbers: Tensor, positions: Tensor) -> Tensor:
+def cn_eeq(
+    numbers: Tensor,
+    positions: Tensor,
+    counting_function: CountingFunction = erf_count,
+) -> Tensor:
     """
     Compute fractional coordination number using an exponential counting
     function.
@@ -46,6 +50,11 @@ def cn_eeq(numbers: Tensor, positions: Tensor) -> Tensor:
         Atomic numbers for all atoms in the system of shape ``(..., nat)``.
     positions : Tensor
         Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    counting_function : CountingFunction, optional
+        Counting function used for the EEQ coordination number.
+        Defaults to the error function counting function
+        :func:`tad_mctc.ncoord.count.erf_count`.
+
     Returns
     -------
     Tensor
@@ -58,17 +67,38 @@ def cn_eeq(numbers: Tensor, positions: Tensor) -> Tensor:
     return coordination_number(
         numbers,
         positions,
-        counting_function=erf_count,
+        counting_function=counting_function,
         rcov=rcov,
         cutoff=cutoff,
         cn_max=defaults.CUTOFF_EEQ_MAX,
     )
 
 
-def cn_eeq_en(numbers: Tensor, positions: Tensor) -> Tensor:
+def cn_eeq_en(
+    numbers: Tensor,
+    positions: Tensor,
+    counting_function: CountingFunction = erf_count,
+) -> Tensor:
     """
     Compute the electronegativity-weighted coordination number using the
     Pauling scale stored in :mod:`tad_mctc.data.en`.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+    positions : Tensor
+        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+    counting_function : CountingFunction, optional
+        Counting function used for the EEQ coordination number.
+        Defaults to the error function counting function
+        :func:`tad_mctc.ncoord.count.erf_count`.
+
+    Returns
+    -------
+    Tensor
+        Electronegativity-weighted coordination numbers for all atoms
+        (shape: ``(..., nat)``).
     """
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
 
@@ -82,7 +112,7 @@ def cn_eeq_en(numbers: Tensor, positions: Tensor) -> Tensor:
     return coordination_number(
         numbers,
         positions,
-        counting_function=erf_count,
+        counting_function=counting_function,
         rcov=rcov,
         cutoff=cutoff,
         cn_max=None,
