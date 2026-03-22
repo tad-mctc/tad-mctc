@@ -137,7 +137,7 @@ def deflate(
     if axis is not None:
         slices.insert(axis, slice(None))  # <- dummy index for batch-axis
 
-    return tensor[slices]
+    return tensor[tuple(slices)]
 
 
 def unpack(

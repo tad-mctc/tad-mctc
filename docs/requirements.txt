@@ -4,7 +4,6 @@ sphinx-copybutton
 sphinx-design
 numpy
 opt_einsum
-qcelemental
 psutil
 torch
 jinja2<3.1
