@@ -581,7 +581,7 @@ class CNFunc(Protocol):
         self,
         numbers: Tensor,
         positions: Tensor,
-        counting_function: CountingFunction,
+        counting_function: CountingFunction | None = None,
     ) -> Tensor:
         """
         Calculate the coordination number of each atom in the system.
