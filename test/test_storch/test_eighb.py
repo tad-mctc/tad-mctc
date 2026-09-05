@@ -92,6 +92,86 @@ def clean_zero_padding(m: Tensor, sizes: Tensor) -> Tensor:
     return cleaned
 
 
+def _spectral_density(w: Tensor, v: Tensor) -> Tensor:
+    r"""
+    Contract eigenvalues and eigenvectors into a density-matrix-like quantity.
+
+    The eigenvectors themselves are *not* a well-defined function of the input
+    matrix: they are only determined up to the sign of each column, and within
+    a degenerate subspace up to an arbitrary rotation. Which representative
+    LAPACK returns is not a continuous function of the input either, i.e. an
+    infinitesimal perturbation can flip the sign of a whole eigenvector or
+    re-mix a degenerate subspace. `gradcheck` approximates the derivative by
+    central differences with a step size of 1e-6, so such a jump shows up as a
+    numerical derivative on the order of 1e6 while the analytical gradient is
+    perfectly fine. As the choice depends on the LAPACK/BLAS implementation and
+    its internal blocking, this only ever surfaced sporadically on CI machines
+    and was practically impossible to reproduce locally.
+
+    The zero-padded batches are particularly susceptible because `eighb` pads
+    the diagonal with an estimate of the largest eigenvalue, which creates an
+    exactly degenerate subspace (one dimension per padded row) whose basis is
+    completely arbitrary.
+
+    Therefore, the gradients are not tested for the eigenvectors themselves but
+    for
+
+    .. math:: P = V f(\Lambda) V^{T}
+
+    with the Fermi-like occupation :math:`f(\lambda) = 1 / (1 + e^{\lambda})`.
+    This is the quantity that eigenvectors are actually used for (a density
+    matrix), it is invariant under both sign changes and rotations within a
+    degenerate subspace, and it is a smooth function of the input matrix. Since
+    `f` is injective, no information about the eigenspaces is lost.
+
+    Arguments:
+        w (Tensor):
+            The eigenvalues.
+        v (Tensor):
+            The eigenvectors, stored column-wise.
+
+    Returns:
+        p (Tensor):
+            Density-matrix-like contraction of eigenvalues and eigenvectors.
+    """
+    occupation = torch.sigmoid(-w)
+    return v @ torch.diag_embed(occupation) @ v.transpose(-1, -2)
+
+
+def _metric_rng(size: int, dd: DD) -> Tensor:
+    """
+    Create a random, diagonal, positive definite metric matrix.
+
+    The diagonal entries are drawn from ``[0.5, 1.5)`` instead of ``[0, 1)``.
+    Entries close to zero render the generalized eigenvalue problem
+    ``Az = λBz`` ill-conditioned: the associated eigenvalues (and their
+    eigenvectors) grow without bound and react very sensitively to
+    perturbations of the inputs. This invalidates the absolute tolerances of
+    the accuracy tests (deviations of more than 1e-11 were observed for
+    diagonal entries on the order of 1e-5) and it makes the eigenvector sign
+    flips described in `_fix_eigenvector_sign` far more likely in the gradient
+    tests.
+
+    Since the test inputs are drawn from the global RNG, whose state depends on
+    the test order and on the distribution across `xdist` workers, such an
+    ill-conditioned instance only appeared sporadically, and thus practically
+    only in CI. Bounding the diagonal away from zero limits the condition
+    number of the metric matrix to three and removes this failure mode without
+    weakening the tests.
+
+    Arguments:
+        size (int):
+            Number of rows/columns of the matrix.
+        dd (DD):
+            Device and dtype of the matrix.
+
+    Returns:
+        b (Tensor):
+            Random diagonal positive definite matrix.
+    """
+    return symmetrizef(torch.eye(size, **dd) * (_rng((size,), dd) + 0.5))
+
+
 def test_eighb_fail() -> None:
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -160,7 +240,7 @@ def test_eighb_general_single(direct_inverse: bool) -> None:
 
     for _ in range(10):
         a = _symrng((10, 10), dd)
-        b = symmetrizef(torch.eye(10, **dd) * _rng((10,), dd))
+        b = _metric_rng(10, dd)
 
         w_ref = linalg.eigh(tensor_to_numpy(a), tensor_to_numpy(b))[0]
         w_ref = numpy_to_tensor(w_ref, **dd)
@@ -189,7 +269,7 @@ def test_eighb_general_batch() -> None:
     for _ in range(10):
         sizes = np.random.randint(2, 10, (11,))
         a = [_symrng((s, s), dd) for s in sizes]
-        b = [symmetrizef(torch.eye(s, **dd) * _rng((s,), dd)) for s in sizes]
+        b = [_metric_rng(s, dd) for s in sizes]
         a_batch, b_batch = pack(a), pack(b)
 
         w_ref = pack(
@@ -234,9 +314,11 @@ def _eigen_proxy(
     if size_data is not None:
         m = clean_zero_padding(m, size_data)
     if target_method is None:
-        return torch.linalg.eigh(m)
+        w, v = torch.linalg.eigh(m)
     else:
-        return storch.linalg.eighb(m, broadening_method=target_method)
+        w, v = storch.linalg.eighb(m, broadening_method=target_method)
+
+    return w, _spectral_density(w, v)
 
 
 @pytest.mark.grad
@@ -332,7 +414,9 @@ def _eigen_proxy_general(
         n = clean_zero_padding(n, size_data)
 
     factor = torch.tensor(1e-12, device=m.device, dtype=m.dtype)
-    return storch.linalg.eighb(m, n, scheme=target_scheme, factor=factor)
+    w, v = storch.linalg.eighb(m, n, scheme=target_scheme, factor=factor)
+
+    return w, _spectral_density(w, v)
 
 
 @pytest.mark.grad
@@ -343,7 +427,7 @@ def test_eighb_general_grad(scheme: Literal["chol", "lowd"]) -> None:
 
     # Generate a single generalised eigenvalue test instance
     a1 = _symrng((8, 8), dd)
-    b1 = symmetrizef(torch.eye(8, **dd) * _rng((8,), dd), force=True)
+    b1 = _metric_rng(8, dd)
 
     a1.requires_grad, b1.requires_grad = True, True
 
@@ -356,13 +440,10 @@ def test_eighb_general_grad(scheme: Literal["chol", "lowd"]) -> None:
         ),
         (a1, b1),
         fast_mode=False,
-        atol=1e-1,
-        rtol=1e-1,
     ), f"Non-degenerate single test failed on {scheme}"
 
 
 @pytest.mark.grad
-@pytest.mark.flaky(reruns=5, reruns_delay=2)
 @pytest.mark.parametrize("scheme", ["chol", "lowd"])
 def test_eighb_general_grad_batch(scheme: Literal["chol", "lowd"]) -> None:
     """eighb gradient stability on general eigenvalue problems."""
@@ -371,12 +452,10 @@ def test_eighb_general_grad_batch(scheme: Literal["chol", "lowd"]) -> None:
     # Generate a batch of generalised eigenvalue test instances
     sizes = np.random.randint(3, 8, (5,))
     a2 = pack([_symrng((s, s), dd) for s in sizes])
-    b2 = pack([symmetrizef(torch.eye(s, **dd) * _rng((s,), dd)) for s in sizes])
+    b2 = pack([_metric_rng(s, dd) for s in sizes])
 
     a2.requires_grad, b2.requires_grad = True, True
 
-    # -> loosen tolerances
-    # sometimes randomly fails with "chol" on random GA runners
     assert dgradcheck(
         lambda a2_l, b2_l, size_data_l, scheme_l=scheme: _eigen_proxy_general(
             a2_l,
@@ -386,6 +465,4 @@ def test_eighb_general_grad_batch(scheme: Literal["chol", "lowd"]) -> None:
         ),
         (a2, b2, numpy_to_tensor(sizes, **dd)),
         fast_mode=False,
-        atol=1e-1,
-        rtol=1e-1,
     ), f"Non-degenerate batch test failed on {scheme}"
