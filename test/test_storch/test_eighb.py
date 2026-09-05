@@ -92,40 +92,50 @@ def clean_zero_padding(m: Tensor, sizes: Tensor) -> Tensor:
     return cleaned
 
 
-def _fix_eigenvector_sign(v: Tensor) -> Tensor:
-    """
-    Remove the arbitrary sign of the eigenvectors.
+def _spectral_density(w: Tensor, v: Tensor) -> Tensor:
+    r"""
+    Contract eigenvalues and eigenvectors into a density-matrix-like quantity.
 
-    Eigenvectors are only determined up to their sign, and the sign chosen by
-    LAPACK is *not* a continuous function of the input matrix: an infinitesimal
-    perturbation can flip the sign of an entire eigenvector. `gradcheck`
-    compares the analytical gradient to central differences with a step size of
-    1e-6, so such a flip surfaces as a numerical derivative on the order of 1e6
-    for every component of the affected eigenvector, and the check fails, even
-    though the analytical gradient is perfectly fine.
+    The eigenvectors themselves are *not* a well-defined function of the input
+    matrix: they are only determined up to the sign of each column, and within
+    a degenerate subspace up to an arbitrary rotation. Which representative
+    LAPACK returns is not a continuous function of the input either, i.e. an
+    infinitesimal perturbation can flip the sign of a whole eigenvector or
+    re-mix a degenerate subspace. `gradcheck` approximates the derivative by
+    central differences with a step size of 1e-6, so such a jump shows up as a
+    numerical derivative on the order of 1e6 while the analytical gradient is
+    perfectly fine. As the choice depends on the LAPACK/BLAS implementation and
+    its internal blocking, this only ever surfaced sporadically on CI machines
+    and was practically impossible to reproduce locally.
 
-    Whether a flip occurs for a given input depends on the LAPACK/BLAS
-    implementation and its internal blocking, which is why this was only ever
-    observed on CI machines and was practically impossible to reproduce
-    locally. Multiplying each eigenvector by the sign of its largest component
-    fixes this gauge freedom and makes the tested function continuous.
+    The zero-padded batches are particularly susceptible because `eighb` pads
+    the diagonal with an estimate of the largest eigenvalue, which creates an
+    exactly degenerate subspace (one dimension per padded row) whose basis is
+    completely arbitrary.
+
+    Therefore, the gradients are not tested for the eigenvectors themselves but
+    for
+
+    .. math:: P = V f(\Lambda) V^{T}
+
+    with the Fermi-like occupation :math:`f(\lambda) = 1 / (1 + e^{\lambda})`.
+    This is the quantity that eigenvectors are actually used for (a density
+    matrix), it is invariant under both sign changes and rotations within a
+    degenerate subspace, and it is a smooth function of the input matrix. Since
+    `f` is injective, no information about the eigenspaces is lost.
 
     Arguments:
+        w (Tensor):
+            The eigenvalues.
         v (Tensor):
             The eigenvectors, stored column-wise.
 
     Returns:
-        v (Tensor):
-            Eigenvectors whose largest component is always positive.
-
-    Notes:
-        The signs are detached, i.e. they are treated as constants. This is
-        exact, because the derivative of the sign function vanishes everywhere
-        it is defined.
+        p (Tensor):
+            Density-matrix-like contraction of eigenvalues and eigenvectors.
     """
-    idx = torch.argmax(torch.abs(v), dim=-2, keepdim=True)
-    signs = torch.sign(torch.gather(v, -2, idx)).detach()
-    return v * signs
+    occupation = torch.sigmoid(-w)
+    return v @ torch.diag_embed(occupation) @ v.transpose(-1, -2)
 
 
 def _metric_rng(size: int, dd: DD) -> Tensor:
@@ -308,7 +318,7 @@ def _eigen_proxy(
     else:
         w, v = storch.linalg.eighb(m, broadening_method=target_method)
 
-    return w, _fix_eigenvector_sign(v)
+    return w, _spectral_density(w, v)
 
 
 @pytest.mark.grad
@@ -406,7 +416,7 @@ def _eigen_proxy_general(
     factor = torch.tensor(1e-12, device=m.device, dtype=m.dtype)
     w, v = storch.linalg.eighb(m, n, scheme=target_scheme, factor=factor)
 
-    return w, _fix_eigenvector_sign(v)
+    return w, _spectral_density(w, v)
 
 
 @pytest.mark.grad
@@ -430,8 +440,6 @@ def test_eighb_general_grad(scheme: Literal["chol", "lowd"]) -> None:
         ),
         (a1, b1),
         fast_mode=False,
-        atol=1e-1,
-        rtol=1e-1,
     ), f"Non-degenerate single test failed on {scheme}"
 
 
@@ -448,8 +456,6 @@ def test_eighb_general_grad_batch(scheme: Literal["chol", "lowd"]) -> None:
 
     a2.requires_grad, b2.requires_grad = True, True
 
-    # The eigenvectors of the padded systems carry a comparatively large
-    # numerical error, hence the loosened tolerances.
     assert dgradcheck(
         lambda a2_l, b2_l, size_data_l, scheme_l=scheme: _eigen_proxy_general(
             a2_l,
@@ -459,6 +465,4 @@ def test_eighb_general_grad_batch(scheme: Literal["chol", "lowd"]) -> None:
         ),
         (a2, b2, numpy_to_tensor(sizes, **dd)),
         fast_mode=False,
-        atol=1e-1,
-        rtol=1e-1,
     ), f"Non-degenerate batch test failed on {scheme}"
