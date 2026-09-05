@@ -165,6 +165,9 @@ For example, although only version 2.2.2 is listed, version 2.2.0 and 2.2.1 are 
 
 On macOS and Windows, PyTorch<2.0.0 does only support Python<3.11.
 
+PyTorch<2.3.0 is compiled against the NumPy 1.x C-API and requires `numpy<2`.
+Since this cannot be expressed in the package metadata (dependency markers cannot refer to the PyTorch version), pin `numpy<2` yourself if you use PyTorch<2.3.0.
+
 
 ## Development
 
