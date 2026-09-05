@@ -24,10 +24,11 @@ General reader for file from a path.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import IO, Any
 
 import torch
 
-from ...typing import IO, Any, PathLike, Tensor
+from ...typing import PathLike, Tensor
 from .qcschema import read_qcschema_fileobj
 from .turbomole import read_turbomole_fileobj
 from .xyz import read_xyz_fileobj, read_xyz_qm9_fileobj

@@ -23,10 +23,12 @@ Reader for JSON/QCSchema files.
 
 from __future__ import annotations
 
+from typing import IO, Any
+
 import torch
 
 from ...data import pse
-from ...typing import DD, IO, Any, Tensor, get_default_dtype
+from ...typing import DD, Tensor, get_default_dtype
 from ..checks import content_checks, deflatable_check, shape_checks
 from .frompath import create_path_reader
 

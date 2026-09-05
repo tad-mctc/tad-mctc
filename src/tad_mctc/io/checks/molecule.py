@@ -47,6 +47,8 @@ For more details and examples, check `test/test_io/test_deflatable.py`.
 
 from __future__ import annotations
 
+from typing import IO, Any, NoReturn
+
 import torch
 
 from ... import storch
@@ -54,7 +56,7 @@ from ...autograd import is_functorch_tensor
 from ...batch import deflate, real_pairs
 from ...data import pse
 from ...exceptions import MoleculeError, MoleculeWarning
-from ...typing import DD, IO, Any, NoReturn, Tensor
+from ...typing import DD, Tensor
 
 __all__ = [
     "coldfusion_check",

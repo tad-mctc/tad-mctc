@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 sphinx
 sphinx-book-theme
 sphinx-copybutton
@@ -6,4 +8,4 @@ numpy
 opt_einsum
 psutil
 torch
-jinja2<3.1
+jinja2>=3.1.6

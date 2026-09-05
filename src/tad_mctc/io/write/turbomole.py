@@ -24,8 +24,10 @@ See https://en.wikipedia.org/wiki/XYZ_file_format.
 
 from __future__ import annotations
 
+from typing import IO, Any
+
 from ...data import pse
-from ...typing import IO, Any, Tensor
+from ...typing import Tensor
 from ..checks import content_checks, shape_checks
 from .topath import create_path_writer
 

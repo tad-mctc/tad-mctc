@@ -23,12 +23,14 @@ This module contains safe functions for numpy and pytorch interconversion.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import torch
 from numpy.typing import DTypeLike, NDArray
 
 from .._version import __tversion__
-from ..typing import Any, Tensor, get_default_dtype
+from ..typing import Tensor, get_default_dtype
 
 __all__ = ["numpy_to_tensor", "tensor_to_numpy"]
 

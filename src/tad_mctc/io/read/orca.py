@@ -23,10 +23,12 @@ Reader for ORCA files.
 
 from __future__ import annotations
 
+from typing import IO, Any
+
 import torch
 
 from ...exceptions import EmptyFileError, FormatErrorORCA
-from ...typing import IO, Any, Tensor
+from ...typing import Tensor
 from .frompath import create_path_reader
 
 __all__ = ["read_orca_engrad"]

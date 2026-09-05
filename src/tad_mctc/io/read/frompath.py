@@ -31,11 +31,11 @@ Example
 from __future__ import annotations
 
 from pathlib import Path
-from typing import runtime_checkable
+from typing import IO, Any, Literal, Protocol, runtime_checkable
 
 import torch
 
-from ...typing import IO, Any, Literal, PathLike, Protocol, Tensor
+from ...typing import PathLike, Tensor
 
 __all__ = ["create_path_reader", "create_path_reader_dotfiles"]
 

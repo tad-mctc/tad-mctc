@@ -23,9 +23,11 @@ Utilities for calculating Jacobians via autograd.
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
-from ..typing import Any, Callable, Tensor
+from ..typing import Callable, Tensor
 
 __all__ = ["jacrev_compat"]
 

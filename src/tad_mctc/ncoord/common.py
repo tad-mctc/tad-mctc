@@ -23,12 +23,14 @@ Generic building blocks that mirror the container-based design of mctc-lib.
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
 from .. import storch
 from ..batch import real_pairs
 from ..data import radii
-from ..typing import DD, Any, CountingFunction, Tensor
+from ..typing import DD, CountingFunction, Tensor
 from . import defaults
 
 __all__ = ["coordination_number", "cut_coordination_number"]

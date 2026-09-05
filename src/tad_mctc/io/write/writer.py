@@ -24,8 +24,9 @@ General writer for files to a path.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from ...typing import Any, PathLike, Tensor
+from ...typing import PathLike, Tensor
 from .turbomole import write_turbomole_fileobj
 from .xyz import write_xyz_fileobj
 

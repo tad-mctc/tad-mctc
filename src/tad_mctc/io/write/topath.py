@@ -25,8 +25,9 @@ from __future__ import annotations
 
 from functools import wraps
 from pathlib import Path
+from typing import IO, Any, Protocol, runtime_checkable
 
-from ...typing import IO, Any, PathLike, Protocol, Tensor, runtime_checkable
+from ...typing import PathLike, Tensor
 
 __all__ = ["create_path_writer"]
 

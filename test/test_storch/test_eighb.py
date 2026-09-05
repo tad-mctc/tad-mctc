@@ -21,6 +21,8 @@ https://github.com/tbmalt/tbmalt/blob/development/tests/unittests/test_maths.py
 
 from __future__ import annotations
 
+from typing import Literal
+
 import numpy as np
 import pytest
 import torch
@@ -32,7 +34,7 @@ from tad_mctc import storch
 from tad_mctc.autograd import dgradcheck
 from tad_mctc.batch import pack
 from tad_mctc.convert import numpy_to_tensor, symmetrizef, tensor_to_numpy
-from tad_mctc.typing import DD, Literal, Tensor
+from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE, FAST_MODE
 from ..utils import _rng, _symrng

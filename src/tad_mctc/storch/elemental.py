@@ -23,9 +23,11 @@ Safe versions of elementary functions like `sqrt` or `abs`.
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
-from ..typing import Any, Tensor
+from ..typing import Tensor
 from .utils import get_eps
 
 __all__ = ["divide", "pow", "reciprocal", "sqrt"]

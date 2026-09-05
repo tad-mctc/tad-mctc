@@ -24,10 +24,11 @@ Decorators for memoization/caching.
 from __future__ import annotations
 
 from functools import wraps
+from typing import Any, TypeVar
 
 import torch
 
-from ..typing import Any, CacheKey, Callable, TypeVar
+from ..typing import CacheKey, Callable
 
 __all__ = ["memoize", "memoize_all_instances"]
 

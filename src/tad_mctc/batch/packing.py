@@ -27,9 +27,11 @@ pack them into a single tensor.
 
 from __future__ import annotations
 
+from typing import Literal, overload
+
 import torch
 
-from ..typing import Literal, Size, Tensor, TensorOrTensors, overload
+from ..typing import Size, Tensor, TensorOrTensors
 
 __all__ = ["pack"]
 

@@ -23,10 +23,12 @@ Reader for the `.CHRG` and `.UHF` files.
 
 from __future__ import annotations
 
+from typing import IO, Any
+
 import torch
 
 from ...exceptions import EmptyFileError, FormatError
-from ...typing import IO, Any, Tensor
+from ...typing import Tensor
 from .frompath import create_path_reader_dotfiles
 
 __all__ = ["read_chrg", "read_uhf", "read_spin"]

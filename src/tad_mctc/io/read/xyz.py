@@ -24,12 +24,14 @@ See https://en.wikipedia.org/wiki/XYZ_file_format.
 
 from __future__ import annotations
 
+from typing import IO, Any
+
 import torch
 
 from ...batch import pack
 from ...data import pse
 from ...exceptions import FormatErrorXYZ
-from ...typing import DD, IO, Any, Tensor, get_default_dtype
+from ...typing import DD, Tensor, get_default_dtype
 from ...units import length
 from ..checks import content_checks, deflatable_check, shape_checks
 from .frompath import create_path_reader
