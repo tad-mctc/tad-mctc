@@ -20,13 +20,13 @@ Test PyTorch conversion tools.
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 import torch
 
 from tad_mctc import convert
-from tad_mctc.typing import Any
 
 
 def test_fail() -> None:

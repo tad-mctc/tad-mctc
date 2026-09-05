@@ -26,9 +26,11 @@ Sort a packed ``tensor`` while ignoring any padding values.
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import torch
 
-from tad_mctc.typing import NamedTuple, Tensor
+from tad_mctc.typing import Tensor
 
 __all__ = ["pargsort", "psort"]
 

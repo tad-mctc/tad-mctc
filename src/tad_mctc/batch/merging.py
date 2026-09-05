@@ -27,9 +27,11 @@ pack them into a single tensor.
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
-from ..typing import Any, Tensor, TensorOrTensors
+from ..typing import Tensor, TensorOrTensors
 
 __all__ = ["merge"]
 

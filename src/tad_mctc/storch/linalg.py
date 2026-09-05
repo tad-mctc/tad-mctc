@@ -29,12 +29,14 @@ https://github.com/tbmalt/tbmalt/blob/main/tbmalt/common/maths/__init__.py
 
 from __future__ import annotations
 
+from typing import Any, Literal
+
 import numpy as np
 import torch
 
 from .._version import __tversion__
 from ..convert import symmetrize
-from ..typing import Any, Callable, Literal, Tensor
+from ..typing import Callable, Tensor
 
 __all__ = ["eighb"]
 

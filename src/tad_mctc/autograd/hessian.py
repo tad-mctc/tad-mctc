@@ -27,9 +27,11 @@ Batched Hessians are not supported yet (via `vmap`).
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
-from ..typing import Any, Callable, Tensor
+from ..typing import Callable, Tensor
 from .compat import jacrev_compat as jacrev
 
 __all__ = ["hessian", "hess_fn_rev"]

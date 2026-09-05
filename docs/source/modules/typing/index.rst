@@ -4,6 +4,5 @@
 
 .. toctree::
 
-   builtin
    compat
    pytorch

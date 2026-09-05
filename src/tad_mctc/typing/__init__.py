@@ -24,6 +24,5 @@ Since typing still significantly changes across different Python versions,
 all the special cases are handled here as well.
 """
 
-from .builtin import *
 from .compat import *
 from .pytorch import *

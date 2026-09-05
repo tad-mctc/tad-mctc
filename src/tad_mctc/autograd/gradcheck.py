@@ -23,9 +23,11 @@ Collection of utility functions for testing.
 
 from __future__ import annotations
 
+from typing import Any, Protocol
+
 from torch.autograd.gradcheck import gradcheck, gradgradcheck
 
-from ..typing import Any, Callable, Protocol, Tensor, TensorOrTensors
+from ..typing import Callable, Tensor, TensorOrTensors
 
 __all__ = ["dgradcheck", "dgradgradcheck"]
 

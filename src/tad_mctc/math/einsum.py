@@ -24,9 +24,11 @@ package. If `opt_einsum` is not installed, it falls back to the `torch.einsum`.
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
-from ..typing import Any, Tensor, _wraps
+from ..typing import Tensor, _wraps
 
 __all__ = [
     "einsum",

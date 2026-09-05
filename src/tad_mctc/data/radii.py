@@ -24,11 +24,12 @@ Covalent radii.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import torch
 
 from .._version import __tversion__
-from ..typing import Any, Tensor
+from ..typing import Tensor
 from ..units import length
 
 __all__ = ["ATOMIC_RADII", "COV_D3", "VDW_D3", "VDW_PAIRWISE"]

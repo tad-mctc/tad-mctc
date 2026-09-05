@@ -23,9 +23,11 @@ This module contains PyTorch-specific conversion tools.
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
-from ..typing import Any, Tensor
+from ..typing import Tensor
 
 __all__ = ["normalize_device", "str_to_device", "any_to_tensor"]
 

@@ -39,6 +39,8 @@ Example
 
 from __future__ import annotations
 
+from typing import NoReturn
+
 import torch
 
 from .. import storch
@@ -49,7 +51,7 @@ from ..io.checks import dimension_check
 from ..io.read import read, read_chrg
 from ..math import einsum
 from ..tools import memoize
-from ..typing import NoReturn, PathLike, Self, Tensor, TensorLike
+from ..typing import PathLike, Self, Tensor, TensorLike
 
 __all__ = ["Mol"]
 

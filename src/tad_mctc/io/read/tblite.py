@@ -23,9 +23,11 @@ Reader for tblite output files.
 
 from __future__ import annotations
 
+from typing import IO, Any
+
 import torch
 
-from ...typing import DD, IO, Any, Tensor, get_default_dtype
+from ...typing import DD, Tensor, get_default_dtype
 from .frompath import create_path_reader
 
 __all__ = ["read_tblite_engrad"]

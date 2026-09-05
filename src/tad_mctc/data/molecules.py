@@ -23,10 +23,12 @@ Molecules for testing. Mostly taken from https://github.com/grimme-lab/mstore.
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 
 from ..convert import symbol_to_number
-from ..typing import Any, Molecule
+from ..typing import Molecule
 
 __all__ = ["mols", "merge_nested_dicts"]
 
