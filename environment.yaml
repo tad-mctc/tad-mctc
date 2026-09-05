@@ -21,5 +21,12 @@ channels:
   - pytorch
 dependencies:
   - numpy
+  - opt_einsum
+  - psutil
   - python>=3.8
+  # PyTorch<2.3.0 is compiled against the NumPy 1.x C-API and therefore cannot
+  # be combined with the unpinned `numpy` above. The package itself still
+  # supports torch>=1.11 (see `setup.cfg`); this file only provides the
+  # recommended development environment.
   - pytorch>=2.3.0,<3
+  - typing_extensions
