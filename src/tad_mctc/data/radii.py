@@ -188,6 +188,27 @@ def _load_vdw_rad_pairwise(
     """
     Load reference VDW radii from file.
 
+    Regenerated with the following script whenever the Angstrom source or
+    `length.AA2AU` changes:
+
+    # import re
+    # import torch
+    # from tad_mctc.units.length import AA2AU
+    #
+    # source = Path("s-dftd3/src/dftd3/data/vdwrad.f90").read_text()
+    # start = source.index("vdwrad(max_elem*(1+max_elem)/2)")
+    # body = source[source.index("[", start):source.index("]", start)]
+    # angstrom = [float(v) for v in re.findall(r"([0-9.]+)_wp", body)]
+    #
+    # max_elem = 103
+    # table = torch.zeros(max_elem + 1, max_elem + 1, dtype=torch.float64)
+    # for num1 in range(1, max_elem + 1):
+    #     for num2 in range(1, max_elem + 1):
+    #         hi, lo = max(num1, num2), min(num1, num2)
+    #         index = lo + hi * (hi - 1) // 2 - 1
+    #         table[num1, num2] = angstrom[index] * AA2AU
+    # torch.save(table, "vdw-pairwise.pt")
+
     Parameters
     ----------
     dtype : torch.dtype, optional
