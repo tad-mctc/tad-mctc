@@ -43,7 +43,8 @@ __all__ = ["AU2METER", "METER2AU", "AA2METER", "METER2AA", "AA2AU", "AU2AA"]
 _HBAR = CODATA.planck_constant / (2.0 * math.pi)
 
 AU2METER = _HBAR / (
-    CODATA.electron_mass * CODATA.speed_of_light_in_vacuum
+    CODATA.electron_mass
+    * CODATA.speed_of_light_in_vacuum
     * CODATA.fine_structure_constant
 )
 """
