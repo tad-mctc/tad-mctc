@@ -30,6 +30,7 @@ from tad_mctc.ncoord import (
     cn_d3,
     cn_d4,
     cn_eeq,
+    cn_eeqbc,
 )
 from tad_mctc.typing import DD, Callable, CNFunction, Tensor
 
@@ -66,7 +67,7 @@ def gradchecker(
 @pytest.mark.grad
 @pytest.mark.parametrize("dtype", [torch.double])
 @pytest.mark.parametrize("name", sample_list)
-@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq])
+@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
 def test_gradcheck(
     dtype: torch.dtype,
     name: str,
@@ -83,7 +84,7 @@ def test_gradcheck(
 @pytest.mark.grad
 @pytest.mark.parametrize("dtype", [torch.double])
 @pytest.mark.parametrize("name", sample_list)
-@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq])
+@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
 def test_gradgradcheck(
     dtype: torch.dtype, name: str, cn_function: CNFunction
 ) -> None:
@@ -133,7 +134,7 @@ def gradchecker_batch(
 @pytest.mark.parametrize("dtype", [torch.double])
 @pytest.mark.parametrize("name1", ["SiH4"])
 @pytest.mark.parametrize("name2", sample_list)
-@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq])
+@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
 def test_gradcheck_batch(
     dtype: torch.dtype, name1: str, name2: str, cn_function: CNFunction
 ) -> None:
@@ -149,7 +150,7 @@ def test_gradcheck_batch(
 @pytest.mark.parametrize("dtype", [torch.double])
 @pytest.mark.parametrize("name1", ["SiH4"])
 @pytest.mark.parametrize("name2", sample_list)
-@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq])
+@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
 def test_gradgradcheck_batch(
     dtype: torch.dtype, name1: str, name2: str, cn_function: CNFunction
 ) -> None:

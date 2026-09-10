@@ -38,6 +38,8 @@ __all__ = [
     "D4_K4",
     "D4_K5",
     "D4_K6",
+    "KCN_EEQBC",
+    "NORM_EXP_EEQBC",
 ]
 
 KCN_EEQ = 7.5
@@ -89,3 +91,11 @@ D4_K5 = 19.08857
 
 D4_K6 = 2 * 11.28174**2  # 254.56
 """Parameter for electronegativity scaling."""
+
+
+KCN_EEQBC = 2.0
+"""Steepness of counting function in the EEQBC model (2.0)."""
+
+NORM_EXP_EEQBC = 0.75
+"""Exponent applied to the radii-sum normalization in the EEQBC model's
+counting function (0.75)."""

@@ -31,6 +31,7 @@ from tad_mctc.ncoord import (
     cn_d3,
     cn_d4,
     cn_eeq,
+    cn_eeqbc,
 )
 from tad_mctc.typing import DD, CNFunction, Tensor
 
@@ -41,7 +42,7 @@ from ..utils import numgrad
 sample_list = ["SiH4", "PbH4-BiH3", "MB16_43_01"]
 
 
-@pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq])
+@pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("name", sample_list)
 def test_single(
@@ -67,7 +68,7 @@ def test_single(
     assert pytest.approx(numdr.cpu(), abs=tol) == tensor_to_numpy(jac)
 
 
-@pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq])
+@pytest.mark.parametrize("function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("name1", ["SiH4"])
 @pytest.mark.parametrize("name2", sample_list)

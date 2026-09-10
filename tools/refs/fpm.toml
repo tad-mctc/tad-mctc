@@ -1,0 +1,11 @@
+name = "gen_refs_fortran"
+version = "0.1.0"
+license = "Apache-2.0"
+
+[[executable]]
+name = "gen_refs_fortran"
+source-dir = "."
+main = "gen_refs_fortran.f90"
+
+[dependencies]
+mctc-lib = { git = "https://github.com/grimme-lab/mctc-lib", tag = "v0.5.2" }
