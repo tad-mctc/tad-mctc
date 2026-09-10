@@ -70,4 +70,5 @@ from .count import *
 from .d3 import *
 from .d4 import *
 from .eeq import *
+from .eeqbc import *
 from .gfn2 import *

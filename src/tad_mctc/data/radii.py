@@ -32,7 +32,13 @@ from .._version import __tversion__
 from ..typing import Tensor
 from ..units import length
 
-__all__ = ["ATOMIC_RADII", "COV_D3", "VDW_D3", "VDW_PAIRWISE"]
+__all__ = [
+    "ATOMIC_RADII",
+    "COV_D3",
+    "EEQBC_COV_RADII",
+    "VDW_D3",
+    "VDW_PAIRWISE",
+]
 
 
 def ATOMIC_RADII(
@@ -137,6 +143,59 @@ def COV_D3(
 ##############################################################################
 
 
+def EEQBC_COV_RADII(
+    device: torch.device | None = None, dtype: torch.dtype = torch.double
+) -> Tensor:
+    """
+    Covalent radii for the coordination number of the EEQBC charge model
+    (Froitzheim, Müller, Hansen, Grimme, J. Chem. Phys. 2025, 162, 214109),
+    taken from ``multicharge``'s ``eeqbc2025`` parametrization
+    (``multicharge_param_eeqbc2025``'s ``eeqbc_cov_radii``). Already in
+    atomic units (Bohr) in the source -- unlike :func:`COV_D3`, no
+    Angstrom-to-Bohr conversion is applied here.
+    """
+
+    # fmt: off
+    _EEQBC_COV_RADII = [
+        0.0000000000,  # dummy
+        1.0873678902,0.0045628280,2.8385414023,2.2369359793,  # H-Be
+        2.2631432568,2.5556464299,2.6528219471,2.5471166478,  # B-O
+        2.0970520036,1.1527679853,3.9222564151,3.6628112720,  # F-Mg
+        3.1200757440,3.2311571633,3.3714412240,3.4966508157,  # Al-S
+        3.1641167151,1.4177781099,4.2825156987,4.0979720404,  # Cl-Ca
+        3.4027683492,3.1330930644,3.2083129359,3.1971240284,  # Sc-Cr
+        3.0122827243,3.0215412255,2.9286697665,2.9318983659,  # Mn-Ni
+        2.9333228012,3.4211414769,3.5543149265,3.3547895521,  # Cu-Ge
+        3.8566746758,4.0522579752,3.7055903624,2.1533955559,  # As-Kr
+        4.8750192244,4.2251415193,3.8193395754,3.7700784196,  # Rb-Zr
+        3.8026660286,3.4791250751,3.3748738252,3.3400607232,  # Nb-Ru
+        3.3194948126,3.5185381046,3.6974620558,4.2120386946,  # Rh-Cd
+        4.2834967376,4.0408029917,4.1029792717,4.5056357496,  # In-Te
+        4.1912939737,3.1889722321,5.3761906399,4.9848540155,  # I-Ba
+        4.1643020686,4.2242687055,4.0906998457,4.0483164017,  # La-Nd
+        4.0130748483,3.6618368303,3.8161213688,3.6044393411,  # Pm-Gd
+        3.7159335631,3.8610077243,3.8543967507,3.7804332520,  # Tb-Er
+        3.6171475823,3.6614908934,3.9127576452,3.7447075110,  # Tm-Hf
+        3.7737132271,3.3371881773,3.3105897209,3.3868061092,  # Ta-Os
+        3.4036207674,3.5310959808,3.5697281366,4.3942379403,  # Ir-Hg
+        4.6313791191,4.3952892419,4.2961541488,4.6294486870,  # Tl-Po
+        4.5547581691,3.6325616087,5.0182872162,4.4284455579,  # At-Ra
+        3.7478960318,2.9868700652,3.6306659286,3.8514208797,  # Ac-U
+        3.4838982283,3.5107992105,3.4255592145,3.5581888894,  # Np-Cf
+        3.3079867688,3.4972376288,3.4590842861,3.2327976004,  # Es-Md
+        3.4619632872,3.7360296053,3.5692246969,  # No-Lr
+    ]
+    # fmt: on
+
+    t = torch.tensor(
+        _EEQBC_COV_RADII, dtype=dtype, device=device, requires_grad=False
+    )
+    return 0.5 * t
+
+
+##############################################################################
+
+
 def VDW_D3(
     device: torch.device | None = None, dtype: torch.dtype | None = torch.double
 ) -> Tensor:
@@ -191,23 +250,25 @@ def _load_vdw_rad_pairwise(
     Regenerated with the following script whenever the Angstrom source or
     `length.AA2AU` changes:
 
-    # import re
-    # import torch
-    # from tad_mctc.units.length import AA2AU
-    #
-    # source = Path("s-dftd3/src/dftd3/data/vdwrad.f90").read_text()
-    # start = source.index("vdwrad(max_elem*(1+max_elem)/2)")
-    # body = source[source.index("[", start):source.index("]", start)]
-    # angstrom = [float(v) for v in re.findall(r"([0-9.]+)_wp", body)]
-    #
-    # max_elem = 103
-    # table = torch.zeros(max_elem + 1, max_elem + 1, dtype=torch.float64)
-    # for num1 in range(1, max_elem + 1):
-    #     for num2 in range(1, max_elem + 1):
-    #         hi, lo = max(num1, num2), min(num1, num2)
-    #         index = lo + hi * (hi - 1) // 2 - 1
-    #         table[num1, num2] = angstrom[index] * AA2AU
-    # torch.save(table, "vdw-pairwise.pt")
+    .. code-block:: python
+
+        import re
+        import torch
+        from tad_mctc.units.length import AA2AU
+
+        source = Path("s-dftd3/src/dftd3/data/vdwrad.f90").read_text()
+        start = source.index("vdwrad(max_elem*(1+max_elem)/2)")
+        body = source[source.index("[", start):source.index("]", start)]
+        angstrom = [float(v) for v in re.findall(r"([0-9.]+)_wp", body)]
+
+        max_elem = 103
+        table = torch.zeros(max_elem + 1, max_elem + 1, dtype=torch.float64)
+        for num1 in range(1, max_elem + 1):
+            for num2 in range(1, max_elem + 1):
+                hi, lo = max(num1, num2), min(num1, num2)
+                index = lo + hi * (hi - 1) // 2 - 1
+                table[num1, num2] = angstrom[index] * AA2AU
+        torch.save(table, "vdw-pairwise.pt")
 
     Parameters
     ----------

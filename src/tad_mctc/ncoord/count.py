@@ -73,7 +73,10 @@ def exp_count(
 
 
 def erf_count(
-    r: Tensor, r0: Tensor, kcn: Tensor | float | int = defaults.KCN_D4
+    r: Tensor,
+    r0: Tensor,
+    kcn: Tensor | float | int = defaults.KCN_D4,
+    norm_exp: Tensor | float | int = 1.0,
 ) -> Tensor:
     """
     Error function counting function for coordination number contributions.
@@ -87,13 +90,18 @@ def erf_count(
     kcn : Tensor | float | int, optional
         Steepness of the counting function. Defaults to
         :data:`tad_mctc.ncoord.defaults.KCN_D3`.
+    norm_exp : Tensor | float | int, optional
+        Exponent applied to ``r0`` in the normalization (used by the EEQBC
+        coordination number). Defaults to ``1.0``, which recovers the
+        standard error-function counting function used by DFT-D4 and EEQ.
 
     Returns
     -------
     Tensor
         Count of coordination number contribution.
     """
-    return 0.5 * (1.0 + torch.erf(-kcn * (storch.divide(r, r0) - 1.0)))
+    rc = r0**norm_exp
+    return 0.5 * (1.0 + torch.erf(-kcn * storch.divide(r - r0, rc)))
 
 
 def gfn2_count(
@@ -160,7 +168,10 @@ def dexp_count(
 
 
 def derf_count(
-    r: Tensor, r0: Tensor, kcn: Tensor | float | int = defaults.KCN_D4
+    r: Tensor,
+    r0: Tensor,
+    kcn: Tensor | float | int = defaults.KCN_D4,
+    norm_exp: Tensor | float | int = 1.0,
 ) -> Tensor:
     """
     Derivative of error function counting function w.r.t. the distance.
@@ -174,14 +185,19 @@ def derf_count(
     kcn : Tensor | float | int, optional
         Steepness of the counting function. Defaults to
         :data:`tad_mctc.ncoord.defaults.KCN_D3`.
+    norm_exp : Tensor | float | int, optional
+        Exponent applied to ``r0`` in the normalization (used by the EEQBC
+        coordination number). Defaults to ``1.0``, which recovers the
+        standard error-function counting function used by DFT-D4 and EEQ.
 
     Returns
     -------
     Tensor
         Derivative of count of coordination number contribution.
     """
-    div = storch.divide(-(kcn**2) * (r - r0) ** 2, r0**2)
-    return -kcn / sqrt(pi) / r0 * torch.exp(div)
+    rc = r0**norm_exp
+    div = storch.divide(-(kcn**2) * (r - r0) ** 2, rc**2)
+    return -kcn / sqrt(pi) / rc * torch.exp(div)
 
 
 def dgfn2_count(
