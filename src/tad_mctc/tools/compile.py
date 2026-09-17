@@ -23,26 +23,41 @@ Introspection of the current ``torch.compile`` tracing state.
 
 from __future__ import annotations
 
+from typing import Callable
+
 import torch
 
 __all__ = ["is_compiling"]
 
 
-def is_compiling() -> bool:
-    """
-    Whether we are currently being traced by ``torch.compile``.
+def _always_false() -> bool:
+    """``torch.compile`` does not exist, or exposes no way to ask."""
+    return False
 
-    Checked by capability rather than by a ``__tversion__`` cutoff: across
-    the PyTorch versions this package supports, neither the public
-    ``torch.compiler.is_compiling`` nor its older, private predecessor
-    ``torch._dynamo.is_compiling`` reliably exists (or resolves without
-    raising) purely as a function of version. ``torch.compiler`` can exist
-    without yet having ``is_compiling`` (added later than the module
-    itself), and ``torch._dynamo`` -- even on a version that ships it --
-    is only exposed as a ``torch`` attribute once something has imported
-    it, which nothing upstream of this call is guaranteed to have done.
-    Every step below is therefore guarded, and any PyTorch version older
-    than ``torch.compile`` itself correctly falls through to ``False``.
+
+def _resolve_is_compiling() -> Callable[[], bool]:
+    """
+    Resolve, once, which underlying "is compiling" query this PyTorch
+    offers.
+
+    This capability probe -- ``getattr``/``hasattr`` chains, an explicit
+    ``import torch._dynamo`` -- has to run here, outside of
+    :func:`is_compiling`'s own body. ``is_compiling()`` is called from
+    inside code (``math/einsum.py``, ``storch/elemental.py``) that itself
+    gets traced under ``torch.compile(fullgraph=True)``, and Dynamo cannot
+    trace ``hasattr``/``getattr`` introspection on a module object
+    (``Unsupported: hasattr: PythonModuleVariable()``); it can trace a
+    plain call to a resolved function just fine. Resolving once at import
+    time keeps :func:`is_compiling`'s traced body down to that one call.
+
+    Neither the public ``torch.compiler.is_compiling`` nor its older,
+    private predecessor ``torch._dynamo.is_compiling`` reliably exists (or
+    resolves without raising) purely as a function of ``__tversion__``:
+    ``torch.compiler`` can exist without yet having ``is_compiling`` on it
+    (added later than the module itself), and ``torch._dynamo`` -- even on
+    a version that ships it -- is only exposed as a ``torch`` attribute
+    once something has imported it, which nothing upstream of this call is
+    guaranteed to have done.
     """
     try:
         import torch._dynamo as _torch_dynamo  # noqa: F401  # pylint: disable=unused-import, protected-access
@@ -52,10 +67,18 @@ def is_compiling() -> bool:
 
     compiler = getattr(torch, "compiler", None)
     if compiler is not None and hasattr(compiler, "is_compiling"):
-        return bool(compiler.is_compiling())
+        return compiler.is_compiling
 
     dynamo = getattr(torch, "_dynamo", None)
     if dynamo is not None and hasattr(dynamo, "is_compiling"):
-        return bool(dynamo.is_compiling())
+        return dynamo.is_compiling
 
-    return False
+    return _always_false
+
+
+_is_compiling_impl = _resolve_is_compiling()
+
+
+def is_compiling() -> bool:
+    """Whether we are currently being traced by ``torch.compile``."""
+    return bool(_is_compiling_impl())

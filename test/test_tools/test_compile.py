@@ -55,11 +55,9 @@ def test_is_compiling_inside_torch_compile_fullgraph() -> None:
         flag = torch.tensor(1.0 if is_compiling() else 0.0)
         return x + flag
 
-    compiled = torch.compile(f, fullgraph=True, dynamic=False)
-
     x = torch.zeros(3)
     eager_result = f(x)
-    compiled_result = run_compiled_or_skip(compiled, x)
+    compiled_result = run_compiled_or_skip(f, x)
 
     assert torch.equal(eager_result, torch.zeros(3))
     assert torch.equal(compiled_result, torch.ones(3))

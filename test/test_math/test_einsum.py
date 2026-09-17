@@ -104,9 +104,7 @@ def test_torch_compile_fullgraph_matches_eager() -> None:
     def f(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return math.einsum("ij,jk->ik", x, y)
 
-    compiled = torch.compile(f, fullgraph=True, dynamic=False)
-
     eager_value = f(*operands)
-    compiled_value = run_compiled_or_skip(compiled, *operands)
+    compiled_value = run_compiled_or_skip(f, *operands)
 
     assert pytest.approx(eager_value.cpu(), abs=1e-12) == compiled_value.cpu()

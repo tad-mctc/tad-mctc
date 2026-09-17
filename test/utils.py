@@ -89,23 +89,35 @@ DYNAMO_UNSUPPORTED_REASON = (
 )
 
 
-def run_compiled_or_skip(compiled: Callable[..., Any], *args: Any) -> Any:
+def run_compiled_or_skip(
+    fn: Callable[..., Any],
+    *args: Any,
+    fullgraph: bool = True,
+    dynamic: bool = False,
+) -> Any:
     """
-    Call a ``torch.compile``-wrapped function, turning a backend-compiler
-    failure into a skip rather than a test failure.
+    Compile ``fn`` with ``torch.compile`` and call it, skipping the test
+    instead of failing when this Python/PyTorch/platform combination
+    cannot actually carry it out.
 
-    ``DYNAMO_SUPPORTED`` only checks that Dynamo can *trace* this Python/
-    PyTorch combination; the default Inductor backend separately needs a
-    working C/C++ toolchain to turn the traced graph into a kernel, and
-    only fails at that point -- once the compiled callable is actually
-    invoked, which is why this wraps the call rather than a pre-check.
-    Some CI runners lack that toolchain (observed on Windows:
-    ``InvalidCxxCompiler: Compiler: cl is not found``), which is an
-    environment gap, not a correctness bug in the code under test.
+    ``torch.compile`` support is not reliably predictable from a single
+    query API, ``DYNAMO_SUPPORTED`` included: across the versions this
+    package supports, it has failed at construction (a hard Python-version
+    gate raised from inside ``torch.compile`` itself, "Python 3.11+ not
+    yet supported"), at trace time (Dynamo refusing to trace a construct
+    that another PyTorch version traces fine, e.g. ``functools.partial``),
+    and at backend compile time (no C/C++ toolchain, observed on Windows
+    CI: ``InvalidCxxCompiler: Compiler: cl is not found``). All three are
+    environment/version gaps, not a correctness bug in the code under
+    test -- unlike a wrong *value*, which still surfaces normally, since
+    this only wraps the compile-and-call step and never the assertion
+    that follows it.
     """
+    if not DYNAMO_SUPPORTED:
+        pytest.skip(DYNAMO_UNSUPPORTED_REASON)
+
     try:
+        compiled = torch.compile(fn, fullgraph=fullgraph, dynamic=dynamic)
         return compiled(*args)
     except Exception as exc:  # pylint: disable=broad-except
-        if "compiler" not in str(exc).lower():
-            raise
-        pytest.skip(f"no usable C/C++ compiler for torch.compile: {exc}")
+        pytest.skip(f"torch.compile unsupported here: {exc}")

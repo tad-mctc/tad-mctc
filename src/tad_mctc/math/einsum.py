@@ -62,11 +62,11 @@ try:
 
     @_wraps(contract)
     def einsum_greedy(*args: Any) -> Tensor:
-        return partial(_torch_einsum, optimize="greedy")(*args)
+        return _torch_einsum(*args, optimize="greedy")
 
     @_wraps(contract)
     def einsum_optimal(*args: Any) -> Tensor:
-        return partial(_torch_einsum, optimize="optimal")(*args)
+        return _torch_einsum(*args, optimize="optimal")
 
     @_wraps(contract)
     def einsum(*args: Any, optimize: Any = "greedy") -> Tensor:
