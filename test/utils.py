@@ -121,3 +121,4 @@ def run_compiled_or_skip(
         return compiled(*args)
     except Exception as exc:  # pylint: disable=broad-except
         pytest.skip(f"torch.compile unsupported here: {exc}")
+        return None
