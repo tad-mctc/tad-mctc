@@ -20,7 +20,7 @@ Test caching.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Type, Union, cast
 
 import pytest
 
@@ -41,7 +41,7 @@ class ClassInstances:
         return x + y + sum(range(1000))
 
 
-MemoizeClass = type[Class] | type[ClassInstances]
+MemoizeClass = Union[Type[Class], Type[ClassInstances]]
 
 
 @pytest.mark.parametrize("memoize_class", [Class, ClassInstances])
