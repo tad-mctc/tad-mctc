@@ -25,25 +25,36 @@ from __future__ import annotations
 
 import torch
 
-from .._version import __tversion__
-
 __all__ = ["is_compiling"]
 
 
-if __tversion__ >= (2, 1, 0):
+def is_compiling() -> bool:
+    """
+    Whether we are currently being traced by ``torch.compile``.
 
-    def is_compiling() -> bool:
-        """Whether we are currently being traced by ``torch.compile``."""
-        return torch.compiler.is_compiling()
+    Checked by capability rather than by a ``__tversion__`` cutoff: across
+    the PyTorch versions this package supports, neither the public
+    ``torch.compiler.is_compiling`` nor its older, private predecessor
+    ``torch._dynamo.is_compiling`` reliably exists (or resolves without
+    raising) purely as a function of version. ``torch.compiler`` can exist
+    without yet having ``is_compiling`` (added later than the module
+    itself), and ``torch._dynamo`` -- even on a version that ships it --
+    is only exposed as a ``torch`` attribute once something has imported
+    it, which nothing upstream of this call is guaranteed to have done.
+    Every step below is therefore guarded, and any PyTorch version older
+    than ``torch.compile`` itself correctly falls through to ``False``.
+    """
+    try:
+        import torch._dynamo as _torch_dynamo  # noqa: F401  # pylint: disable=unused-import, protected-access
+    except ImportError:
+        pass
 
-elif __tversion__ >= (2, 0, 0):  # pragma: no cover
+    compiler = getattr(torch, "compiler", None)
+    if compiler is not None and hasattr(compiler, "is_compiling"):
+        return bool(compiler.is_compiling())
 
-    def is_compiling() -> bool:
-        """Whether we are currently being traced by ``torch.compile``."""
-        return torch._dynamo.is_compiling()  # pylint: disable=protected-access
+    dynamo = getattr(torch, "_dynamo", None)
+    if dynamo is not None and hasattr(dynamo, "is_compiling"):
+        return bool(dynamo.is_compiling())
 
-else:  # pragma: no cover
-
-    def is_compiling() -> bool:
-        """``torch.compile`` does not exist before PyTorch 2.0."""
-        return False
+    return False

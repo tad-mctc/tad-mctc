@@ -21,11 +21,12 @@ Utility functions for testing.
 from __future__ import annotations
 
 import numpy as np
+import torch
 
 from tad_mctc.convert import numpy_to_tensor, symmetrizef
 from tad_mctc.typing import DD, Tensor
 
-__all__ = ["_rng", "_symrng"]
+__all__ = ["_rng", "_symrng", "DYNAMO_SUPPORTED", "DYNAMO_UNSUPPORTED_REASON"]
 
 
 def _rng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
@@ -36,3 +37,34 @@ def _rng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
 
 def _symrng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
     return symmetrizef(_rng(size, dd))
+
+
+def _dynamo_is_supported() -> bool:
+    """
+    Whether ``torch.compile``/Dynamo tracing is usable on this Python/
+    PyTorch combination -- either not, because this PyTorch predates
+    ``torch.compile`` entirely, or because
+    ``torch._dynamo.is_dynamo_supported()`` reports that Dynamo does not
+    support this Python version yet (support for a new Python release
+    consistently lags the PyTorch release that first runs on it).
+    """
+    if not hasattr(torch, "compile"):
+        return False
+
+    try:
+        import torch._dynamo as dynamo  # pylint: disable=protected-access
+    except ImportError:
+        return False
+
+    return bool(
+        dynamo.is_dynamo_supported()
+    )  # pyright: ignore[reportPrivateImportUsage]
+
+
+DYNAMO_SUPPORTED = _dynamo_is_supported()
+"""For ``@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)``
+on any test that calls ``torch.compile``."""
+
+DYNAMO_UNSUPPORTED_REASON = (
+    "torch.compile/Dynamo is not supported on this Python/PyTorch combination"
+)

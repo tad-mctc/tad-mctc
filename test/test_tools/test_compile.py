@@ -31,16 +31,16 @@ import torch
 
 from tad_mctc.tools import is_compiling
 
+from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON
+
 
 def test_is_compiling_outside_compile() -> None:
     assert is_compiling() is False
 
 
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_is_compiling_inside_torch_compile_fullgraph() -> None:
-    if not hasattr(torch, "compile"):
-        pytest.skip("torch.compile is not available")
-
-    torch._dynamo.reset()
+    torch._dynamo.reset()  # pylint: disable=protected-access
 
     def f(x: torch.Tensor) -> torch.Tensor:
         # `is_compiling()` itself is the thing under test, so its result is
