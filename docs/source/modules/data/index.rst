@@ -11,4 +11,5 @@
    molecules
    pse
    radii
+   structures/index
    zeff

@@ -24,14 +24,21 @@ from pathlib import Path
 import pytest
 import torch
 
-from tad_mctc.data.molecules import mols as samples
+from tad_mctc.data.structures.mstore import get_structure
 from tad_mctc.exceptions import EmptyFileError, FormatErrorTM
 from tad_mctc.io import read, write
 from tad_mctc.typing import DD, PathLike
 
 from ..conftest import DEVICE
 
-sample_list = ["LiH", "H2O"]
+# Historical name -> mstore (collection, record), reached only through
+# `get_structure` -- see `test_ncoord/samples.py` for the same pattern and
+# its rationale.
+_SAMPLE_SOURCES = {"LiH": ("mb16_43", "LiH"), "H2O": ("heavy28", "h2o")}
+samples = {
+    name: get_structure(*source) for name, source in _SAMPLE_SOURCES.items()
+}
+sample_list = list(_SAMPLE_SOURCES)
 
 
 def test_read_fail() -> None:
@@ -70,8 +77,8 @@ def test_read_fail_format() -> None:
 
 def test_write_fail() -> None:
     sample = samples["H2O"]
-    numbers = sample["numbers"]
-    positions = sample["positions"]
+    numbers = sample.numbers
+    positions = sample.positions
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         # create file
@@ -91,8 +98,8 @@ def test_write_and_read(dtype: torch.dtype, name: str, extra: bool) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     sample = samples[name]
-    numbers = sample["numbers"].to(DEVICE)
-    positions = sample["positions"].to(**dd)
+    numbers = sample.numbers.to(DEVICE)
+    positions = sample.positions.to(**dd)
 
     # Create a temporary directory to save the file
     with tempfile.TemporaryDirectory() as tmpdirname:

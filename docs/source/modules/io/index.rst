@@ -6,4 +6,5 @@
 
    checks/index
    read/index
+   structure
    write/index

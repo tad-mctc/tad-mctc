@@ -29,11 +29,13 @@ from typing import IO, Any
 import torch
 
 from ...typing import PathLike, Tensor
+from ..structure import Structure
+from .dotfiles import read_chrg, read_uhf
 from .qcschema import read_qcschema_fileobj
 from .turbomole import read_turbomole_fileobj
 from .xyz import read_xyz_fileobj, read_xyz_qm9_fileobj
 
-__all__ = ["read"]
+__all__ = ["read", "read_structure"]
 
 
 def read_from_fileobj(
@@ -174,3 +176,66 @@ def read(
             dtype_int=dtype_int,
             **kwargs,
         )
+
+
+def read_structure(
+    filepath: PathLike,
+    ftype: str | None = None,
+    *,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+    dtype_int: torch.dtype = torch.long,
+    check_coldfusion: bool = False,
+) -> Structure:
+    """
+    Read a structure from a file, picking up its ``.CHRG``/``.UHF``
+    sidecar files from the same directory if present. Mirrors mctc-lib's
+    ``read_structure``; replaces the removed ``Mol.from_path``.
+
+    Parameters
+    ----------
+    filepath : PathLike
+        Path of the file containing the structure.
+    ftype : str | None, optional
+        File type. Defaults to ``None``, i.e., inferred from the extension.
+    device : :class:`torch.device` | None, optional
+        Device to store the tensors on. Defaults to ``None``.
+    dtype : :class:`torch.dtype` | None, optional
+        Floating point data type of the tensors. Defaults to ``None``.
+    dtype_int : :class:`torch.dtype`, optional
+        Integer data type of the tensors. Defaults to ``torch.long``.
+    check_coldfusion : bool, optional
+        Run the interatomic-distance sanity check while reading. Defaults
+        to ``False``: this is an O(nat^2) all-pairs check (see
+        :func:`tad_mctc.io.checks.coldfusion_check`), so it can dominate
+        read time for a large structure; pass ``True`` to opt in for an
+        untrusted geometry.
+
+    Returns
+    -------
+    Structure
+        The structure's atomic numbers, positions, charge and number of
+        unpaired electrons.
+
+    Raises
+    ------
+    FileNotFoundError
+        Given file does not exist.
+    """
+    numbers, positions = read(
+        filepath,
+        ftype=ftype,
+        device=device,
+        dtype=dtype,
+        dtype_int=dtype_int,
+        check_coldfusion=check_coldfusion,
+    )
+    charge = read_chrg(filepath, device=device, dtype=dtype)
+    uhf = read_uhf(filepath, device=device, dtype=dtype_int)
+    # `uhf` counts unpaired electrons, so it stays an integer tensor
+    # (matching the mstore mirror's `torch.tensor(1)`-style records),
+    # unlike `charge`, which keeps `Mol.charge`'s float representation.
+
+    return Structure(
+        numbers=numbers, positions=positions, charge=charge, uhf=uhf
+    )

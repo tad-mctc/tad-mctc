@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from tad_mctc.exceptions import MoleculeError, MoleculeWarning
+from tad_mctc.exceptions import StructureError, StructureWarning
 from tad_mctc.io import read
 from tad_mctc.units.length import AA2AU
 
@@ -34,7 +34,7 @@ def test_read_atom_exception() -> None:
     """
     p = Path(__file__).parent.resolve() / "files" / "atom.xyz"
 
-    with pytest.raises(MoleculeError):
+    with pytest.raises(StructureError):
         read.read(p, raise_padding_exception=True)
 
 
@@ -44,7 +44,7 @@ def test_read_atom_warning() -> None:
     """
     p = Path(__file__).parent.resolve() / "files" / "atom.xyz"
 
-    with pytest.warns(MoleculeWarning):
+    with pytest.warns(StructureWarning):
         read.read(p, raise_padding_exception=False)
 
 
@@ -85,5 +85,5 @@ def test_read_fail_last_zero() -> None:
     clash with zero-padding; hence, we immediately throw an error.
     """
     p = Path(__file__).parent.resolve() / "fail" / "lastzero.xyz"
-    with pytest.raises(MoleculeError):
+    with pytest.raises(StructureError):
         read.read(p, raise_padding_exception=True)

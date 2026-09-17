@@ -25,14 +25,20 @@ import pytest
 import torch
 
 from tad_mctc.batch import pack
-from tad_mctc.data.molecules import mols as samples
+from tad_mctc.data.structures.mstore import get_structure
 from tad_mctc.exceptions import FormatErrorXYZ
 from tad_mctc.io import read, write
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
 
-sample_list = ["H2O"]
+# "H2O" is mstore's `heavy28/h2o`, reached only through `get_structure` --
+# see `test_ncoord/samples.py` for the same pattern and its rationale.
+_SAMPLE_SOURCES = {"H2O": ("heavy28", "h2o")}
+samples = {
+    name: get_structure(*source) for name, source in _SAMPLE_SOURCES.items()
+}
+sample_list = list(_SAMPLE_SOURCES)
 
 
 def test_read_fail() -> None:
@@ -46,8 +52,8 @@ def test_read_fail() -> None:
 
 def test_write_fail() -> None:
     sample = samples["H2O"]
-    numbers = sample["numbers"]
-    positions = sample["positions"]
+    numbers = sample.numbers
+    positions = sample.positions
 
     with pytest.raises(FileExistsError):
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -67,14 +73,14 @@ def test_write_batch_fail() -> None:
         filepath = Path(tmpdirname) / "dummy.xyz"
 
         # numbers batched, positions not
-        numbers = pack((sample["numbers"], sample["numbers"]))
-        positions = sample["positions"]
+        numbers = pack((sample.numbers, sample.numbers))
+        positions = sample.positions
         with pytest.raises(ValueError):
             write.write_xyz(filepath, numbers, positions, overwrite=True)
 
         # positions batched, numbers not
-        numbers = sample["numbers"]
-        positions = pack((sample["positions"], sample["positions"]))
+        numbers = sample.numbers
+        positions = pack((sample.positions, sample.positions))
         with pytest.raises(ValueError):
             write.write_xyz(filepath, numbers, positions, overwrite=True)
 
@@ -87,8 +93,8 @@ def test_write_batch_fail() -> None:
 
 def test_write_comment_fail() -> None:
     sample = samples["H2O"]
-    numbers = sample["numbers"]
-    positions = sample["positions"]
+    numbers = sample.numbers
+    positions = sample.positions
 
     comment = "Comment \n with \n linebreaks \n"
 
@@ -110,8 +116,8 @@ def test_write_and_read(
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     sample = samples[name]
-    numbers = sample["numbers"].to(DEVICE)
-    positions = sample["positions"].to(**dd)
+    numbers = sample.numbers.to(DEVICE)
+    positions = sample.positions.to(**dd)
 
     # Create a temporary directory to save the file
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -145,12 +151,12 @@ def test_write_and_read_batch(
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     sample1 = samples[name1]
-    numbers1 = sample1["numbers"].to(DEVICE)
-    positions1 = sample1["positions"].to(**dd)
+    numbers1 = sample1.numbers.to(DEVICE)
+    positions1 = sample1.positions.to(**dd)
 
     sample2 = samples[name2]
-    numbers2 = sample2["numbers"].to(DEVICE)
-    positions2 = sample2["positions"].to(**dd)
+    numbers2 = sample2.numbers.to(DEVICE)
+    positions2 = sample2.positions.to(**dd)
 
     numbers_batch = pack((numbers1, numbers2))
     positions_batch = pack((positions1, positions2))
@@ -184,14 +190,14 @@ def test_write_batch_and_read_batch(
     sample1, sample2 = samples[name1], samples[name2]
     numbers = pack(
         (
-            sample1["numbers"].to(DEVICE),
-            sample2["numbers"].to(DEVICE),
+            sample1.numbers.to(DEVICE),
+            sample2.numbers.to(DEVICE),
         )
     )
     positions = pack(
         (
-            sample1["positions"].to(**dd),
-            sample2["positions"].to(**dd),
+            sample1.positions.to(**dd),
+            sample2.positions.to(**dd),
         )
     )
 

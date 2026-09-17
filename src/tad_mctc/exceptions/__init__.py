@@ -22,5 +22,5 @@ This module contains a collection of exceptions and warnings.
 """
 
 from .io import *
-from .molecule import *
 from .pytorch import *
+from .structure import *
