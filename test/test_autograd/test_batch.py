@@ -85,7 +85,7 @@ def test_vmap_compat(dtype: torch.dtype) -> None:
         requires_grad=True,
     )
 
-    f = vmap_compat(jacrev(_linear, argnums=1))  # type: ignore
+    f = vmap_compat(jacrev(_linear, argnums=1))
     jacobian_matrix = f(A, x)
 
     # Expected Jacobian for the quadratic function is A

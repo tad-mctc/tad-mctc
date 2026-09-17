@@ -33,27 +33,41 @@ a separate installation.
 
 from __future__ import annotations
 
+from typing import Any
+
 from .._version import __tversion__
+from ..typing import Callable
 
 __all__ = ["jacrev", "fjacrev", "vmap", "fvmap"]
 
 
+jacrev: Callable[..., Any]
+vmap: Callable[..., Any]
+fjacrev: Callable[..., Any] | None
+fvmap: Callable[..., Any] | None
+
 if __tversion__ < (2, 0, 0):
     # We always use the compatiblity functions even if `functorch` is available,
     # because `functorch` does not work with custom autograd functions.
-    from .compat import jacrev_compat as jacrev
-    from .compat import vmap_compat as vmap
+    from .compat import jacrev_compat, vmap_compat
+
+    jacrev = jacrev_compat
+    vmap = vmap_compat
 
     try:
-        from functorch import jacrev as fjacrev  # type: ignore[import-error]
-        from functorch import vmap as fvmap  # type: ignore[import-error]
+        import functorch  # type: ignore[import-untyped]
+
+        fjacrev = functorch.jacrev
+        fvmap = functorch.vmap
     except ModuleNotFoundError:
         # pylint: disable=invalid-name
         fjacrev = None
         fvmap = None
 else:
-    from torch.func import jacrev  # type: ignore[import-error]
-    from torch.func import vmap  # type: ignore[import-error]
+    import torch.func
+
+    jacrev = torch.func.jacrev  # pyright: ignore[reportPrivateImportUsage]
+    vmap = torch.func.vmap  # pyright: ignore[reportPrivateImportUsage]
 
     fjacrev = jacrev
     fvmap = vmap

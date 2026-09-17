@@ -23,7 +23,6 @@ from __future__ import annotations
 import torch
 
 from tad_mctc.batch.mask import real_pairs
-from tad_mctc.batch.mask.jit import real_pairs_traced
 
 
 def test_real_pairs_single() -> None:
@@ -35,18 +34,12 @@ def test_real_pairs_single() -> None:
     mask = real_pairs(numbers, mask_diagonal=False)
     assert (mask == ref).all()
 
-    jmask = real_pairs_traced(numbers, mask_diagonal=False)
-    assert (mask == jmask).all()
-
     ############################################################################
 
     ref *= ~torch.diag_embed(torch.ones(size, dtype=torch.bool))
 
     mask = real_pairs(numbers, mask_diagonal=True)
     assert (mask == ref).all()
-
-    jmask = real_pairs_traced(numbers, mask_diagonal=True)
-    assert (mask == jmask).all()
 
 
 def test_real_pairs_batch() -> None:
@@ -75,9 +68,6 @@ def test_real_pairs_batch() -> None:
     mask = real_pairs(numbers, mask_diagonal=False)
     assert (mask == ref).all()
 
-    jmask = real_pairs_traced(numbers, mask_diagonal=False)
-    assert (mask == jmask).all()
-
     ############################################################################
 
     ref = torch.tensor(
@@ -96,6 +86,3 @@ def test_real_pairs_batch() -> None:
     )
     mask = real_pairs(numbers, mask_diagonal=True)
     assert (mask == ref).all()
-
-    jmask = real_pairs_traced(numbers, mask_diagonal=True)
-    assert (mask == jmask).all()

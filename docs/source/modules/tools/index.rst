@@ -5,4 +5,5 @@
 .. toctree::
 
    caching
+   compile
    memory

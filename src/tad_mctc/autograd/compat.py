@@ -52,9 +52,7 @@ def jacrev_compat(
 
     try:
         # pylint: disable=import-outside-toplevel
-        from torch.autograd.functional import (
-            jacobian,  # type: ignore[import-error]
-        )
+        from torch.autograd.functional import jacobian
     except ImportError as e:
         raise ImportError(
             f"Failed to import required modules. {e}. {e.name} provides "
@@ -136,7 +134,7 @@ def vmap_compat(
         DeprecationWarning,
     )
 
-    def manual_vmap(*args, **kwargs):
+    def manual_vmap(*args: Any, **kwargs: Any) -> Tensor:
         # some sanity checks, non-exhaustive
         assert isinstance(in_dims, int), "Input dimensions must be integer."
         assert isinstance(out_dims, int), "Output dimensions must be integer."

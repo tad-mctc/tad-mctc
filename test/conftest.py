@@ -24,6 +24,8 @@ import numpy as np
 import pytest
 import torch
 
+from tad_mctc._version import __tversion__
+
 # avoid randomness and non-deterministic algorithms
 np.random.seed(0)
 torch.manual_seed(0)
@@ -115,9 +117,9 @@ def pytest_configure(config: pytest.Config) -> None:
         torch.autograd.anomaly_mode.set_detect_anomaly(True)
 
     if config.getoption("--jit"):
-        torch.jit._state.enable()  # type: ignore # pylint: disable=protected-access
+        torch.jit._state.enable()  # pyright: ignore[reportAttributeAccessIssue]  # pylint: disable=protected-access
     else:
-        torch.jit._state.disable()  # type: ignore # pylint: disable=protected-access
+        torch.jit._state.disable()  # pyright: ignore[reportAttributeAccessIssue]  # pylint: disable=protected-access
 
     if config.getoption("--fast"):
         FAST_MODE = True
@@ -145,10 +147,10 @@ def pytest_configure(config: pytest.Config) -> None:
 
         # `torch.set_default_tensor_type` is deprecated since 2.1.0 and version
         # 2.0.0 introduces `torch.set_default_device`
-        if torch.__version__ < (2, 0, 0):  # type: ignore
-            torch.set_default_tensor_type("torch.cuda.FloatTensor")  # type: ignore
+        if __tversion__ < (2, 0, 0):
+            torch.set_default_tensor_type("torch.cuda.FloatTensor")
         else:
-            torch.set_default_device(DEVICE)  # type: ignore
+            torch.set_default_device(DEVICE)
     else:
         torch.use_deterministic_algorithms(True)
         DEVICE = None

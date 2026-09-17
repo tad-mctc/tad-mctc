@@ -28,7 +28,7 @@ from tad_mctc._version import __tversion__
 from tad_mctc.autograd import checks
 
 
-def test_dummy():
+def test_dummy() -> None:
     import tad_mctc._version
 
     torch_version = tad_mctc._version.__tversion__
@@ -48,7 +48,7 @@ def test_dummy():
 
 
 @pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_is_gradtracking_true(monkeypatch):
+def test_is_gradtracking_true(monkeypatch: pytest.MonkeyPatch) -> None:
     """Should return True when torch._C._functorch.is_gradtrackingtensor is True."""
     dummy = object()
     monkeypatch.setattr(
@@ -60,7 +60,7 @@ def test_is_gradtracking_true(monkeypatch):
 
 
 @pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_is_gradtracking_false(monkeypatch):
+def test_is_gradtracking_false(monkeypatch: pytest.MonkeyPatch) -> None:
     """Should return False when torch._C._functorch.is_gradtrackingtensor is False."""
     dummy = object()
     monkeypatch.setattr(
@@ -72,7 +72,7 @@ def test_is_gradtracking_false(monkeypatch):
 
 
 @pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_is_batched_true(monkeypatch):
+def test_is_batched_true(monkeypatch: pytest.MonkeyPatch) -> None:
     """Should return True when torch._C._functorch.is_batchedtensor is True."""
     dummy = object()
     monkeypatch.setattr(
@@ -84,7 +84,7 @@ def test_is_batched_true(monkeypatch):
 
 
 @pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_is_batched_false(monkeypatch):
+def test_is_batched_false(monkeypatch: pytest.MonkeyPatch) -> None:
     """Should return False when torch._C._functorch.is_batchedtensor is False."""
     dummy = object()
     monkeypatch.setattr(
@@ -105,7 +105,12 @@ def test_is_batched_false(monkeypatch):
         (False, False, False),  # neither
     ],
 )
-def test_is_functorch_tensor(monkeypatch, grad_val, batched_val, expected):
+def test_is_functorch_tensor(
+    monkeypatch: pytest.MonkeyPatch,
+    grad_val: bool,
+    batched_val: bool,
+    expected: bool,
+) -> None:
     """
     is_functorch_tensor should return True if either grad-tracking
     or batched (or both) is True, otherwise False.
@@ -129,7 +134,7 @@ def test_is_functorch_tensor(monkeypatch, grad_val, batched_val, expected):
 
 
 @pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_plain_tensor_behavior():
+def test_plain_tensor_behavior() -> None:
     # A plain torch.Tensor should not be seen as grad-tracking or batched
     t = torch.tensor([1.0, 2.0, 3.0])
     assert checks.is_gradtracking(t) is False
@@ -138,7 +143,7 @@ def test_plain_tensor_behavior():
 
 
 @pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_gradtracking_tensor_via_grad():
+def test_gradtracking_tensor_via_grad() -> None:
     # grad(f) returns a grad-tracking tensor when applied
     def f(x: torch.Tensor) -> torch.Tensor:
         assert checks.is_gradtracking(x) is True
@@ -148,11 +153,11 @@ def test_gradtracking_tensor_via_grad():
         return x * x
 
     t = torch.tensor(4.0, requires_grad=True)
-    _ = torch.func.jacrev(f)(t)
+    _ = torch.func.jacrev(f)(t)  # pyright: ignore[reportPrivateImportUsage]
 
 
 @pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_batched_tensor_via_vmap():
+def test_batched_tensor_via_vmap() -> None:
     # vmap wraps a tensor into a batched tensor
     def f(x: torch.Tensor) -> torch.Tensor:
         assert checks.is_gradtracking(x) is False
@@ -162,13 +167,13 @@ def test_batched_tensor_via_vmap():
         return x * x
 
     t = torch.randn((2, 4), requires_grad=True)
-    _ = torch.func.vmap(f)(t)
+    _ = torch.func.vmap(f)(t)  # pyright: ignore[reportPrivateImportUsage]
 
 
 @pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_grad_and_batched_tensor():
+def test_grad_and_batched_tensor() -> None:
     # Combine grad + vmap to get a tensor that is both
-    def f(x):
+    def f(x: torch.Tensor) -> torch.Tensor:
         assert checks.is_gradtracking(x) is True
         assert checks.is_batched(torch._C._functorch.get_unwrapped(x)) is True
         assert checks.is_functorch_tensor(x) is True
@@ -176,5 +181,5 @@ def test_grad_and_batched_tensor():
         return x**3
 
     t = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
-    grad_fn = torch.func.grad(f)
-    _ = torch.func.vmap(grad_fn)(t)
+    grad_fn = torch.func.grad(f)  # pyright: ignore[reportPrivateImportUsage]
+    _ = torch.func.vmap(grad_fn)(t)  # pyright: ignore[reportPrivateImportUsage]

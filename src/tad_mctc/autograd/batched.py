@@ -23,6 +23,8 @@ Batched versions of autograd functions.
 
 from __future__ import annotations
 
+from typing import Any
+
 from ..typing import Callable, Tensor
 from .internals import jacrev, vmap
 
@@ -30,7 +32,7 @@ __all__ = ["bjacrev"]
 
 
 def bjacrev(
-    func: Callable[..., Tensor], argnums: int = 0, **kwargs
+    func: Callable[..., Tensor], argnums: int = 0, **kwargs: Any
 ) -> Callable[..., Tensor]:
     """
     Batched Jacobian of a function.

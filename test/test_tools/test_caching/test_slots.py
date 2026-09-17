@@ -20,6 +20,8 @@ Test caching.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from tad_mctc.tools.caching import memoize
@@ -28,11 +30,11 @@ from tad_mctc.tools.caching import memoize
 class DummyClass:
     __slots__ = ["dummy", "__memoization_cache"]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.dummy = 0
 
     @memoize
-    def compute(self, x, y=0):
+    def compute(self, x: int, y: int = 0) -> int:
         """A simple method to test memoization."""
         return self.dummy + x + y + sum(range(1000))
 
@@ -42,7 +44,7 @@ def test_fail() -> None:
         __slots__ = ["dummy"]
 
         @memoize
-        def compute(self, x, y=0):
+        def compute(self, x: int, y: int = 0) -> int:
             """A simple method to test memoization."""
             return x + y + sum(range(1000))
 
@@ -63,20 +65,21 @@ def test_memoization() -> None:
     assert id(first_result) == id(second_result)
 
 
-def test_cache_separation():
+def test_cache_separation() -> None:
     obj1 = DummyClass()
     obj2 = DummyClass()
 
     obj1.compute(5)
     obj2.compute(5)
 
-    # Different objects do NOT share cache
-    c1 = obj1.compute.get_cache(obj1)
-    c2 = obj2.compute.get_cache(obj2)
+    # Different objects do NOT share cache. `get_cache` is attached to the
+    # wrapper by `memoize` via `setattr`, which no static type can see.
+    c1 = cast(Any, obj1.compute).get_cache(obj1)
+    c2 = cast(Any, obj2.compute).get_cache(obj2)
     assert c1 != c2
 
 
-def test_argument_sensitivity():
+def test_argument_sensitivity() -> None:
     obj = DummyClass()
 
     result1 = obj.compute(5)
@@ -86,10 +89,10 @@ def test_argument_sensitivity():
     assert result1 != result2
 
 
-def test_clear_cache():
+def test_clear_cache() -> None:
     obj = DummyClass()
     obj.compute(10)
-    obj.compute.clear_cache(obj)
+    cast(Any, obj.compute).clear_cache(obj)
 
     # The cache should be empty after clearing
-    assert not obj.compute.get_cache(obj)
+    assert not cast(Any, obj.compute).get_cache(obj)

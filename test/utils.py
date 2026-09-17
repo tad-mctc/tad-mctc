@@ -31,7 +31,7 @@ __all__ = ["_rng", "_symrng"]
 def _rng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
     s = (size,) if isinstance(size, int) else size
     n = np.random.rand(*s)
-    return numpy_to_tensor(n, **dd)  # type: ignore[arg-type]
+    return numpy_to_tensor(n, **dd)
 
 
 def _symrng(size: tuple[int, ...] | int, dd: DD) -> Tensor:

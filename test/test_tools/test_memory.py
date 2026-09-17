@@ -20,7 +20,7 @@ Test memory functions.
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import torch
@@ -70,7 +70,7 @@ def test_memory_device_cpu() -> None:
 
 
 @patch("torch.cuda.mem_get_info")
-def test_memory_device_cuda(mock_mem_info):
+def test_memory_device_cuda(mock_mem_info: MagicMock) -> None:
     # Mock values for free and total memory in bytes
     mock_free, mock_total = 8 * 1024**3, 16 * 1024**3
     mock_mem_info.return_value = (mock_free, mock_total)
@@ -88,7 +88,7 @@ def test_memory_device_cuda(mock_mem_info):
     assert total_memory == pytest.approx(expected_total)
 
 
-def test_memory_device_invalid_device():
+def test_memory_device_invalid_device() -> None:
     with pytest.raises(TypeError):
         memory_device("invalid_device")  # type: ignore
 

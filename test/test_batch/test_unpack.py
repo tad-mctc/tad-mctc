@@ -68,7 +68,7 @@ def test_2d_tensor() -> None:
 ###############################################################################
 
 
-def test_general():
+def test_general() -> None:
     """
     Ensures unpack functions as intended.
 

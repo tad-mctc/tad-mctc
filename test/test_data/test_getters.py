@@ -36,22 +36,22 @@ from tad_mctc.units import GMOL2AU
 
 
 @pytest.fixture
-def atomic_numbers():
+def atomic_numbers() -> torch.Tensor:
     return torch.tensor([1, 2, 3], dtype=torch.long)
 
 
 @pytest.fixture
-def mock_mass_tensor():
+def mock_mass_tensor() -> torch.Tensor:
     return torch.tensor([1.0, 4.0, 7.0, 10.0], dtype=torch.float)
 
 
 @pytest.fixture
-def mock_zeff_tensor():
+def mock_zeff_tensor() -> torch.Tensor:
     return torch.tensor([1, 2, 3, 4], dtype=torch.long)
 
 
 @pytest.fixture
-def mock_hardness_tensor():
+def mock_hardness_tensor() -> torch.Tensor:
     return torch.tensor(
         [
             0.00000000,
@@ -64,7 +64,7 @@ def mock_hardness_tensor():
 
 
 @pytest.fixture
-def mock_vdw_pairwise_tensor():
+def mock_vdw_pairwise_tensor() -> torch.Tensor:
     return torch.tensor(
         [
             [1.0, 1.5, 2.0, 2.5],
@@ -76,7 +76,9 @@ def mock_vdw_pairwise_tensor():
     )
 
 
-def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
+def test_get_atomic_masses(
+    atomic_numbers: torch.Tensor, mock_mass_tensor: torch.Tensor
+) -> None:
     # patch the name that `get_atomic_masses()` dereferences
     with patch(
         "tad_mctc.data.mass.ATOMIC_MASS",
@@ -94,7 +96,9 @@ def test_get_atomic_masses(atomic_numbers, mock_mass_tensor):
         )
 
 
-def test_get_atomic_radii(atomic_numbers, mock_mass_tensor):
+def test_get_atomic_radii(
+    atomic_numbers: torch.Tensor, mock_mass_tensor: torch.Tensor
+) -> None:
     # patch the name that `get_atomic_radii()` dereferences
     with patch(
         "tad_mctc.data.radii.ATOMIC_RADII",
@@ -108,7 +112,9 @@ def test_get_atomic_radii(atomic_numbers, mock_mass_tensor):
         )
 
 
-def test_get_zvalence(atomic_numbers, mock_zeff_tensor):
+def test_get_zvalence(
+    atomic_numbers: torch.Tensor, mock_zeff_tensor: torch.Tensor
+) -> None:
     with patch(
         "tad_mctc.data.zeff.ZVALENCE",
         side_effect=lambda dtype=torch.long, device=None: mock_zeff_tensor,
@@ -117,7 +123,9 @@ def test_get_zvalence(atomic_numbers, mock_zeff_tensor):
         assert pytest.approx(ref.cpu()) == get_zvalence(atomic_numbers).cpu()
 
 
-def test_get_ecore(atomic_numbers, mock_zeff_tensor) -> None:
+def test_get_ecore(
+    atomic_numbers: torch.Tensor, mock_zeff_tensor: torch.Tensor
+) -> None:
     with patch(
         "tad_mctc.data.zeff.ECORE",
         side_effect=lambda dtype=torch.long, device=None: mock_zeff_tensor,
@@ -126,7 +134,9 @@ def test_get_ecore(atomic_numbers, mock_zeff_tensor) -> None:
         assert pytest.approx(ref.cpu()) == get_ecore(atomic_numbers).cpu()
 
 
-def test_get_hardness(atomic_numbers, mock_hardness_tensor) -> None:
+def test_get_hardness(
+    atomic_numbers: torch.Tensor, mock_hardness_tensor: torch.Tensor
+) -> None:
     with patch(
         "tad_mctc.data.hardness.GAM",
         side_effect=lambda dtype=torch.float64, device=None: mock_hardness_tensor,
@@ -135,7 +145,9 @@ def test_get_hardness(atomic_numbers, mock_hardness_tensor) -> None:
         assert pytest.approx(ref.cpu()) == get_hardness(atomic_numbers).cpu()
 
 
-def test_get_vdw_pairwise(atomic_numbers, mock_vdw_pairwise_tensor) -> None:
+def test_get_vdw_pairwise(
+    atomic_numbers: torch.Tensor, mock_vdw_pairwise_tensor: torch.Tensor
+) -> None:
     # patch the name that `get_vdw_pairwise()` dereferences
     with patch(
         "tad_mctc.data.radii.VDW_PAIRWISE",

@@ -174,7 +174,7 @@ def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
     jacobian_func(x.detach().clone().requires_grad_(), y)
 
 
-def test_torch_to_np_below_1_13_0():
+def test_torch_to_np_below_1_13_0() -> None:
     import tad_mctc._version
 
     torch_version = tad_mctc._version.__tversion__
@@ -194,7 +194,7 @@ def test_torch_to_np_below_1_13_0():
 
 
 @pytest.mark.skipif(__tversion__ < (1, 13, 0), reason="Requires torch>=1.13.0")
-def test_torch_to_np_above_1_13_0():
+def test_torch_to_np_above_1_13_0() -> None:
     import tad_mctc._version
 
     torch_version = tad_mctc._version.__tversion__

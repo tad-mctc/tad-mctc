@@ -21,7 +21,9 @@ Tools
 Collection of tools for:
 - caching
 - memory
+- compile (introspection of the ``torch.compile`` tracing state)
 """
 
 from .caching import *
+from .compile import *
 from .memory import *
