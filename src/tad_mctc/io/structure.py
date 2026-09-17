@@ -73,7 +73,15 @@ from typing import Any, Iterable
 
 import torch
 from torch import Tensor
-from torch.utils._pytree import register_pytree_node
+
+try:
+    from torch.utils._pytree import register_pytree_node
+except ImportError:  # pragma: no cover
+    # PyTorch < 2.1 only has the private, otherwise identical predecessor
+    # this was later renamed from.
+    from torch.utils._pytree import (
+        _register_pytree_node as register_pytree_node,
+    )
 
 from .checks.structure import structure_check
 

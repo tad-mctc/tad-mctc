@@ -39,6 +39,12 @@ from tad_mctc.exceptions import DtypeError
 from tad_mctc.io.structure import Structure
 from tad_mctc.typing import Tensor
 
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    run_compiled_or_skip,
+)
+
 
 def _water() -> tuple[Tensor, Tensor]:
     """Numbers and positions for a single, non-periodic water molecule."""
@@ -313,17 +319,19 @@ def _leaf_op(structure: Structure) -> Tensor:
     return total
 
 
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_compile_fullgraph_without_lattice() -> None:
     """`torch.compile(fullgraph=True)` must trace through a `Structure`
     with only its required fields set."""
     numbers, positions = _water()
     structure = Structure(numbers=numbers, positions=positions)
 
-    compiled = torch.compile(_leaf_op, fullgraph=True)
+    result = run_compiled_or_skip(_leaf_op, structure)
 
-    assert torch.allclose(compiled(structure), _leaf_op(structure))
+    assert torch.allclose(result, _leaf_op(structure))
 
 
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_compile_fullgraph_with_lattice() -> None:
     """Same guarantee, but with `lattice` also set -- a different pytree
     treespec, so `torch.compile` specializes and traces it separately."""
@@ -331,6 +339,6 @@ def test_compile_fullgraph_with_lattice() -> None:
     lattice = 20.0 * torch.eye(3, dtype=torch.double)
     structure = Structure(numbers=numbers, positions=positions, lattice=lattice)
 
-    compiled = torch.compile(_leaf_op, fullgraph=True)
+    result = run_compiled_or_skip(_leaf_op, structure)
 
-    assert torch.allclose(compiled(structure), _leaf_op(structure))
+    assert torch.allclose(result, _leaf_op(structure))
