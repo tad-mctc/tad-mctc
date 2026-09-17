@@ -30,7 +30,7 @@ import torch
 __all__ = ["is_compiling"]
 
 
-def _always_false() -> bool:
+def _always_false() -> bool:  # pragma: no cover
     """``torch.compile`` does not exist, or exposes no way to ask."""
     return False
 
@@ -61,8 +61,9 @@ def _resolve_is_compiling() -> Callable[[], bool]:
     """
     try:
         import torch._dynamo as _torch_dynamo  # noqa: F401  # pylint: disable=unused-import, protected-access
-    except ImportError:
-        # Optional across supported PyTorch variants; fall back to other probes.
+    except ImportError:  # pragma: no cover
+        # Only unavailable on PyTorch < 2.0, not exercised by any single
+        # CI job's torch version; the other probes below fall through.
         pass
 
     compiler = getattr(torch, "compiler", None)
@@ -73,7 +74,7 @@ def _resolve_is_compiling() -> Callable[[], bool]:
     if dynamo is not None and hasattr(dynamo, "is_compiling"):
         return dynamo.is_compiling
 
-    return _always_false
+    return _always_false  # pragma: no cover
 
 
 _is_compiling_impl = _resolve_is_compiling()

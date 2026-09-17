@@ -26,9 +26,12 @@ direct coverage.
 
 from __future__ import annotations
 
+import types
+
 import pytest
 import torch
 
+from tad_mctc.tools import compile as compile_module
 from tad_mctc.tools import is_compiling
 
 from ..utils import (
@@ -40,6 +43,39 @@ from ..utils import (
 
 def test_is_compiling_outside_compile() -> None:
     assert is_compiling() is False
+
+
+def test_resolve_prefers_torch_compiler_is_compiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def sentinel() -> bool:
+        return True
+
+    fake_compiler = types.SimpleNamespace(is_compiling=sentinel)
+    monkeypatch.setattr(torch, "compiler", fake_compiler, raising=False)
+
+    assert compile_module._resolve_is_compiling() is sentinel
+
+
+def test_resolve_falls_back_to_dynamo_is_compiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A `torch.compiler` without `is_compiling` on it (the real gap on
+    # PyTorch 2.2.2) must fall through to `torch._dynamo.is_compiling`
+    # rather than stopping at the first, `is_compiling`-less namespace.
+    monkeypatch.setattr(
+        torch, "compiler", types.SimpleNamespace(), raising=False
+    )
+
+    if not hasattr(torch, "_dynamo") or not hasattr(
+        torch._dynamo, "is_compiling"  # pylint: disable=protected-access
+    ):
+        pytest.skip("torch._dynamo.is_compiling is not available here")
+
+    resolved = compile_module._resolve_is_compiling()
+    assert (
+        resolved is torch._dynamo.is_compiling
+    )  # pylint: disable=protected-access
 
 
 @pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
