@@ -47,6 +47,7 @@ def is_compiling() -> bool:
     try:
         import torch._dynamo as _torch_dynamo  # noqa: F401  # pylint: disable=unused-import, protected-access
     except ImportError:
+        # Optional across supported PyTorch variants; fall back to other probes.
         pass
 
     compiler = getattr(torch, "compiler", None)
