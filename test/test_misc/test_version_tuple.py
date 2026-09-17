@@ -25,7 +25,7 @@ import pytest
 from tad_mctc._version import version_tuple
 
 
-def test_valid_version_strings():
+def test_valid_version_strings() -> None:
     """Test whether valid version strings are recognized."""
     assert version_tuple("1.2.3") == (1, 2, 3), "Standard version string"
     assert version_tuple("10.20.30") == (
@@ -47,13 +47,13 @@ def test_valid_version_strings():
     ), "Version with underscore"
 
 
-def test_edge_cases():
+def test_edge_cases() -> None:
     """Test edge cases for version strings."""
     assert version_tuple("0.0.1") == (0, 0, 1), "Minimal version numbers"
     assert version_tuple("1.2.3.4") == (1, 2, 3), "Extra version parts"
 
 
-def test_fail():
+def test_fail() -> None:
     """Test failure of unsupported version string."""
     # Missing patch number
     with pytest.raises(RuntimeError):

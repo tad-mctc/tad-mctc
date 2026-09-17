@@ -118,10 +118,12 @@ def tensor_to_numpy(x: Tensor, dtype: DTypeLike | None = None) -> NDArray[Any]:
             while torch._C._functorch.is_functorch_wrapped_tensor(x) is True:
                 x = torch._C._functorch.get_unwrapped(x)
 
-            if __tversion__ < (2, 0, 0):  # type: ignore[operator] # pragma: no cover
+            if __tversion__ < (2, 0, 0):  # pragma: no cover
                 interpreted = np.array(x.storage().tolist(), dtype=dtype)
             else:
-                storage_bytes = bytes(x.untyped_storage())  # type: ignore
+                storage_bytes = bytes(
+                    x.untyped_storage()
+                )  # pyright: ignore[reportArgumentType]
                 interpreted = np.frombuffer(storage_bytes, dtype=xdtype).astype(
                     dtype
                 )

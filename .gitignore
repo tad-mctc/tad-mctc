@@ -183,7 +183,14 @@ cython_debug/
 .pi/
 .pi-subagents/
 .scratch/
+.agent-docs/
+/CLAUDE.md
 
 # project-specific ignores
 examples/write/*coord
 examples/write/*.xyz
+examples/scaling/glu_ala_a_0001_to_2048/
+examples/scaling/glu_ala_b_512_to_65536/
+examples/scaling/*.tar.gz
+examples/scaling/glu_ala_scaling_*.txt
+examples/scaling/glu_ala_scaling_*.png

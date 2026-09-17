@@ -28,6 +28,7 @@ from typing import Any
 
 import torch
 
+from ..tools import is_compiling
 from ..typing import Tensor, _wraps
 
 __all__ = [
@@ -40,22 +41,32 @@ __all__ = [
 try:
     from functools import partial
 
-    from opt_einsum import contract  # type: ignore[import]
+    from opt_einsum import contract  # type: ignore[import-untyped]
 
     @_wraps(contract)
     def _torch_einsum(
         *args: Any, optimize: Any = "greedy"
     ) -> Tensor:  # pragma: no cover
+        # Dynamo cannot trace `opt_einsum.contract`'s internals (it builds
+        # up its contraction path with plain Python list mutation), so
+        # `torch.compile(fullgraph=True)` fails on every call site of this
+        # wrapper whenever `opt_einsum` is installed. Eager execution keeps
+        # `opt_einsum`'s contraction-order optimization; under compilation,
+        # Inductor does its own fusion, so that optimization buys little
+        # there anyway.
+        if is_compiling():
+            return torch.einsum(*args)
+
         f = partial(contract, backend="torch", optimize=optimize)
-        return f(*args)  # type: ignore
+        return f(*args)
 
     @_wraps(contract)
     def einsum_greedy(*args: Any) -> Tensor:
-        return partial(_torch_einsum, optimize="greedy")(*args)
+        return _torch_einsum(*args, optimize="greedy")
 
     @_wraps(contract)
     def einsum_optimal(*args: Any) -> Tensor:
-        return partial(_torch_einsum, optimize="optimal")(*args)
+        return _torch_einsum(*args, optimize="optimal")
 
     @_wraps(contract)
     def einsum(*args: Any, optimize: Any = "greedy") -> Tensor:

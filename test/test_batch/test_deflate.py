@@ -69,7 +69,7 @@ def test_single_system() -> None:
 
 
 @pytest.mark.filterwarnings("ignore")
-def test_general():
+def test_general() -> None:
     """General operational test of the `deflate` method."""
     a = torch.tensor(
         [
@@ -115,10 +115,10 @@ def test_general():
 
 
 @pytest.mark.grad
-def test_grad():
+def test_grad() -> None:
     """Check the gradient stability of the deflate function."""
 
-    def proxy(tensor):
+    def proxy(tensor: torch.Tensor) -> torch.Tensor:
         # Clean the padding values to prevent unjust failures
         proxy_tensor = torch.zeros_like(tensor)
         proxy_tensor[~mask] = tensor[~mask]

@@ -157,7 +157,7 @@ class SymEigBroadBase(torch.autograd.Function):
     KNOWN_METHODS = ["cond", "lorn", "none", None]
 
     @staticmethod
-    def backward(  # type: ignore[override]
+    def backward(  # pyright: ignore[reportIncompatibleMethodOverride]
         ctx: Any,
         w_bar: Tensor,
         v_bar: Tensor,
@@ -269,7 +269,7 @@ class _SymEigBroad_V1(SymEigBroadBase):  # pragma: no cover
     """
 
     @staticmethod
-    def forward(  # type: ignore[override]
+    def forward(
         ctx: Any,
         a: Tensor,
         method: str = "cond",
@@ -347,7 +347,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
     """
 
     @staticmethod
-    def forward(  # type: ignore[override]
+    def forward(
         a: Tensor,
         method: str = "cond",
         factor: Tensor | float = 1e-12,
@@ -403,7 +403,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
 
     @staticmethod
     def setup_context(
-        ctx: Any, inputs: tuple[Any, ...], outputs: tuple[Tensor, Tensor]
+        ctx: Any, inputs: tuple[Any, ...], output: tuple[Tensor, Tensor]
     ) -> None:
         """
         Sets up the context for backward computation in a PyTorch autograd
@@ -422,7 +422,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
             A tuple containing inputs to the forward method. It should include
             the matrix `a`, the broadening method `method`, and the broadening
             factor `factor`.
-        outputs : tuple of Tensor
+        output : tuple of Tensor
             A tuple containing the outputs from the forward pass, which are the
             eigenvalues and eigenvectors of the matrix.
 
@@ -436,7 +436,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
         method: str = inputs[1]
         factor: Tensor | float = inputs[2]
 
-        w, v = outputs
+        w, v = output
 
         # Save tensors that will be needed in the backward pass
         ctx.save_for_backward(w, v)
@@ -536,7 +536,7 @@ def eighb(
     a: Tensor,
     b: Tensor | None = None,
     scheme: Literal["chol", "lowd"] = "chol",
-    broadening_method: Literal["cond", "lorn"] | None = "cond",
+    broadening_method: Literal["cond", "lorn", "none"] | None = "cond",
     factor: Tensor | float = 1e-12,
     sort_out: bool = True,
     aux: bool = True,
@@ -572,6 +572,8 @@ def eighb(
 
         - "cond": conditional broadening. [DEFAULT='cond']
         - "lorn": Lorentzian broadening.
+        - "none": broadening path with the broadening disabled, kept only
+          for debugging/testing against the ``None`` fast path below.
         - None: no broadening (uses `torch.linalg.eigh`).
     factor : float, optional
         The degree of broadening (broadening factor). [Default=1E-12]
@@ -678,7 +680,7 @@ def eighb(
     v: Tensor
     w: Tensor
 
-    if __tversion__ < (2, 0, 0):  # type: ignore[operator] # pragma: no cover
+    if __tversion__ < (2, 0, 0):  # pragma: no cover
         _SymEigB = _SymEigBroad_V1
     else:
         _SymEigB = _SymEigBroad_V2  # type: ignore[assignment]
@@ -737,7 +739,7 @@ def eighb(
             # To obtain C, perform the reduction operation C = L^{-1}AL^{-T}
             c = l_inv @ a @ l_inv_t
 
-            if aux:
+            if aux and mask is not None:
                 # Convert from zero-padding to padding with largest eigenvalue estimate
                 shift = estimate_minmax(c)[-1].unsqueeze(-1)
                 c = c + torch.diag_embed(shift * mask)
@@ -764,7 +766,7 @@ def eighb(
             # A' (a_prime) can then be constructed as: A' = B^{-1/2} A B^{-1/2}
             a_prime = b_so @ a @ b_so
 
-            if aux:
+            if aux and mask is not None:
                 # Convert from zero-padding to padding with largest eigenvalue estimate
                 shift = estimate_minmax(a_prime)[-1].unsqueeze(-1)
                 a_prime = a_prime + torch.diag_embed(shift * mask)

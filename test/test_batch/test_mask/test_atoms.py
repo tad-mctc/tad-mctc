@@ -23,7 +23,6 @@ from __future__ import annotations
 import torch
 
 from tad_mctc.batch.mask import real_atoms
-from tad_mctc.batch.mask.jit import real_atoms_traced
 
 
 def test_real_atoms() -> None:
@@ -42,6 +41,3 @@ def test_real_atoms() -> None:
 
     mask = real_atoms(numbers)
     assert (mask == ref).all()
-
-    jmask = real_atoms_traced(numbers)
-    assert (mask == jmask).all()

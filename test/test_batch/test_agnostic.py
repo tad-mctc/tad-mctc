@@ -27,7 +27,7 @@ from tad_mctc.batch import eye
 from ..conftest import DEVICE
 
 
-def test_eye_single():
+def test_eye_single() -> None:
     shape = (3, 3)
     value = 1.0
     tensor = torch.empty(shape, device=DEVICE)
@@ -43,7 +43,7 @@ def test_eye_single():
     assert torch.all(result[result != value] == 0)
 
 
-def test_eye_batch():
+def test_eye_batch() -> None:
     shape = (5, 3, 3)
     value = 1.0
     tensor = torch.empty(shape, device=DEVICE)

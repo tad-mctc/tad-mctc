@@ -354,7 +354,7 @@ def test_eighb_broadening_grad(bmethod: Literal["cond", "lorn"] | None) -> None:
     assert dgradcheck(
         lambda a2, method_l=bmethod: _eigen_proxy(
             a2,
-            target_method=method_l,  # type: ignore[arg-type]
+            target_method=method_l,  # pyright: ignore[reportArgumentType]
         ),
         (a1,),
         fast_mode=FAST_MODE,
@@ -393,7 +393,7 @@ def test_eighb_broadening_grad_batch(bmethod: Literal["cond", "lorn"]) -> None:
     assert dgradcheck(
         lambda a2_l, method_l=bmethod: _eigen_proxy(
             a2_l,
-            target_method=method_l,  # type: ignore[arg-type]
+            target_method=method_l,  # pyright: ignore[reportArgumentType]
             size_data=numpy_to_tensor(sizes, **dd),
         ),
         (a2,),
@@ -438,7 +438,7 @@ def test_eighb_general_grad(scheme: Literal["chol", "lowd"]) -> None:
         lambda a1_l, b1_l, scheme_l=scheme: _eigen_proxy_general(
             a1_l,
             b1_l,
-            target_scheme=scheme_l,  # type: ignore[arg-type]
+            target_scheme=scheme_l,  # pyright: ignore[reportArgumentType]
         ),
         (a1, b1),
         fast_mode=False,
@@ -463,7 +463,7 @@ def test_eighb_general_grad_batch(scheme: Literal["chol", "lowd"]) -> None:
             a2_l,
             b2_l,
             size_data=size_data_l,
-            target_scheme=scheme_l,  # type: ignore[arg-type]
+            target_scheme=scheme_l,  # pyright: ignore[reportArgumentType]
         ),
         (a2, b2, numpy_to_tensor(sizes, **dd)),
         fast_mode=False,

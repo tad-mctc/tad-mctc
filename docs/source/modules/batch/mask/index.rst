@@ -7,4 +7,3 @@
    atoms
    pairs
    triples
-   jit

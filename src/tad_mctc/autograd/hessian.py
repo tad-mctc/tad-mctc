@@ -97,12 +97,12 @@ def hessian(
         # dims = tuple(None if x != argnums else 0 for x in range(len(inputs)))
         # _jac = torch.func.vmap(_jac, in_dims=dims)
 
-    return _jac(*inputs)  # type: ignore
+    return _jac(*inputs)
 
 
 def hess_fn_rev(
     f: Callable[..., Tensor], argnums: tuple[int] | int = 0
-) -> Callable:
+) -> Callable[..., Tensor]:
     """
     Return the Hessian function using reverse-mode autodiff twice.
     (Functorch's `hessian` uses forward and backward mode, but forward is
@@ -121,6 +121,9 @@ def hess_fn_rev(
         A function that computes the Hessian of `f` with respect to the
         specified argument(s).
     """
-    return torch.func.jacrev(
-        torch.func.jacrev(f, argnums=argnums), argnums=argnums
+    return torch.func.jacrev(  # pyright: ignore[reportPrivateImportUsage, reportReturnType]
+        torch.func.jacrev(
+            f, argnums=argnums
+        ),  # pyright: ignore[reportPrivateImportUsage]
+        argnums=argnums,
     )

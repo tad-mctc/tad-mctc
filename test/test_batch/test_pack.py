@@ -144,7 +144,7 @@ def test_return_mask_axis() -> None:
 ###############################################################################
 
 
-def test_pack():
+def test_pack() -> None:
     """Sanity test of batch packing operation."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -189,14 +189,14 @@ def test_pack():
 
 
 @pytest.mark.grad
-def test_pack_grad():
+def test_pack_grad() -> None:
     """Gradient stability test of batch packing operation."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
     sizes = np.random.randint(2, 6, (3,))
     tensors = [_rng((i, i), dd).requires_grad_(True) for i in sizes]
 
-    def proxy(*args):
+    def proxy(*args: torch.Tensor) -> torch.Tensor:
         # Proxy function is used to prevent an undiagnosed error from occurring.
         return pack(list(args))
 

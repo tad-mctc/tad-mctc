@@ -18,6 +18,8 @@
 Test compatibility function for Jacobian.
 """
 
+from typing import Any
+
 import pytest
 import torch
 
@@ -52,7 +54,7 @@ def test_jacobian(dtype: torch.dtype) -> None:
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 def test_argument_propagation(dtype: torch.dtype) -> None:
-    dd = {"device": DEVICE, "dtype": dtype}
+    dd: DD = {"device": DEVICE, "dtype": dtype}
 
     def two_arg_func(x: Tensor, y: Tensor) -> Tensor:
         return x * y
@@ -68,7 +70,7 @@ def test_argument_propagation(dtype: torch.dtype) -> None:
 
 
 def test_non_tensor_input_error() -> None:
-    def simple_func(x):
+    def simple_func(x: Any) -> Any:
         return x**2
 
     f_jac = jacrev(simple_func)

@@ -30,7 +30,7 @@ from tad_mctc.convert import normalize_device
 from ..conftest import DEVICE
 
 
-def test_merge():
+def test_merge() -> None:
     """
     Operational tests of the merge function.
 
@@ -63,10 +63,10 @@ def test_merge():
 
 
 @pytest.mark.grad
-def test_merge_grad():
+def test_merge_grad() -> None:
     """Checks gradient stability of the merge function."""
 
-    def proxy(a_in, b_in):
+    def proxy(a_in: torch.Tensor, b_in: torch.Tensor) -> torch.Tensor:
         # Clean padding values
         a_proxy = torch.zeros_like(a_in)
         b_proxy = torch.zeros_like(b_in)

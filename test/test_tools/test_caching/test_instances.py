@@ -20,6 +20,8 @@ Test caching.
 
 from __future__ import annotations
 
+from typing import Any, Type, Union, cast
+
 import pytest
 
 from tad_mctc.tools.caching import memoize, memoize_all_instances
@@ -27,20 +29,23 @@ from tad_mctc.tools.caching import memoize, memoize_all_instances
 
 class Class:
     @memoize
-    def compute(self, x, y=0):
+    def compute(self, x: int, y: int = 0) -> int:
         """A simple method to test memoization."""
         return x + y + sum(range(1000))
 
 
 class ClassInstances:
     @memoize_all_instances
-    def compute(self, x, y=0):
+    def compute(self, x: int, y: int = 0) -> int:
         """A simple method to test memoization."""
         return x + y + sum(range(1000))
 
 
+MemoizeClass = Union[Type[Class], Type[ClassInstances]]
+
+
 @pytest.mark.parametrize("memoize_class", [Class, ClassInstances])
-def test_memoization(memoize_class) -> None:
+def test_memoization(memoize_class: MemoizeClass) -> None:
     obj = memoize_class()
 
     # Call the function with the same arguments to ensure it's cached
@@ -59,9 +64,11 @@ def test_cache_separation() -> None:
     obj1.compute(5)
     obj2.compute(5)
 
-    # Different objects DO share cache
-    c1 = obj1.compute.get_cache(obj1)
-    c2 = obj2.compute.get_cache(obj2)
+    # Different objects DO share cache. `get_cache` is attached to the
+    # wrapper by `memoize`/`memoize_all_instances` via `setattr`, which no
+    # static type can see.
+    c1 = cast(Any, obj1.compute).get_cache(obj1)
+    c2 = cast(Any, obj2.compute).get_cache(obj2)
     assert c1 == c2
 
     ###########################################################################
@@ -73,13 +80,13 @@ def test_cache_separation() -> None:
     obj4.compute(5)
 
     # Different objects DO NOT share cache
-    c3 = obj3.compute.get_cache(obj3)
-    c4 = obj4.compute.get_cache(obj4)
+    c3 = cast(Any, obj3.compute).get_cache(obj3)
+    c4 = cast(Any, obj4.compute).get_cache(obj4)
     assert c3 != c4
 
 
 @pytest.mark.parametrize("memoize_class", [Class, ClassInstances])
-def test_argument_sensitivity(memoize_class) -> None:
+def test_argument_sensitivity(memoize_class: MemoizeClass) -> None:
     obj = memoize_class()
 
     result1 = obj.compute(5)
@@ -90,10 +97,10 @@ def test_argument_sensitivity(memoize_class) -> None:
 
 
 @pytest.mark.parametrize("memoize_class", [Class, ClassInstances])
-def test_clear_cache(memoize_class) -> None:
+def test_clear_cache(memoize_class: MemoizeClass) -> None:
     obj = memoize_class()
     obj.compute(10)
-    obj.compute.clear_cache(obj)
+    cast(Any, obj.compute).clear_cache(obj)
 
     # The cache should be empty after clearing
-    assert not obj.compute.get_cache(obj)
+    assert not cast(Any, obj.compute).get_cache(obj)

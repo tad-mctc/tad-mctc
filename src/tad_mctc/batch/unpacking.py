@@ -119,9 +119,9 @@ def deflate(
         for dim in reversed(torch.combinations(torch.arange(ndim), ndim - 1)):
             # Count Nº of trailing padding values. Reduce/partial used here as
             # torch.all cannot operate on multiple dimensions like numpy.
-            torchall = partial(torch.all, keepdims=True)
+            torchall = partial(torch.all, keepdim=True)
             v, c = (
-                reduce(torchall, dim, mask)
+                reduce(torchall, dim.tolist(), mask)
                 .squeeze()
                 .unique_consecutive(return_counts=True)
             )

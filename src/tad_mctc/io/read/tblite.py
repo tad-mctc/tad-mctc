@@ -33,7 +33,7 @@ from .frompath import create_path_reader
 __all__ = ["read_tblite_engrad"]
 
 
-def _read_tblite_gfn(fileobj: IO[Any]) -> dict[str, str | float]:
+def _read_tblite_gfn(fileobj: IO[Any]) -> dict[str, str | float | list[float]]:
     """
     Read energy file from tblite json output.
 
@@ -44,8 +44,10 @@ def _read_tblite_gfn(fileobj: IO[Any]) -> dict[str, str | float]:
 
     Returns
     -------
-    dict[str, str | float]
-        Full tblite JSON output.
+    dict[str, str | float | list[float]]
+        Full tblite JSON output: scalar entries (``version``, ``energy``)
+        alongside the list-valued ones (``energies``, ``gradient``,
+        ``virial``).
     """
     # pylint: disable=import-outside-toplevel
     from json import loads as json_load

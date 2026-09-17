@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar
 
 import torch
 from torch import Tensor
@@ -37,11 +37,14 @@ __all__ = [
     "CountingFunction",
     "DampingFunction",
     "Generator",
+    "NotRequired",
+    "PairWeightFunction",
     "PathLike",
     "Self",
     "Sequence",
     "Size",
     "Sliceable",
+    "TableFunction",
     "Tensor",
     "TensorOrTensors",
     "TypeAlias",
@@ -60,9 +63,9 @@ else:
 
 # Python 3.11
 if sys.version_info >= (3, 11):
-    from typing import Self, Unpack
+    from typing import NotRequired, Self, Unpack
 else:
-    from typing_extensions import Self, Unpack
+    from typing_extensions import NotRequired, Self, Unpack
 
 # Python 3.10
 if sys.version_info >= (3, 10):
@@ -78,7 +81,32 @@ if sys.version_info >= (3, 9):
 else:
     from typing import Callable, Generator, Sequence
 
-CountingFunction = Callable[[Tensor, Tensor], Tensor]
+CountingFunction = Callable[..., Tensor]
+"""
+Signature every counting function (``exp_count``, ``erf_count``,
+``gfn2_count``, and their derivatives) satisfies: ``(r, r0, *params) ->
+Tensor``, where ``*params`` is each function's own set of optional
+control parameters (a single ``kcn`` for ``exp_count``, ``kcn`` and
+``norm_exp`` for ``erf_count``, ``ka``/``kb``/``r_shift`` for
+``gfn2_count``). ``Callable[[Tensor, Tensor], Tensor]`` would reject
+every call that passes one of those.
+"""
+
+# `(en_i, en_j) -> Tensor`: the weight on atom j's count as it is added to
+# cn[i]. Elementwise, so it broadcasts over pairs.
+PairWeightFunction = Callable[[Tensor, Tensor], Tensor]
+
+
+class TableFunction(Protocol):
+    """
+    A per-element table (such as ``radii.COV_D3``), created on the given
+    device and dtype.
+    """
+
+    def __call__(
+        self, *, device: torch.device | None = None, dtype: torch.dtype
+    ) -> Tensor: ...
+
 
 if sys.version_info >= (3, 10):
     # "from __future__ import annotations" only affects type annotations
@@ -128,7 +156,7 @@ T = TypeVar("T")
 
 
 def _wraps(
-    wrapped: Callable[[Any], T],
+    wrapped: Callable[..., Any],
     namestr: str | None = None,
     docstr: str | None = None,
     **kwargs: Any,
@@ -148,7 +176,10 @@ def _wraps(
             )
             fun.__qualname__ = getattr(wrapped, "__qualname__", fun.__name__)  # type: ignore
             fun.__wrapped__ = wrapped  # type: ignore
-        finally:
-            return fun
+        except AttributeError:
+            # Best-effort metadata propagation: some callables/objects do not
+            # expose or allow setting all wrapped attributes.
+            pass
+        return fun
 
     return wrapper

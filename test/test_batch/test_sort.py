@@ -29,7 +29,7 @@ from tad_mctc.convert import normalize_device
 from ..conftest import DEVICE
 
 
-def test_sort():
+def test_sort() -> None:
     """
     Ensures that the ``psort`` and ``pargsort`` methods work as intended.
 
@@ -64,7 +64,7 @@ def test_sort():
     assert check_3, "Values were incorrectly sorted"
 
 
-def test_pargsort():
+def test_pargsort() -> None:
     """Normal `torch.argsort`."""
     t = torch.tensor(
         [

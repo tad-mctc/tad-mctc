@@ -37,12 +37,12 @@ __all__ = ["pack"]
 
 
 @overload
-def pack(  # type: ignore[misc]
+def pack(
     tensors: TensorOrTensors,
     axis: int = 0,
     value: int | float = 0,
     size: Size | None = None,
-    return_mask: Literal[False] = False,
+    return_mask: Literal[False] = ...,
 ) -> Tensor: ...
 
 
@@ -52,7 +52,8 @@ def pack(
     axis: int = 0,
     value: int | float = 0,
     size: Size | None = None,
-    return_mask: Literal[True] = True,
+    *,
+    return_mask: Literal[True],
 ) -> tuple[Tensor, Tensor]: ...
 
 
@@ -154,11 +155,12 @@ def pack(
     # for assignments rather than a slice to prevent in-place errors.
     for n, source in enumerate(tensors):
         # Slice operations not elegant but they are dimension agnostic & fast.
-        padded[(n, *[slice(0, s) for s in source.shape])] = source
+        idx: tuple[int | slice, ...] = (n, *(slice(0, s) for s in source.shape))
+        padded[idx] = source
 
         # Update the mask if required.
         if return_mask is True and mask is not None:
-            mask[(n, *[slice(0, s) for s in source.shape])] = True
+            mask[idx] = True
 
     # If "axis" was anything other than 0, then "padded" must be permuted.
     if axis != 0:

@@ -30,6 +30,7 @@ markers = [
 
 
 [tool.mypy]
+mypy_path = "src"
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_incomplete_defs = true
@@ -39,7 +40,8 @@ warn_unreachable = true
 warn_unused_ignores = true
 exclude = '''(?x)
   ^src/tad_mctc/autograd
-  | ^src/tad_mctc/units/codata.py$
+  | ^src/tad_mctc/typing/
+  | ^src/tad_mctc/units/
   | ^test/conftest.py$
   | ^examples/
   | ^build/
@@ -47,6 +49,32 @@ exclude = '''(?x)
   | ^setup.py$
 '''
 
+[[tool.mypy.overrides]]
+module = "psutil"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "scipy.*"
+ignore_missing_imports = true
+
+
+[tool.pyright]
+extraPaths = ["src"]
+include = ["src", "test"]
+exclude = [
+  "**/__pycache__",
+  "**/node_modules",
+  "**/.venv*",
+  "**/.*",
+  "src/tad_mctc/autograd",
+  "src/tad_mctc/typing",
+  "src/tad_mctc/units",
+  "test/conftest.py",
+  "examples",
+  "build",
+  "dist",
+  "setup.py",
+]
 
 
 [tool.coverage.run]
