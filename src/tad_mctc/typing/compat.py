@@ -177,6 +177,8 @@ def _wraps(
             fun.__qualname__ = getattr(wrapped, "__qualname__", fun.__name__)  # type: ignore
             fun.__wrapped__ = wrapped  # type: ignore
         except AttributeError:
+            # Best-effort metadata propagation: some callables/objects do not
+            # expose or allow setting all wrapped attributes.
             pass
         return fun
 
