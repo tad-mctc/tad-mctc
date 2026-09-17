@@ -18,9 +18,11 @@
 Test the XYZ file reader and writer.
 """
 
+import io
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 
@@ -28,6 +30,7 @@ from tad_mctc.batch import pack
 from tad_mctc.data.structures.mstore import get_structure
 from tad_mctc.exceptions import FormatErrorXYZ
 from tad_mctc.io import read, write
+from tad_mctc.io.read.xyz import _parse_atom_block
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
@@ -216,3 +219,14 @@ def test_write_batch_and_read_batch(
     assert read_numbers.shape == numbers.shape
     assert (read_numbers == numbers).all()
     assert pytest.approx(positions.cpu()) == read_positions.cpu()
+
+
+def test_parse_atom_block_zero_atoms() -> None:
+    """A zero-atom frame must short-circuit before `numpy.loadtxt`, which
+    cannot parse an empty block."""
+    numbers, coords = _parse_atom_block(io.StringIO(""), 0)
+
+    assert numbers.shape == (0,)
+    assert coords.shape == (0, 3)
+    assert numbers.dtype == np.int64
+    assert coords.dtype == np.float64

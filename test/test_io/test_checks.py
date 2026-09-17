@@ -49,6 +49,17 @@ def test_coldfusion() -> None:
         checks.coldfusion_check(numbers, positions_close, threshold=0.5)
 
 
+def test_coldfusion_threshold_already_a_tensor() -> None:
+    # `threshold` given as a Tensor must be used as-is, not re-wrapped
+    numbers = torch.tensor([1, 2])
+    positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
+
+    with pytest.raises(StructureError):
+        checks.coldfusion_check(
+            numbers, positions_close, threshold=torch.tensor(0.5)
+        )
+
+
 def test_coldfusion_check_disabled() -> None:
     numbers = torch.tensor([1, 2])
     positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
