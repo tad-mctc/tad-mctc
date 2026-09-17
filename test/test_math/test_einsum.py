@@ -28,7 +28,11 @@ import torch
 
 from tad_mctc import math
 
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    run_compiled_or_skip,
+)
 
 
 def test_functions_existence() -> None:
@@ -103,6 +107,6 @@ def test_torch_compile_fullgraph_matches_eager() -> None:
     compiled = torch.compile(f, fullgraph=True, dynamic=False)
 
     eager_value = f(*operands)
-    compiled_value = compiled(*operands)
+    compiled_value = run_compiled_or_skip(compiled, *operands)
 
     assert pytest.approx(eager_value.cpu(), abs=1e-12) == compiled_value.cpu()

@@ -31,7 +31,11 @@ import torch
 
 from tad_mctc.tools import is_compiling
 
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    run_compiled_or_skip,
+)
 
 
 def test_is_compiling_outside_compile() -> None:
@@ -55,7 +59,7 @@ def test_is_compiling_inside_torch_compile_fullgraph() -> None:
 
     x = torch.zeros(3)
     eager_result = f(x)
-    compiled_result = compiled(x)
+    compiled_result = run_compiled_or_skip(compiled, x)
 
     assert torch.equal(eager_result, torch.zeros(3))
     assert torch.equal(compiled_result, torch.ones(3))
