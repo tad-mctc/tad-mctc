@@ -5,5 +5,5 @@
 .. toctree::
 
    io
-   molecule
    pytorch
+   structure

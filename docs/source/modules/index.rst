@@ -14,8 +14,8 @@ The following modules are contained with `tad_mctc`.
    exceptions/index
    io/index
    math/index
-   molecule/index
    ncoord/index
+   properties/index
    storch/index
    tools/index
    typing/index

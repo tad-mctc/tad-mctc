@@ -1,12 +1,16 @@
 # SPDX-Identifier: CC0-1.0
+"""Writing atomic numbers and positions to a Turbomole `coord` file."""
+
 from pathlib import Path
 
-from tad_mctc.data.molecules import mols
+from tad_mctc.data.structures import structures
 from tad_mctc.io import write
 
-mol = mols["H2O"]
-numbers = mol["numbers"]
-positions = mol["positions"]
+# `tad_mctc.data.molecules.mols["H2O"]` no longer exists (that dataset was
+# removed); `CO2` is the smallest bespoke structure the refactor kept.
+structure = structures["CO2"]
+numbers = structure.numbers
+positions = structure.positions
 
 path = Path(__file__).resolve().parent / "coord"
 write.write_turbomole(path, numbers, positions)

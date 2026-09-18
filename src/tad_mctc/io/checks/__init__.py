@@ -21,5 +21,5 @@ I/O: Checks
 This module contains various checkers for readers/writers.
 """
 
-from .molecule import *
 from .shape import *
+from .structure import *

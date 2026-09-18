@@ -24,13 +24,19 @@ from pathlib import Path
 import pytest
 import torch
 
-from tad_mctc.data.molecules import mols as samples
+from tad_mctc.data.structures.mstore import get_structure
 from tad_mctc.io import read, write
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
 
-sample_list = ["H2O"]
+# "H2O" is mstore's `heavy28/h2o`, reached only through `get_structure` --
+# see `test_ncoord/samples.py` for the same pattern and its rationale.
+_SAMPLE_SOURCES = {"H2O": ("heavy28", "h2o")}
+samples = {
+    name: get_structure(*source) for name, source in _SAMPLE_SOURCES.items()
+}
+sample_list = list(_SAMPLE_SOURCES)
 
 
 @pytest.mark.parametrize("file", ["mol.mol", "mol.ein", "POSCAR"])
@@ -68,8 +74,8 @@ def test_write_and_read(dtype: torch.dtype, name: str, fname: str) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
     sample = samples[name]
-    numbers = sample["numbers"].to(DEVICE)
-    positions = sample["positions"].to(**dd)
+    numbers = sample.numbers.to(DEVICE)
+    positions = sample.positions.to(**dd)
 
     # Create a temporary directory to save the file
     with tempfile.TemporaryDirectory() as tmpdirname:
