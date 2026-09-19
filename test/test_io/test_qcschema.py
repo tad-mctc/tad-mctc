@@ -545,6 +545,217 @@ def test_extras1_qcschema() -> None:
     assert periodic.all()
 
 
+def test_extras_periodic_without_lattice_qcschema() -> None:
+    """``extras.periodic`` present but without a ``lattice`` key is not an
+    error -- it just carries no periodic information, same as ``extras``
+    being absent entirely."""
+    data = {
+        "schema_version": 2,
+        "schema_name": "qcschema_molecule",
+        "symbols": ["O", "H", "H"],
+        "geometry": [
+            0.0,
+            0.0,
+            -0.1294,
+            0.0,
+            -1.4941,
+            1.0274,
+            0.0,
+            1.4941,
+            1.0274,
+        ],
+        "extras": {"periodic": {}},
+    }
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        result = read.read_qcschema(filepath)
+
+    assert len(result) == 2
+
+
+def test_invalid_lattice_length_qcschema() -> None:
+    """``extras.periodic.lattice`` must have exactly 9 elements."""
+    data = {
+        "schema_version": 2,
+        "schema_name": "qcschema_molecule",
+        "symbols": ["O", "H", "H"],
+        "geometry": [
+            0.0,
+            0.0,
+            -0.1294,
+            0.0,
+            -1.4941,
+            1.0274,
+            0.0,
+            1.4941,
+            1.0274,
+        ],
+        "extras": {"periodic": {"lattice": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]}},
+    }
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        with pytest.raises(ValueError):
+            read.read_qcschema(filepath)
+
+
+def test_invalid_schema_name_qcschema() -> None:
+    """A ``schema_name`` that is neither ``qcschema_molecule`` nor
+    ``qcschema_input`` is rejected outright."""
+    data = {
+        "schema_name": "not_a_qcschema",
+        "symbols": ["O", "H", "H"],
+        "geometry": [
+            0.0,
+            0.0,
+            -0.1294,
+            0.0,
+            -1.4941,
+            1.0274,
+            0.0,
+            1.4941,
+            1.0274,
+        ],
+    }
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        with pytest.raises(KeyError):
+            read.read_qcschema(filepath)
+
+
+def test_invalid_root_schema_version_qcschema() -> None:
+    """A ``qcschema_molecule`` document's own ``schema_version`` must be 1
+    or 2 (unlike ``test_invalid_root_data_qcschema``, the root here really
+    is a JSON object, so this reaches the schema-version check itself)."""
+    data = {
+        "schema_version": 3,
+        "schema_name": "qcschema_molecule",
+        "symbols": ["O", "H", "H"],
+        "geometry": [
+            0.0,
+            0.0,
+            -0.1294,
+            0.0,
+            -1.4941,
+            1.0274,
+            0.0,
+            1.4941,
+            1.0274,
+        ],
+    }
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        with pytest.raises(KeyError):
+            read.read_qcschema(filepath)
+
+
+def test_qcschema_input_invalid_schema_version_qcschema() -> None:
+    """A ``qcschema_input`` document's own ``schema_version`` must be 1."""
+    data = {
+        "schema_version": 2,
+        "schema_name": "qcschema_input",
+        "molecule": {
+            "schema_name": "qcschema_molecule",
+            "symbols": ["O", "H", "H"],
+            "geometry": [
+                0.0,
+                0.0,
+                -0.1294,
+                0.0,
+                -1.4941,
+                1.0274,
+                0.0,
+                1.4941,
+                1.0274,
+            ],
+        },
+    }
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        with pytest.raises(KeyError):
+            read.read_qcschema(filepath)
+
+
+def test_qcschema_input_missing_molecule_qcschema() -> None:
+    """A ``qcschema_input`` document with no ``molecule`` key at all has
+    nothing to resolve down to."""
+    data = {
+        "schema_version": 1,
+        "schema_name": "qcschema_input",
+        "driver": "gradient",
+    }
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        with pytest.raises(KeyError):
+            read.read_qcschema(filepath)
+
+
+def test_qcschema_input_child_wrong_schema_name_qcschema() -> None:
+    """The nested ``molecule`` a ``qcschema_input`` wraps must itself
+    declare ``qcschema_molecule`` (or omit ``schema_name``, defaulted to
+    it) -- anything else is rejected."""
+    data = {
+        "schema_version": 1,
+        "schema_name": "qcschema_input",
+        "molecule": {
+            "schema_name": "not_a_qcschema_molecule",
+            "symbols": ["O", "H", "H"],
+            "geometry": [
+                0.0,
+                0.0,
+                -0.1294,
+                0.0,
+                -1.4941,
+                1.0274,
+                0.0,
+                1.4941,
+                1.0274,
+            ],
+        },
+    }
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        with pytest.raises(KeyError):
+            read.read_qcschema(filepath)
+
+
+def test_schema_version_1_missing_molecule_qcschema() -> None:
+    """A plain (not ``qcschema_input``-wrapped) ``schema_version: 1``
+    document must itself carry a ``molecule`` key."""
+    data = {
+        "schema_version": 1,
+        "schema_name": "qcschema_molecule",
+        "symbols": ["O", "H", "H"],
+        "geometry": [
+            0.0,
+            0.0,
+            -0.1294,
+            0.0,
+            -1.4941,
+            1.0274,
+            0.0,
+            1.4941,
+            1.0274,
+        ],
+    }
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        with pytest.raises(KeyError):
+            read.read_qcschema(filepath)
+
+
+def test_missing_geometry_qcschema() -> None:
+    """``geometry`` is required alongside ``symbols``."""
+    data = {
+        "schema_version": 2,
+        "schema_name": "qcschema_molecule",
+        "symbols": ["O", "H", "H"],
+    }
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        with pytest.raises(KeyError):
+            read.read_qcschema(filepath)
+
+
 def test_missing_symbols_qcschema() -> None:
     """
     Port of mctc-lib's ``test_missing_symbols``: only ``atomic_numbers`` is

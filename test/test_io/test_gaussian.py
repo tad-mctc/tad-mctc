@@ -89,6 +89,8 @@ def test_read_fail_notfound() -> None:
 @pytest.mark.parametrize(
     "content",
     [
+        # empty file: no header line to even read
+        "",
         # non-numeric header fields (charge/spin columns)
         (
             "         4         1      zero       one\n"
@@ -126,6 +128,7 @@ def test_read_fail_notfound() -> None:
         ),
     ],
     ids=[
+        "empty-file",
         "bad-header",
         "non-positive-atom-count",
         "malformed-coordinate",

@@ -337,6 +337,33 @@ def test_read_fail_empty() -> None:
             "  3.699330769  0.894399231  1.479060000\n"
             "  0.894399231  3.699330769  1.479060000\n"
         ),
+        # lattice vector line with too few values (all otherwise valid)
+        (
+            "Ti  O \n"
+            " 1.0\n"
+            "     4.59373    0.00000\n"
+            "     0.00000    4.59373    0.00000\n"
+            "     0.00000    0.00000    2.95812\n"
+            "   Ti  O \n"
+            "   1   1\n"
+            "Cartesian\n"
+            "  0.0  0.0  0.0\n"
+            "  2.3  2.3  1.5\n"
+        ),
+        # non-numeric atom counts (same length as the symbol line, so the
+        # mismatched-counts check above does not fire first)
+        (
+            "Ti  O \n"
+            " 1.0\n"
+            "     4.59373    0.00000    0.00000\n"
+            "     0.00000    4.59373    0.00000\n"
+            "     0.00000    0.00000    2.95812\n"
+            "   Ti  O \n"
+            "   a   b\n"
+            "Cartesian\n"
+            "  0.0  0.0  0.0\n"
+            "  2.3  2.3  1.5\n"
+        ),
         # unknown element symbol
         (
             "Titan  Oxygen\n"
@@ -386,6 +413,8 @@ def test_read_fail_empty() -> None:
         "truncated",
         "blank-line-only",
         "malformed-lattice",
+        "lattice-too-few-values",
+        "non-numeric-atom-counts",
         "mismatched-counts",
         "mismatched-counts-pre-vasp5",
         "unknown-element",

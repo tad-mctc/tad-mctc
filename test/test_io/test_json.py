@@ -64,18 +64,13 @@ def test_sniff_qcschema_by_schema_name() -> None:
 
 def test_sniff_qcschema_default_fallback() -> None:
     """A file with none of the identifying keys falls back to qcschema,
-    matching mctc-lib's own default -- this is the shape of the existing
-    ``files/mol.json`` fixture used by ``test_reader.py``'s ``test_types``.
-    ``schema_version`` is explicit here (mctc-lib defaults an absent one to
-    2, the flat/no-wrapper layout) so this fixture's ``molecule``-wrapped
-    shape stays schema_version-1-correct rather than relying on a default
-    that would actually pick the other layout."""
+    matching mctc-lib's own default. An absent ``schema_version`` itself
+    defaults to 2 (the flat, no-``molecule``-wrapper layout), so this has
+    to be flat too, not the ``molecule``-wrapped shape a real
+    ``schema_version: 1`` document would use."""
     data = {
-        "schema_version": 1,
-        "molecule": {
-            "symbols": ["O", "H", "H"],
-            "geometry": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
-        },
+        "symbols": ["O", "H", "H"],
+        "geometry": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
     }
     tmpdir, filepath = _write(data)
     with tmpdir:

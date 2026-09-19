@@ -149,9 +149,9 @@ def read_genformat_fileobj(
             f"Invalid input version {header[1]!r} in '{fileobj}'."
         )
 
+    # `_iter_meaningful_lines` never yields a blank/comment-only line, so
+    # `.split()` here always has at least one token.
     species_tokens = _next_line(lines, fileobj, "the species line").split()
-    if not species_tokens:
-        raise FormatErrorGenFormat(f"No species given in '{fileobj}'.")
     species_numbers = []
     for token in species_tokens:
         number = symbol_to_number(token)

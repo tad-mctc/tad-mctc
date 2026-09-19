@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from tad_mctc.exceptions import EmptyFileError, FormatErrorTM
+from tad_mctc.exceptions import EmptyFileError, FormatErrorTM, StructureError
 from tad_mctc.io import read, write
 from tad_mctc.typing import DD, PathLike
 
@@ -168,6 +168,28 @@ def test_read_valid_angs_unit() -> None:
 
     assert positions.shape[0] == 9
     assert len(torch.unique(numbers)) == 2
+
+
+def test_read_dummy_atom_symbol_rejected_outside_batch() -> None:
+    """A ``q`` symbol (mctc-lib's dummy/ghost-atom marker, title-cased to
+    ``Q`` and then remapped here to this package's own ``X`` padding-atom
+    convention) resolves directly to atomic number 0, bypassing the usual
+    symbol lookup -- but a single (non-batched) structure still rejects
+    atomic number 0 downstream as residual padding, since the convention
+    is only meaningful within a padded batch."""
+    content = (
+        "$coord\n"
+        " 1.1847029  1.1150792 -0.0344641 o\n"
+        " 0.4939088  0.9563767  0.6340089 q\n"
+        "$end\n"
+    )
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        filepath = Path(tmpdirname) / "coord"
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        with pytest.raises(StructureError):
+            read.read_turbomole(filepath)
 
 
 def test_read_no_coord_section() -> None:

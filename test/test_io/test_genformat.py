@@ -281,6 +281,8 @@ def test_read_fail_helical_unsupported() -> None:
             "0.0 0.0 0.0\n2.713546 2.713546 0.0\n"
             "0.0 2.713546 2.713546\n2.713546 0.0 2.713546\n"
         ),
+        # header line has no mode identifier at all
+        "2\nGa As\n1 1 0.00 0.00 0.00\n2 2 0.25 0.25 0.25\n",
         # unknown mode identifier
         (
             "2 X\nGa As\n1 1 0.00 0.00 0.00\n2 2 0.25 0.25 0.25\n"
@@ -296,12 +298,21 @@ def test_read_fail_helical_unsupported() -> None:
         ),
         # no atom coordinate lines at all
         "2 F\nGa As\n",
+        # atom coordinate line with a missing column
+        "2 F\nGa As\n1 1 0.00 0.00\n2 2 0.25 0.25 0.25\n",
+        # species index out of range (only 2 species declared)
+        "2 F\nGa As\n1 3 0.00 0.00 0.00\n2 2 0.25 0.25 0.25\n",
         # missing origin/lattice information entirely
         "2 F\nGa As\n1 1 0.00 0.00 0.00\n2 2 0.25 0.25 0.25\n",
         # malformed lattice vector values
         (
             "2 F\nGa As\n1 1 0.00 0.00 0.00\n2 2 0.25 0.25 0.25\n"
             "0.0 0.0 0.0\n***** ***** 0.0\n0.0 ***** *****\n***** 0.0 *****\n"
+        ),
+        # lattice vector line with too few values
+        (
+            "2 S\nC\n1 1 0.0 0.0 0.0\n2 1 1.5 0.0 0.0\n"
+            "0.0 0.0 0.0\n2.0 0.0\n0.0 100.0 0.0\n0.0 0.0 100.0\n"
         ),
         # origin line with too few values
         (
@@ -311,11 +322,15 @@ def test_read_fail_helical_unsupported() -> None:
     ],
     ids=[
         "negative-atom-count",
+        "missing-mode",
         "unknown-mode",
         "unknown-element",
         "no-atoms",
+        "malformed-atom-coordinate",
+        "invalid-species-index",
         "missing-lattice-info",
         "malformed-lattice-vector",
+        "short-lattice-vector-line",
         "short-origin-line",
     ],
 )

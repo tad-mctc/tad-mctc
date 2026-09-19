@@ -680,6 +680,31 @@ def test_invalid5_extxyz_species_wrong_kind() -> None:
         )
 
 
+def test_invalid_extxyz_properties_count_not_integer() -> None:
+    """A ``Properties`` entry's count field must parse as an integer."""
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single("Properties=species:S:x:pos:R:3", "H 0.0 0.0 0.0")
+        )
+
+
+def test_invalid_extxyz_properties_count_zero() -> None:
+    """A ``Properties`` entry's count must be at least 1."""
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single("Properties=species:S:0:pos:R:3", "H 0.0 0.0 0.0")
+        )
+
+
+def test_invalid_extxyz_z_wrong_kind() -> None:
+    """``Z`` must be kind ``I`` (integer), mirroring ``species`` needing
+    kind ``S`` (see the wrong-kind test above)."""
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single("Properties=Z:R:1:pos:R:3", "8 0.0 0.0 0.0")
+        )
+
+
 def test_invalid6_extxyz_pos_wrong_count() -> None:
     """mctc-lib's ``invalid6-extxyz``: ``pos`` must have count 3."""
     with pytest.raises(FormatErrorXYZ):
@@ -740,6 +765,109 @@ def test_invalid12_extxyz_non_positive_atomic_number() -> None:
     with pytest.raises(FormatErrorXYZ):
         read.xyz.read_xyz_fileobj(
             _extxyz_single("Properties=Z:I:1:pos:R:3", "0 0.0 0.0 0.0")
+        )
+
+
+def test_invalid_extxyz_lattice_non_numeric_value() -> None:
+    """A ``Lattice`` value must be 3 or 9 real numbers, not junk tokens."""
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single(
+                'Properties=species:S:1:pos:R:3 Lattice="a b c d e f g h i"',
+                "H 0.0 0.0 0.0",
+            )
+        )
+
+
+def test_extxyz_lattice_three_values_is_diagonal() -> None:
+    """``Lattice`` with exactly 3 values fills only the diagonal of an
+    otherwise-zero lattice matrix, mirroring mctc-lib's ``parse_lattice``."""
+    numbers, positions, lattice, periodic = _read4(
+        '1\nProperties=species:S:1:pos:R:3 Lattice="1.0 2.0 3.0"\n'
+        "H 0.0 0.0 0.0\n"
+    )
+
+    assert (numbers == torch.tensor([1])).all()
+    assert positions.shape == (1, 3)
+    assert periodic is not None and periodic.all()
+    ref_lattice = torch.diag(torch.tensor([1.0, 2.0, 3.0])) * length.AA2AU
+    assert pytest.approx(ref_lattice.cpu()) == lattice.cpu()
+
+
+def test_invalid_extxyz_pbc_invalid_token() -> None:
+    """A ``pbc`` token must start with ``t``/``T`` or ``f``/``F``."""
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single(
+                'Properties=species:S:1:pos:R:3 pbc="T Q T"',
+                "H 0.0 0.0 0.0",
+            )
+        )
+
+
+def test_invalid_extxyz_z_column_non_integer() -> None:
+    """A ``Z`` column's value must parse as an integer."""
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single("Properties=Z:I:1:pos:R:3", "abc 0.0 0.0 0.0")
+        )
+
+
+def test_invalid_extxyz_species_unknown_symbol() -> None:
+    """A ``species`` column that does not map to any known element."""
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single("Properties=species:S:1:pos:R:3", "Xx 0.0 0.0 0.0")
+        )
+
+
+def test_invalid_extxyz_truncated_atom_block() -> None:
+    """Fewer atom lines than the header's atom count declares, for the
+    Extended XYZ path (see ``test_invalid5_xyz_atom_count_mismatch`` for
+    the plain-XYZ analogue)."""
+    text = "2\nProperties=species:S:1:pos:R:3\nH 0.0 0.0 0.0\n"
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(io.StringIO(text))
+
+
+def test_extxyz_header_tolerates_extra_whitespace_and_escapes() -> None:
+    """The header line scanner tolerates extra whitespace after ``=``,
+    backslash-escaped characters inside quoted/bracketed values, and
+    same-type nested brackets (all in unused keys here), rather than
+    misparsing any of them as the end of the header."""
+    text = (
+        "1\n"
+        "Properties=species:S:1:pos:R:3 "
+        'comment=  "a\\b" escaped=[a "b\\]c" d] nested=[[a] b]\n'
+        "H 0.0 0.0 0.0\n"
+    )
+    numbers, positions = _read2(text)
+
+    assert (numbers == torch.tensor([1])).all()
+    assert positions.shape == (1, 3)
+
+
+def test_invalid_extxyz_header_empty_key() -> None:
+    """A stray ``=value`` fragment with no key name before it ends the
+    header scan early, same as an unterminated quote/bracket does."""
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single(
+                "Properties=species:S:1:pos:R:3 =foo", "H 0.0 0.0 0.0"
+            )
+        )
+
+
+def test_invalid_extxyz_header_unterminated_bracket() -> None:
+    """A bracketed value that never closes ends the header scan early,
+    same as an unterminated quote does (see
+    ``test_invalid3_extxyz_unterminated_comment_quote``)."""
+    with pytest.raises(FormatErrorXYZ):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single(
+                "Properties=species:S:1:pos:R:3 pbc=[T F T",
+                "H 0.0 0.0 0.0",
+            )
         )
 
 

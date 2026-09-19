@@ -119,7 +119,9 @@ def _parse_header_pairs(line: str) -> tuple[dict[str, str], bool]:
         while i < n and _is_space(line[i]):
             i += 1
         if i >= n:
-            break
+            # unreachable: `n` excludes trailing whitespace already, so
+            # this loop can never run off the end looking for more of it.
+            break  # pragma: no cover
 
         first = i
         while i < n and not (_is_space(line[i]) or line[i] == "="):

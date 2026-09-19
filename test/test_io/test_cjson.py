@@ -441,6 +441,23 @@ def test_read_molecule_bonds_without_order() -> None:
     assert (bond_orders == torch.ones(7, **dd)).all()
 
 
+def test_read_molecule_bonds_object_without_connections() -> None:
+    """A ``bonds`` object with no ``connections`` key is not malformed --
+    just empty -- and reads as if ``bonds`` had been absent entirely."""
+    dd: DD = {"device": None, "dtype": torch.double}
+
+    data = json.loads(json.dumps(_VALID1_ETHANE))
+    data["bonds"] = {}
+
+    tmpdir, filepath = _write(data)
+    with tmpdir:
+        result = read.read_cjson(filepath, **dd)
+
+    _, _, _, _, bonds, bond_orders = result
+    assert bonds is None
+    assert bond_orders is None
+
+
 def test_read_molecule_varied_bond_orders() -> None:
     """mctc-lib's ``valid4``: a larger molecule whose bond orders are not
     all 1 (single/double/aromatic) -- pins that bond orders are read
@@ -629,6 +646,15 @@ _DELETE = object()
         ),
         _mutated(bonds=[]),
         _mutated(
+            atoms={
+                "elements": {"number": [1, 6]},
+                "coords": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            }
+        ),
+        _mutated(
+            bonds={"connections": {"index": [0, 1, 2]}},
+        ),
+        _mutated(
             bonds={
                 "connections": {
                     "index": [0, 1, 1, 2, 1, 3, 1, 4, 4, 5, 4, 6, 4, 7]
@@ -740,6 +766,8 @@ _DELETE = object()
         "invalid-element-number-too-large",
         "invalid-element-number-negative",
         "bonds-wrong-type",
+        "coords-not-a-dict",
+        "bond-connectivity-odd-length",
         "mismatch-bonds",
         "invalid-element-type-string",
         "elements-not-a-dict",

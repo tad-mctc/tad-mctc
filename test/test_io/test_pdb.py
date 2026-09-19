@@ -346,3 +346,12 @@ def test_read_fail_unknown_element() -> None:
     with tmpdir:
         with pytest.raises(FormatErrorPDB):
             read.read_pdb(filepath)
+
+
+def test_read_fail_no_atoms() -> None:
+    """An empty file has no ``ATOM``/``HETATM`` records to build a
+    structure from."""
+    tmpdir, filepath = _write("")
+    with tmpdir:
+        with pytest.raises(FormatErrorPDB, match="No atoms found"):
+            read.read_pdb(filepath)

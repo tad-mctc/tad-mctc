@@ -85,6 +85,27 @@ def test_read_cartesian_symbols() -> None:
     assert pytest.approx(ref_positions.cpu()) == positions.cpu()
 
 
+def test_read_cartesian_blank_line_between_atoms_skipped() -> None:
+    """A blank line between atom records (not just before ``$molecule``)
+    is skipped rather than ending the block early."""
+    dd: DD = {"device": None, "dtype": torch.double}
+
+    content = (
+        "$molecule\n"
+        "0 1\n"
+        "O   0.000000   0.000000  -0.212195\n"
+        "\n"
+        "H   1.370265   0.000000   0.848778\n"
+        "$end\n"
+    )
+    tmpdir, filepath = _write(content)
+    with tmpdir:
+        numbers, positions = read.read_qchem(filepath, **dd)
+
+    assert (numbers == torch.tensor([8, 1])).all()
+    assert positions.shape == (2, 3)
+
+
 def test_read_cartesian_atomic_numbers() -> None:
     """mctc-lib's ``valid1``: raw atomic numbers instead of element
     symbols, uppercase ``$MOLECULE``/``$END`` tags."""
@@ -248,6 +269,22 @@ def test_read_fail_notfound() -> None:
         "$mol\n0 1\nO 0.0 0.0 0.0\n$end\n",
         # malformed coordinate value
         "$molecule\n0 1\nO ****** 0.0 0.0\n$end\n",
+        # cartesian coordinate line with fewer than 3 values
+        "$molecule\n0 1\nO 0.0 0.0\n$end\n",
+        # no atoms at all: $end immediately after the charge/multiplicity line
+        "$molecule\n0 1\n$end\n",
+        # non-numeric z-matrix reference index
+        "$molecule\n0 1\nP\nH  x 1.407461\n$end\n",
+        # dihedral-level z-matrix entry referencing a not-yet-defined atom
+        (
+            "$molecule\n"
+            "0 1\n"
+            "P\n"
+            "H  1 1.407461\n"
+            "H  1 1.407521 2 100.786448\n"
+            "H  1 1.407521 2 100.786448 99 103.310033\n"
+            "$end\n"
+        ),
         # truncated z-matrix entry: reference index without a distance
         "$molecule\n0 1\nP\nH  1\n$end\n",
         # mctc-lib's invalid6: z-matrix atom with no reference data at all
@@ -285,6 +322,10 @@ def test_read_fail_notfound() -> None:
         "missing-end",
         "no-molecule-block",
         "malformed-coordinate",
+        "cartesian-too-few-values",
+        "no-atoms",
+        "non-numeric-zmatrix-refindex",
+        "zmatrix-dihedral-reference-out-of-range",
         "truncated-zmatrix-entry",
         "truncated-zmatrix-entry-no-refindex",
         "zmatrix-forward-reference",

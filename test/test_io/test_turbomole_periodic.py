@@ -651,6 +651,19 @@ def test_read_valid11_lattice_2d_two_vectors() -> None:
         ),
         # mctc-lib's invalid17-cell: unparseable $cell for $periodic 1
         ("$coord\n0.0 0.0 0.0 h\n$periodic 1\n$cell\nnot-a-cell\n$end\n"),
+        # $cell tag with no parameter line at all before the next tag
+        ("$coord\n0.0 0.0 0.0 c\n$periodic 3\n$cell\n$end\n"),
+        # unparseable $lattice vector
+        (
+            "$coord\n0.0 0.0 0.0 c\n$periodic 1\n$lattice\n"
+            "not-a-number\n$end\n"
+        ),
+        # $lattice line count matches periodicity, but too few numeric
+        # values overall (one row is short a column)
+        (
+            "$coord\n0.0 0.0 0.0 c\n$periodic 2\n$lattice\n"
+            "1.0\n0.0 1.0\n$end\n"
+        ),
     ],
     ids=[
         "conflicting-cell-lattice",
@@ -669,6 +682,9 @@ def test_read_valid11_lattice_2d_two_vectors() -> None:
         "duplicated-cell-across-periodic",
         "duplicated-lattice",
         "unparseable-cell-1d",
+        "cell-with-no-parameter-line",
+        "unparseable-lattice",
+        "lattice-too-few-values",
     ],
 )
 def test_read_periodic_fail(content: str) -> None:

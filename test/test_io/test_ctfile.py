@@ -487,6 +487,91 @@ def test_read_v3000_fail_garbage_in_counts_extra_field() -> None:
             read.read_molfile(filepath)
 
 
+def test_read_v3000_fail_missing_counts_header() -> None:
+    """The CTAB's first entry must be a ``COUNTS`` record -- anything
+    else, even otherwise well-formed V3000 syntax, is rejected."""
+    content = (
+        "Compound\n"
+        "     RDKit          3D\n"
+        "\n"
+        "  0  0  0  0  0  0  0  0  0  0999 V3000\n"
+        "M  V30 BEGIN CTAB\n"
+        "M  V30 BEGIN ATOM\n"
+        "M  V30 END ATOM\n"
+        "M  V30 END CTAB\n"
+        "M  END\n"
+    )
+    tmpdir, filepath = _write(content, "mol")
+    with tmpdir:
+        with pytest.raises(FormatErrorCTFile, match="COUNTS header not found"):
+            read.read_molfile(filepath)
+
+
+def test_read_v3000_skips_unrecognized_ctab_entry() -> None:
+    """A top-level CTAB entry that is neither a ``BEGIN`` block nor the
+    closing ``END CTAB`` (e.g. an optional ``LINKNODE`` line) is skipped
+    -- only an unrecognized *block* name is an error (see the
+    unknown-block test above)."""
+    content = _v3000_compound11(
+        "17 16 0 0 0", extra_block="M  V30 LINKNODE 1 2 3 4 5 6\n"
+    )
+    tmpdir, filepath = _write(content, "mol")
+    with tmpdir:
+        numbers, *_ = read.read_molfile(filepath)
+
+    assert numbers.shape == (17,)
+
+
+def test_read_v3000_fail_malformed_atom_record() -> None:
+    """A truncated V3000 ATOM record (missing coordinate/mapping fields)
+    is a format error, not an uncaught ``IndexError``/``ValueError``."""
+    content = (
+        "Compound\n"
+        "     RDKit          3D\n"
+        "\n"
+        "  0  0  0  0  0  0  0  0  0  0999 V3000\n"
+        "M  V30 BEGIN CTAB\n"
+        "M  V30 COUNTS 1 0 0 0 0\n"
+        "M  V30 BEGIN ATOM\n"
+        "M  V30 1 C 0.0 0.0\n"
+        "M  V30 END ATOM\n"
+        "M  V30 END CTAB\n"
+        "M  END\n"
+    )
+    tmpdir, filepath = _write(content, "mol")
+    with tmpdir:
+        with pytest.raises(FormatErrorCTFile, match="Cannot read coordinates"):
+            read.read_molfile(filepath)
+
+
+def test_read_v3000_fail_malformed_bond_record() -> None:
+    """A truncated V3000 BOND record (missing an atom index) is a format
+    error, not an uncaught ``IndexError``/``ValueError``."""
+    content = (
+        "Compound\n"
+        "     RDKit          3D\n"
+        "\n"
+        "  0  0  0  0  0  0  0  0  0  0999 V3000\n"
+        "M  V30 BEGIN CTAB\n"
+        "M  V30 COUNTS 2 1 0 0 0\n"
+        "M  V30 BEGIN ATOM\n"
+        "M  V30 1 C 0.0 0.0 0.0 0\n"
+        "M  V30 2 C 1.0 0.0 0.0 0\n"
+        "M  V30 END ATOM\n"
+        "M  V30 BEGIN BOND\n"
+        "M  V30 1 1 1\n"
+        "M  V30 END BOND\n"
+        "M  V30 END CTAB\n"
+        "M  END\n"
+    )
+    tmpdir, filepath = _write(content, "mol")
+    with tmpdir:
+        with pytest.raises(
+            FormatErrorCTFile, match="Cannot read bond information"
+        ):
+            read.read_molfile(filepath)
+
+
 def test_read_sdf_wrapper() -> None:
     """mctc-lib's ``read_sdf``: the same connection table, plus a trailing
     key-value data block terminated by ``$$$$``."""
