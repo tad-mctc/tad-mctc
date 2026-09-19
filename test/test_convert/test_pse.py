@@ -18,6 +18,9 @@
 Test interconversion of atomic symbols and numbers.
 """
 
+from __future__ import annotations
+
+import pytest
 import torch
 
 from tad_mctc import convert
@@ -30,6 +33,27 @@ def test_symbol_to_number() -> None:
     numbers = torch.tensor([1, 2, 6, 6, 63], device=DEVICE)
 
     assert (convert.symbol_to_number(symbols) == numbers).all()
+
+
+def test_symbol_to_number_unknown_raises() -> None:
+    with pytest.raises(ValueError, match="Unknown element symbol"):
+        convert.symbol_to_number(["H", "Xx"])
+
+
+@pytest.mark.parametrize(
+    "symbol,number",
+    [
+        ("H", 1),
+        ("D", 1),  # deuterium special-cased to hydrogen
+        ("T", 1),  # tritium special-cased to hydrogen
+        ("C*", 6),  # decoration is stripped
+        ("1H", 1),  # isotope mass-number prefix is stripped
+        ("Xx", None),  # unknown element
+        ("X", None),  # this package's own dummy/padding symbol, not real
+    ],
+)
+def test_symbol_to_number_single(symbol: str, number: int | None) -> None:
+    assert convert.symbol_to_number(symbol) == number
 
 
 def test_number_to_symbol() -> None:

@@ -30,9 +30,20 @@ import torch
 
 from ...typing import PathLike, Tensor
 from ..structure import Structure
+from .aims import read_aims_fileobj
+from .cjson import read_cjson_fileobj
+from .ctfile import read_molfile_fileobj, read_sdf_fileobj
 from .dotfiles import read_chrg, read_uhf
+from .frompath import JSONResult
+from .gaussian import read_gaussian_fileobj
+from .genformat import read_genformat_fileobj
+from .json import read_json_fileobj
+from .pdbfile import read_pdb_fileobj
+from .pymatgen import read_pymatgen_fileobj
+from .qchem import read_qchem_fileobj
 from .qcschema import read_qcschema_fileobj
 from .turbomole import read_turbomole_fileobj
+from .vasp import read_poscar_fileobj
 from .xyz import read_xyz_fileobj, read_xyz_qm9_fileobj
 
 __all__ = ["read", "read_structure"]
@@ -45,7 +56,12 @@ def read_from_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor]:
+) -> (
+    tuple[Tensor, Tensor]
+    | tuple[Tensor, Tensor, Tensor]
+    | tuple[Tensor, Tensor, Tensor, Tensor]
+    | JSONResult
+):
     """
     Helper to read the structure from the given file.
 
@@ -64,9 +80,13 @@ def read_from_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor)
+    (Tensor, Tensor) | (Tensor, Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
         (Possibly batched) tensors of atomic numbers and positions. Positions
-        is a tensor of shape (batch_size, nat, 3) in atomic units.
+        is a tensor of shape (batch_size, nat, 3) in atomic units. A VASP
+        POSCAR/CONTCAR file additionally carries lattice vectors as a third
+        tensor of shape (3, 3), also in atomic units. A periodic Turbomole
+        coord file (``$periodic`` > 0) additionally carries a periodicity
+        mask as a fourth tensor of shape (3,).
 
     Raises
     ------
@@ -78,46 +98,78 @@ def read_from_fileobj(
     # path stored in TextIOWrapper
     fname = Path(fileobj.name).name.lower()
 
-    if ftype in ("xyz", "log"):
-        numbers, positions = read_xyz_fileobj(
+    if ftype in ("xyz", "log", "extxyz"):
+        return read_xyz_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
-    elif ftype in ("qm9",):
-        numbers, positions = read_xyz_qm9_fileobj(
+    if ftype in ("qm9",):
+        return read_xyz_qm9_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
-    elif ftype in ("tmol", "tm", "turbomole") or fname == "coord":
-        numbers, positions = read_turbomole_fileobj(
+    # mctc-lib's `get_filetype` maps both the *extension* ".coord" and the
+    # bare *filename* "coord" (no extension) to its `tmol` filetype -- the
+    # extension case was missing here.
+    if ftype in ("tmol", "tm", "turbomole", "coord") or fname == "coord":
+        return read_turbomole_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
-    elif ftype in ("mol", "sdf", "gen", "pdb"):
-        raise NotImplementedError(
-            f"Filetype '{ftype}' recognized but no reader available."
+    if ftype in ("aims",) or fname == "geometry.in":
+        return read_aims_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
-    elif ftype in ("qchem",):
-        raise NotImplementedError(
-            f"Filetype '{ftype}' (Q-Chem) recognized but no reader available."
+    if ftype in ("mol",):
+        return read_molfile_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
-    elif ftype in ("poscar", "contcar", "vasp", "crystal") or fname in (
+    if ftype in ("sdf",):
+        return read_sdf_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    if ftype in ("gen",):
+        return read_genformat_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    if ftype in ("pdb",):
+        return read_pdb_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    if ftype in ("qchem",):
+        return read_qchem_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    if ftype in ("poscar", "contcar", "vasp") or fname in (
         "poscar",
         "contcar",
-        "vasp",
     ):
-        raise NotImplementedError(
-            f"Filetype '{ftype}' (VASP/CRYSTAL) recognized but no reader available."
-        )
-    elif ftype in ("ein", "gaussian"):
-        raise NotImplementedError(
-            f"Filetype '{ftype}' (Gaussian) recognized but no reader available."
-        )
-    elif ftype in ("json", "qcschema"):
-        numbers, positions = read_qcschema_fileobj(
+        return read_poscar_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
-    else:
-        raise ValueError(f"Unknown filetype '{ftype}' in '{fileobj}'.")
+    if ftype in ("crystal",):
+        raise NotImplementedError(
+            f"Filetype '{ftype}' (CRYSTAL) recognized but no reader available."
+        )
+    if ftype in ("ein", "gaussian"):
+        return read_gaussian_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    if ftype in ("qcschema", "qcjson"):
+        return read_qcschema_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    if ftype in ("json",):
+        return read_json_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    if ftype in ("pmgjson", "pymatgen"):
+        return read_pymatgen_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
+    if ftype in ("cjson",):
+        return read_cjson_fileobj(
+            fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
+        )
 
-    return numbers, positions
+    raise ValueError(f"Unknown filetype '{ftype}' in '{fileobj}'.")
 
 
 def read(
@@ -128,7 +180,12 @@ def read(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor]:
+) -> (
+    tuple[Tensor, Tensor]
+    | tuple[Tensor, Tensor, Tensor]
+    | tuple[Tensor, Tensor, Tensor, Tensor]
+    | JSONResult
+):
     """
     Helper to read the structure from the given file path.
 
@@ -149,9 +206,13 @@ def read(
 
     Returns
     -------
-    (Tensor, Tensor)
+    (Tensor, Tensor) | (Tensor, Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
         (Possibly batched) tensors of atomic numbers and positions. Positions
-        is a tensor of shape (batch_size, nat, 3) in atomic units.
+        is a tensor of shape (batch_size, nat, 3) in atomic units. A VASP
+        POSCAR/CONTCAR file additionally carries lattice vectors as a third
+        tensor of shape (3, 3), also in atomic units. A periodic Turbomole
+        coord file (``$periodic`` > 0) additionally carries a periodicity
+        mask as a fourth tensor of shape (3,).
 
     Raises
     ------
@@ -206,23 +267,26 @@ def read_structure(
         Integer data type of the tensors. Defaults to ``torch.long``.
     check_coldfusion : bool, optional
         Run the interatomic-distance sanity check while reading. Defaults
-        to ``False``: this is an O(nat^2) all-pairs check (see
-        :func:`tad_mctc.io.checks.coldfusion_check`), so it can dominate
-        read time for a large structure; pass ``True`` to opt in for an
-        untrusted geometry.
+        to ``False``: this check builds its own neighbour list (see
+        :func:`tad_mctc.io.checks.coldfusion_check`) on the CPU, before
+        ``device`` is applied, so it can dominate read time for a large
+        structure; pass ``True`` to opt in for an untrusted geometry.
 
     Returns
     -------
     Structure
-        The structure's atomic numbers, positions, charge and number of
-        unpaired electrons.
+        The structure's atomic numbers, positions, charge, number of
+        unpaired electrons and, for a periodic file (VASP POSCAR/CONTCAR,
+        always; a Turbomole/aims/genformat/pymatgen file with periodicity
+        declared), its lattice and periodicity mask. A cjson file
+        additionally carries bond connectivity/order if present.
 
     Raises
     ------
     FileNotFoundError
         Given file does not exist.
     """
-    numbers, positions = read(
+    result = read(
         filepath,
         ftype=ftype,
         device=device,
@@ -230,6 +294,19 @@ def read_structure(
         dtype_int=dtype_int,
         check_coldfusion=check_coldfusion,
     )
+    periodic = None
+    bonds = None
+    bond_orders = None
+    if len(result) == 6:
+        numbers, positions, lattice, periodic, bonds, bond_orders = result
+    elif len(result) == 4:
+        numbers, positions, lattice, periodic = result
+    elif len(result) == 3:
+        numbers, positions, lattice = result
+    else:
+        numbers, positions = result
+        lattice = None
+
     charge = read_chrg(filepath, device=device, dtype=dtype)
     uhf = read_uhf(filepath, device=device, dtype=dtype_int)
     # `uhf` counts unpaired electrons, so it stays an integer tensor
@@ -237,5 +314,12 @@ def read_structure(
     # unlike `charge`, which keeps `Mol.charge`'s float representation.
 
     return Structure(
-        numbers=numbers, positions=positions, charge=charge, uhf=uhf
+        numbers=numbers,
+        positions=positions,
+        charge=charge,
+        uhf=uhf,
+        lattice=lattice,
+        periodic=periodic,
+        bonds=bonds,
+        bond_orders=bond_orders,
     )

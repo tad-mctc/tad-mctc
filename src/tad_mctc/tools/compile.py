@@ -27,12 +27,56 @@ from typing import Callable
 
 import torch
 
-__all__ = ["is_compiling"]
+__all__ = ["is_compile_supported", "is_compiling"]
 
 
 def _always_false() -> bool:  # pragma: no cover
     """``torch.compile`` does not exist, or exposes no way to ask."""
     return False
+
+
+def _probe_compile_supported() -> bool:
+    """
+    Whether ``torch.compile``/Dynamo tracing is usable at all on this
+    Python/PyTorch combination -- a one-time capability probe, unlike
+    :func:`is_compiling`'s per-call "are we being traced right now" query.
+
+    ``torch._dynamo.is_dynamo_supported`` -- the query PyTorch itself uses
+    to track Python-version support lag -- is itself a later addition than
+    ``torch.compile``, so its own absence (e.g. PyTorch 2.0.1) is read as
+    "assume supported", matching what has been observed in practice on
+    those older versions.
+    """
+    if not hasattr(torch, "compile"):
+        return False  # pragma: no cover
+
+    try:
+        import torch._dynamo as dynamo  # pylint: disable=protected-access
+    except ImportError:  # pragma: no cover
+        return False
+
+    is_supported = getattr(dynamo, "is_dynamo_supported", None)
+    if is_supported is None:
+        return True  # pragma: no cover
+
+    try:
+        return bool(is_supported())
+    except Exception:  # pragma: no cover  # pylint: disable=broad-except
+        return False
+
+
+_compile_supported = _probe_compile_supported()
+
+
+def is_compile_supported() -> bool:
+    """
+    Whether ``torch.compile``/Dynamo tracing is usable in this environment.
+
+    Unlike :func:`is_compiling`, this is not safe to call from code that
+    is itself traced under ``torch.compile(fullgraph=True)`` -- it is meant
+    for deciding, ahead of time, whether to attempt compiling at all.
+    """
+    return _compile_supported
 
 
 def _resolve_is_compiling() -> Callable[[], bool]:

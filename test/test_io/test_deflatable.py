@@ -54,7 +54,7 @@ def test_read_atom() -> None:
     x-coordinate to avoid a clash with zero-padding.
     """
     p = Path(__file__).parent.resolve() / "files" / "atom.xyz"
-    numbers, positions = read.read(
+    numbers, positions = read.read(  # type: ignore[misc]
         p, raise_padding_exception=False, shift_for_last=True, shift_value=1.0
     )
 
@@ -70,7 +70,7 @@ def test_read_atom2() -> None:
     Read a single atom placed at [0.3, 0.3, 0.3].
     """
     p = Path(__file__).parent.resolve() / "files" / "atom2.xyz"
-    numbers, positions = read.read(p)
+    numbers, positions = read.read(p)  # type: ignore[misc]
 
     ref_numbers = torch.tensor([2])
     ref_positions = torch.tensor([[0.3, 0.3, 0.3]]) * AA2AU

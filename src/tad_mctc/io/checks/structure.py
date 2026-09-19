@@ -341,6 +341,8 @@ def structure_check(
     uhf: Tensor | None = None,
     lattice: Tensor | None = None,
     periodic: Tensor | None = None,
+    bonds: Tensor | None = None,
+    bond_orders: Tensor | None = None,
 ) -> bool | NoReturn:
     """
     Check a :class:`~tad_mctc.io.structure.Structure`'s tensors for consistent
@@ -366,6 +368,14 @@ def structure_check(
     periodic : Tensor | None, optional
         Boolean mask marking periodic lattice axes, shape ``(..., 3)``. Not
         checked if ``None``.
+    bonds : Tensor | None, optional
+        Atom-index pairs describing bond connectivity, shape
+        ``(..., nbond, 2)``. Not checked if ``None``.
+    bond_orders : Tensor | None, optional
+        Bond order per entry in ``bonds``, shape ``(..., nbond)``. Only
+        meaningful alongside ``bonds`` -- giving one without the other is
+        an error, since a bond order without the atom pair it belongs to
+        is meaningless.
 
     Returns
     -------
@@ -376,9 +386,9 @@ def structure_check(
     ------
     RuntimeError
         A tensor has the wrong number of dimensions or an inconsistent
-        shape.
+        shape, or ``bond_orders`` is given without ``bonds``.
     DtypeError
-        ``numbers`` or ``periodic`` has the wrong dtype.
+        ``numbers``, ``periodic`` or ``bonds`` has the wrong dtype.
     DeviceError
         The tensors do not all live on the same device.
     """
@@ -412,6 +422,36 @@ def structure_check(
                 f"'{periodic.dtype}'."
             )
 
+    if bond_orders is not None and bonds is None:
+        raise RuntimeError(
+            "'bond_orders' was given without 'bonds': a bond order without "
+            "the atom-index pair it belongs to is meaningless."
+        )
+
+    if bonds is not None:
+        dimension_check(bonds, min_ndim=2, max_ndim=3)
+        if bonds.shape[-1] != 2:
+            raise RuntimeError(
+                "Bonds must be given as a '(..., nbond, 2)' tensor of "
+                f"atom-index pairs, but shape is '{tuple(bonds.shape)}'."
+            )
+        allowed_bond_dtypes = (torch.long, torch.int16, torch.int32)
+        if bonds.dtype not in allowed_bond_dtypes:
+            raise DtypeError(
+                "Dtype of bond indices must be one of the following to "
+                f"allow indexing: "
+                f"'{', '.join(str(x) for x in allowed_bond_dtypes)}', but "
+                f"is '{bonds.dtype}'."
+            )
+
+        if bond_orders is not None:
+            dimension_check(bond_orders, min_ndim=1, max_ndim=2)
+            if bond_orders.shape[-1] != bonds.shape[-2]:
+                raise RuntimeError(
+                    f"Number of bond orders ({bond_orders.shape[-1]}) does "
+                    f"not match the number of bonds ({bonds.shape[-2]})."
+                )
+
     allowed_dtypes = (torch.long, torch.int16, torch.int32, torch.int64)
     if numbers.dtype not in allowed_dtypes:
         raise DtypeError(
@@ -420,7 +460,14 @@ def structure_check(
             f"but is '{numbers.dtype}'"
         )
 
-    optional_tensors = (charge, uhf, lattice, periodic)
+    optional_tensors = (
+        charge,
+        uhf,
+        lattice,
+        periodic,
+        bonds,
+        bond_orders,
+    )
     all_tensors = (numbers, positions) + optional_tensors
     devices = {t.device for t in all_tensors if isinstance(t, Tensor)}
     if len(devices) > 1:

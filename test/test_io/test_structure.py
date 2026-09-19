@@ -89,6 +89,8 @@ def test_construction_all_fields() -> None:
     uhf = torch.tensor(0)
     lattice = 20.0 * torch.eye(3, dtype=torch.double)
     periodic = torch.tensor([True, True, True])
+    bonds = torch.tensor([[0, 1], [0, 2]], dtype=torch.long)
+    bond_orders = torch.tensor([1.0, 1.0], dtype=torch.double)
 
     structure = Structure(
         numbers=numbers,
@@ -97,12 +99,25 @@ def test_construction_all_fields() -> None:
         uhf=uhf,
         lattice=lattice,
         periodic=periodic,
+        bonds=bonds,
+        bond_orders=bond_orders,
     )
 
     assert structure.charge is charge
     assert structure.uhf is uhf
     assert structure.lattice is lattice
     assert structure.periodic is periodic
+    assert structure.bonds is bonds
+    assert structure.bond_orders is bond_orders
+
+
+def test_construction_bonds_default_none() -> None:
+    numbers, positions = _water()
+
+    structure = Structure(numbers=numbers, positions=positions)
+
+    assert structure.bonds is None
+    assert structure.bond_orders is None
 
 
 def test_construction_runs_structure_check() -> None:
@@ -156,16 +171,42 @@ def test_pytree_includes_present_optional_fields() -> None:
     assert leaves[2] is uhf
 
 
+def test_pytree_includes_bonds_after_periodic_fields() -> None:
+    """`bonds`/`bond_orders` are the last two entries in `_OPTIONAL_FIELDS`,
+    so they appear last among the leaves, after charge/uhf/lattice/
+    periodic -- whichever of those are also present."""
+    numbers, positions = _water()
+    periodic = torch.tensor([True, True, True])
+    bonds = torch.tensor([[0, 1], [0, 2]], dtype=torch.long)
+    bond_orders = torch.tensor([1.0, 1.0])
+    structure = Structure(
+        numbers=numbers,
+        positions=positions,
+        periodic=periodic,
+        bonds=bonds,
+        bond_orders=bond_orders,
+    )
+
+    leaves, _ = tree_flatten(structure)
+
+    assert len(leaves) == 5
+    assert leaves[2] is periodic
+    assert leaves[3] is bonds
+    assert leaves[4] is bond_orders
+
+
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_to_moves_only_floating_fields_to_new_dtype(dtype: torch.dtype) -> None:
-    """`.to(dtype=...)` must cast `positions`/`charge`/`lattice`, but leave
-    `numbers`/`uhf`/`periodic` (integer/boolean) untouched -- mirroring
-    `NeighborList.to()`."""
+    """`.to(dtype=...)` must cast `positions`/`charge`/`lattice`/
+    `bond_orders`, but leave `numbers`/`uhf`/`periodic`/`bonds`
+    (integer/boolean) untouched -- mirroring `NeighborList.to()`."""
     numbers, positions = _water()
     charge = torch.tensor(0.0)
     uhf = torch.tensor(0)
     lattice = 20.0 * torch.eye(3, dtype=torch.double)
     periodic = torch.tensor([True, True, True])
+    bonds = torch.tensor([[0, 1], [0, 2]], dtype=torch.long)
+    bond_orders = torch.tensor([1.0, 1.0], dtype=torch.double)
 
     structure = Structure(
         numbers=numbers,
@@ -174,6 +215,8 @@ def test_to_moves_only_floating_fields_to_new_dtype(dtype: torch.dtype) -> None:
         uhf=uhf,
         lattice=lattice,
         periodic=periodic,
+        bonds=bonds,
+        bond_orders=bond_orders,
     )
 
     moved = structure.to(dtype=dtype)
@@ -181,9 +224,12 @@ def test_to_moves_only_floating_fields_to_new_dtype(dtype: torch.dtype) -> None:
     assert moved.positions.dtype == dtype
     assert moved.charge is not None and moved.charge.dtype == dtype
     assert moved.lattice is not None and moved.lattice.dtype == dtype
+    assert moved.bond_orders is not None
+    assert moved.bond_orders.dtype == dtype
     assert moved.numbers.dtype == torch.long
     assert moved.uhf is not None and moved.uhf.dtype == torch.long
     assert moved.periodic is not None and moved.periodic.dtype == torch.bool
+    assert moved.bonds is not None and moved.bonds.dtype == torch.long
 
 
 def test_to_with_no_arguments_returns_self() -> None:

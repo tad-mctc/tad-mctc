@@ -26,7 +26,11 @@ import numpy as np
 import pytest
 import torch
 
+from tad_mctc.batch import pack
 from tad_mctc.convert import numpy_to_tensor, symmetrizef
+from tad_mctc.data.structures import resolve_structure
+from tad_mctc.io.structure import Structure
+from tad_mctc.tools.compile import is_compile_supported
 from tad_mctc.typing import DD, Tensor
 
 __all__ = [
@@ -34,6 +38,10 @@ __all__ = [
     "_symrng",
     "DYNAMO_SUPPORTED",
     "DYNAMO_UNSUPPORTED_REASON",
+    "load_pair",
+    "load_sample",
+    "load_structure",
+    "resolve_structure",
     "run_compiled_or_skip",
 ]
 
@@ -48,41 +56,52 @@ def _symrng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
     return symmetrizef(_rng(size, dd))
 
 
-def _dynamo_is_supported() -> bool:
-    """
-    Whether ``torch.compile``/Dynamo tracing is usable on this Python/
-    PyTorch combination.
-
-    This runs once at import time (see ``DYNAMO_SUPPORTED`` below), so
-    every step is guarded: a raise here would break collecting every test
-    module that imports this one, not just skip a `torch.compile` test.
-    ``torch._dynamo.is_dynamo_supported`` -- the query PyTorch itself uses
-    to track Python-version support lag -- is itself a later addition than
-    `torch.compile`, so its own absence (e.g. PyTorch 2.0.1) is read as
-    "assume supported", matching what CI observes: other `torch.compile`
-    tests do pass on those older versions.
-    """
-    if not hasattr(torch, "compile"):
-        return False
-
-    try:
-        import torch._dynamo as dynamo  # pylint: disable=protected-access
-    except ImportError:
-        return False
-
-    is_supported = getattr(dynamo, "is_dynamo_supported", None)
-    if is_supported is None:
-        return True
-
-    try:
-        return bool(is_supported())
-    except Exception:  # pylint: disable=broad-except
-        return False
+def load_structure(collection: str, record: str, dd: DD) -> Structure:
+    """Resolve `(collection, record)` via `resolve_structure`, moved to
+    `dd` in the same call. `load_sample`/`load_pair` are a thin adapter
+    over this that keep only `numbers`/`positions`; a caller that also
+    needs `lattice`/`periodic` (`test_periodic.py`'s CN tests) uses this
+    directly instead of duplicating the resolve-and-move step. Resolves
+    fresh on every call rather than caching a `dict[str, Structure]`:
+    `get_structure`/`structures` lookups are cheap dict indexing plus one
+    `Structure` construction, so there is nothing worth caching, and doing
+    it here also avoids resolving once at a default dtype and `.to()`-
+    casting again per test, the way a precomputed `dict[str, Structure]`
+    would need to."""
+    return resolve_structure(
+        collection, record, device=dd["device"], dtype=dd["dtype"]
+    )
 
 
-DYNAMO_SUPPORTED = _dynamo_is_supported()
+def load_sample(collection: str, record: str, dd: DD) -> tuple[Tensor, Tensor]:
+    """`load_structure`, keeping only `numbers`/`positions`."""
+    structure = load_structure(collection, record, dd)
+    return structure.numbers, structure.positions
+
+
+def load_pair(
+    collection1: str,
+    record1: str,
+    collection2: str,
+    record2: str,
+    dd: DD,
+) -> tuple[Tensor, Tensor]:
+    """Load and pack two `(collection, record)`-named structures'
+    `numbers`/`positions`, moved to `dd`."""
+    numbers1, positions1 = load_sample(collection1, record1, dd)
+    numbers2, positions2 = load_sample(collection2, record2, dd)
+    numbers = pack((numbers1, numbers2))
+    positions = pack((positions1, positions2))
+    return numbers, positions
+
+
+DYNAMO_SUPPORTED = is_compile_supported()
 """For ``@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)``
-on any test that calls ``torch.compile``."""
+on any test that calls ``torch.compile``. The capability probe itself
+(``is_compile_supported``) lives in ``tad_mctc.tools.compile`` -- it is
+plain-torch, has no `pytest` dependency, and other "tad-*" packages can
+call it directly instead of duplicating the probe in their own test suite,
+the way this module used to."""
 
 DYNAMO_UNSUPPORTED_REASON = (
     "torch.compile/Dynamo is not supported on this Python/PyTorch combination"
