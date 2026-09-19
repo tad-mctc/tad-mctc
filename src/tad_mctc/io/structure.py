@@ -20,7 +20,8 @@ I/O: Structure
 
 `Structure` is the one representation of an atomic structure this library
 passes around -- species, positions, and optionally charge, unpaired
-electron count, and a periodic unit cell. It lives here, under `io`,
+electron count, a periodic unit cell, and bond connectivity. It lives
+here, under `io`,
 mirroring mctc-lib's own layout: `structure_type` is defined in
 `mctc-lib/src/mctc/io/structure.f90`, a plain data holder with fields
 only, while behaviour (distances, coordination number, ...) lives as free
@@ -88,15 +89,23 @@ from .checks.structure import structure_check
 __all__ = ["Structure"]
 
 
-# The four fields that may be absent. Order here fixes the order in which
+# The six fields that may be absent. Order here fixes the order in which
 # a present optional field appears among the pytree's leaves.
-_OPTIONAL_FIELDS = ("charge", "uhf", "lattice", "periodic")
+_OPTIONAL_FIELDS = (
+    "charge",
+    "uhf",
+    "lattice",
+    "periodic",
+    "bonds",
+    "bond_orders",
+)
 
-# `numbers`, `uhf` and `periodic` are integer/boolean data (atomic numbers,
-# an electron count, a boundary-condition mask); a floating `.type()` call
-# must never touch them, mirroring `NeighborList.to()`'s int/bool-vs-float
-# distinction in `src/tad_mctc/neighbor/list.py`. Enforced in `.to()` by
-# passing `follow_dtype=False` for exactly these three fields.
+# `numbers`, `uhf`, `periodic` and `bonds` are integer/boolean data (atomic
+# numbers, an electron count, a boundary-condition mask, atom-index pairs);
+# a floating `.type()` call must never touch them, mirroring
+# `NeighborList.to()`'s int/bool-vs-float distinction in
+# `src/tad_mctc/neighbor/list.py`. Enforced in `.to()` by passing
+# `follow_dtype=False` for exactly these four fields.
 
 
 @dataclass(frozen=True, eq=False)
@@ -104,7 +113,7 @@ class Structure:
     """
     One atomic structure: species, positions, and the optional fields that
     extend them (total charge, unpaired electron count, periodic unit
-    cell).
+    cell, bond connectivity).
 
     Frozen because a structure is a value, not a place to mutate in place.
     `eq=False` because the generated `__eq__` a dataclass would otherwise
@@ -129,6 +138,12 @@ class Structure:
     periodic : Tensor | None, optional
         Boolean mask, shape ``(..., 3)``, marking which lattice axes are
         periodic. Only meaningful alongside ``lattice``.
+    bonds : Tensor | None, optional
+        Atom-index pairs describing bond connectivity, shape
+        ``(..., nbond, 2)``. Absent means no connectivity information.
+    bond_orders : Tensor | None, optional
+        Bond order per entry in ``bonds``, shape ``(..., nbond)``. Only
+        meaningful alongside ``bonds``.
 
     Raises
     ------
@@ -136,7 +151,7 @@ class Structure:
         A tensor has the wrong number of dimensions or an inconsistent
         shape (raised by `structure_check`).
     DtypeError
-        ``numbers`` or ``periodic`` has the wrong dtype.
+        ``numbers``, ``periodic`` or ``bonds`` has the wrong dtype.
     DeviceError
         The given tensors do not all live on the same device.
     """
@@ -147,6 +162,8 @@ class Structure:
     uhf: Tensor | None = None
     lattice: Tensor | None = None
     periodic: Tensor | None = None
+    bonds: Tensor | None = None
+    bond_orders: Tensor | None = None
 
     def __post_init__(self) -> None:
         structure_check(
@@ -156,6 +173,8 @@ class Structure:
             uhf=self.uhf,
             lattice=self.lattice,
             periodic=self.periodic,
+            bonds=self.bonds,
+            bond_orders=self.bond_orders,
         )
 
     def to(
@@ -170,9 +189,9 @@ class Structure:
         alike -- a partial move would leave `structure_check`'s
         device-consistency check failing the next time this structure (or
         a copy of it) is validated. Only the floating-point fields
-        (``positions``, ``charge``, ``lattice``) follow ``dtype``;
-        ``numbers``, ``uhf`` and ``periodic`` are integer/boolean and are
-        never cast to a floating dtype.
+        (``positions``, ``charge``, ``lattice``, ``bond_orders``) follow
+        ``dtype``; ``numbers``, ``uhf``, ``periodic`` and ``bonds`` are
+        integer/boolean and are never cast to a floating dtype.
 
         Parameters
         ----------
@@ -219,6 +238,8 @@ class Structure:
             uhf=convert_optional(self.uhf, follow_dtype=False),
             lattice=convert_optional(self.lattice, follow_dtype=True),
             periodic=convert_optional(self.periodic, follow_dtype=False),
+            bonds=convert_optional(self.bonds, follow_dtype=False),
+            bond_orders=convert_optional(self.bond_orders, follow_dtype=True),
         )
 
     def type(self, dtype: torch.dtype) -> Structure:

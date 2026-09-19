@@ -30,10 +30,20 @@ Example
 >>> numbers, positions = read.read(path)
 """
 
+from .aims import *
+from .cjson import *
+from .ctfile import *
 from .dotfiles import *
+from .gaussian import *
+from .genformat import *
+from .json import *
 from .orca import *
+from .pdbfile import *
+from .pymatgen import *
+from .qchem import *
 from .qcschema import *
 from .reader import *
 from .tblite import *
 from .turbomole import *
+from .vasp import *
 from .xyz import *

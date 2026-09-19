@@ -24,8 +24,17 @@ Exceptions and warnings related to input and output operations.
 __all__ = [
     "EmptyFileError",
     "FormatError",
+    "FormatErrorAIMS",
+    "FormatErrorCJSON",
+    "FormatErrorCTFile",
+    "FormatErrorGaussian",
+    "FormatErrorGenFormat",
     "FormatErrorORCA",
+    "FormatErrorPDB",
+    "FormatErrorPymatgen",
+    "FormatErrorQChem",
     "FormatErrorTM",
+    "FormatErrorVASP",
     "FormatErrorXYZ",
 ]
 
@@ -38,12 +47,48 @@ class FormatError(RuntimeError):
     """Error for wrong format of a file."""
 
 
+class FormatErrorAIMS(FormatError):
+    """Format error for an FHI-aims geometry.in file."""
+
+
+class FormatErrorCJSON(FormatError):
+    """Format error for a Chemical JSON (cjson) file."""
+
+
+class FormatErrorCTFile(FormatError):
+    """Format error for an MDL Molfile/SDF (.mol/.sdf) file."""
+
+
+class FormatErrorGaussian(FormatError):
+    """Format error for a Gaussian external (.ein) file."""
+
+
+class FormatErrorGenFormat(FormatError):
+    """Format error for a DFTB+ genFormat (.gen) file."""
+
+
 class FormatErrorORCA(FormatError):
     """Format error for an ORCA file."""
 
 
+class FormatErrorPDB(FormatError):
+    """Format error for a Protein Data Bank (PDB) file."""
+
+
+class FormatErrorPymatgen(FormatError):
+    """Format error for a Pymatgen JSON structure/molecule file."""
+
+
+class FormatErrorQChem(FormatError):
+    """Format error for a Q-Chem ``$molecule`` block."""
+
+
 class FormatErrorTM(FormatError):
     """Format error for a Turbomole file."""
+
+
+class FormatErrorVASP(FormatError):
+    """Format error for a VASP POSCAR/CONTCAR file."""
 
 
 class FormatErrorXYZ(FormatError):

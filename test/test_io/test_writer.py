@@ -18,25 +18,21 @@
 Test the general file writer.
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 
 import pytest
 import torch
 
-from tad_mctc.data.structures.mstore import get_structure
 from tad_mctc.io import read, write
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
+from ..utils import load_sample
 
-# "H2O" is mstore's `heavy28/h2o`, reached only through `get_structure` --
-# see `test_ncoord/samples.py` for the same pattern and its rationale.
-_SAMPLE_SOURCES = {"H2O": ("heavy28", "h2o")}
-samples = {
-    name: get_structure(*source) for name, source in _SAMPLE_SOURCES.items()
-}
-sample_list = list(_SAMPLE_SOURCES)
+_SAMPLE_SOURCES: list[tuple[str, str]] = [("heavy28", "h2o")]
 
 
 @pytest.mark.parametrize("file", ["mol.mol", "mol.ein", "POSCAR"])
@@ -68,21 +64,23 @@ def test_fail_ftype() -> None:
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
-@pytest.mark.parametrize("name", sample_list)
+@pytest.mark.parametrize("collection,record", _SAMPLE_SOURCES)
 @pytest.mark.parametrize("fname", ["mol.xyz", "coord"])
-def test_write_and_read(dtype: torch.dtype, name: str, fname: str) -> None:
+def test_write_and_read(
+    dtype: torch.dtype, collection: str, record: str, fname: str
+) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
 
-    sample = samples[name]
-    numbers = sample.numbers.to(DEVICE)
-    positions = sample.positions.to(**dd)
+    numbers, positions = load_sample(collection, record, dd)
 
     # Create a temporary directory to save the file
     with tempfile.TemporaryDirectory() as tmpdirname:
         filepath = Path(tmpdirname) / fname
 
         write.write(filepath, numbers, positions)
-        read_numbers, read_positions = read.read(filepath, **dd)
+        read_numbers, read_positions = read.read(  # type: ignore[misc]
+            filepath, **dd
+        )
 
     # Check if the read data matches the written data
     assert read_numbers.dtype == numbers.dtype

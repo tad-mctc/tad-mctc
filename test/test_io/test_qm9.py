@@ -15,9 +15,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test the JSON/QCSchema file reader.
+Test the QM9-style XYZ file reader.
 """
 
+import io
 import tempfile
 from pathlib import Path
 
@@ -26,6 +27,7 @@ import torch
 
 from tad_mctc.io import read
 from tad_mctc.typing import DD
+from tad_mctc.units import length
 
 from ..conftest import DEVICE
 
@@ -70,3 +72,36 @@ def test_read(dtype: torch.dtype) -> None:
     assert read_numbers.shape == numbers.shape
     assert (numbers == read_numbers).all()
     assert pytest.approx(positions.cpu()) == read_positions.cpu()
+
+
+def test_read_fortran_exponent() -> None:
+    """QM9 coordinates may use Fortran-style ``*^`` exponents (e.g.
+    ``1.234*^-05``) instead of ``e``; this is the entire reason
+    ``read_xyz_qm9`` exists separately from the plain XYZ reader (its
+    ``*^`` -> ``e`` substitution), yet no existing fixture exercised it."""
+    numbers = torch.tensor([8, 1, 1], device=DEVICE)
+    positions = torch.tensor(
+        [
+            [0.0, 0.0, -0.3931181],
+            [-0.7592247, 0.0, 1.965590e-01],
+            [0.7592247, 0.0, 0.1965590],
+        ],
+        device=DEVICE,
+        dtype=torch.double,
+    )
+
+    text = (
+        "3\n"
+        "gdb 3\t1.0\t2.0\n"
+        "O     0.00000000*^00    0.0000000   -0.3931181   -0.589706\n"
+        "H    -0.7592247    0.0000000    1.965590*^-01   0.294853\n"
+        "H     0.7592247    0.0000000    0.1965590   0.294853\n"
+    )
+
+    read_numbers, read_positions = read.xyz.read_xyz_qm9_fileobj(
+        io.StringIO(text), device=DEVICE, dtype=torch.double
+    )
+
+    assert (numbers == read_numbers).all()
+    ref = positions * length.AA2AU
+    assert pytest.approx(ref.cpu()) == read_positions.cpu()

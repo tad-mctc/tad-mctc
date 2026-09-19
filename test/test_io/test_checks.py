@@ -278,6 +278,67 @@ def test_structure_check_periodic_wrong_dtype() -> None:
         checks.structure_check(numbers, positions, periodic=bad_periodic)
 
 
+def test_structure_check_bonds_valid() -> None:
+    numbers = torch.randint(1, 118, (5,))
+    positions = torch.randn((5, 3))
+    bonds = torch.tensor([[0, 1], [1, 2], [2, 3]], dtype=torch.long)
+    bond_orders = torch.tensor([1.0, 2.0, 1.0])
+
+    assert checks.structure_check(
+        numbers, positions, bonds=bonds, bond_orders=bond_orders
+    )
+
+
+def test_structure_check_bonds_alone_valid() -> None:
+    """`bond_orders` is optional even when `bonds` is given -- unordered
+    connectivity alone is a valid use case."""
+    numbers = torch.randint(1, 118, (5,))
+    positions = torch.randn((5, 3))
+    bonds = torch.tensor([[0, 1], [1, 2]], dtype=torch.long)
+
+    assert checks.structure_check(numbers, positions, bonds=bonds)
+
+
+def test_structure_check_bonds_wrong_last_dim() -> None:
+    numbers = torch.randint(1, 118, (5,))
+    positions = torch.randn((5, 3))
+    bad_bonds = torch.tensor([[0, 1, 2]], dtype=torch.long)
+
+    with pytest.raises(RuntimeError):
+        checks.structure_check(numbers, positions, bonds=bad_bonds)
+
+
+def test_structure_check_bonds_wrong_dtype() -> None:
+    numbers = torch.randint(1, 118, (5,))
+    positions = torch.randn((5, 3))
+    bad_bonds = torch.tensor([[0, 1], [1, 2]], dtype=torch.float32)
+
+    with pytest.raises(DtypeError):
+        checks.structure_check(numbers, positions, bonds=bad_bonds)
+
+
+def test_structure_check_bond_orders_without_bonds() -> None:
+    """A bond order without the corresponding connectivity is meaningless."""
+    numbers = torch.randint(1, 118, (5,))
+    positions = torch.randn((5, 3))
+    bond_orders = torch.tensor([1.0, 2.0])
+
+    with pytest.raises(RuntimeError):
+        checks.structure_check(numbers, positions, bond_orders=bond_orders)
+
+
+def test_structure_check_bond_orders_count_mismatch() -> None:
+    numbers = torch.randint(1, 118, (5,))
+    positions = torch.randn((5, 3))
+    bonds = torch.tensor([[0, 1], [1, 2], [2, 3]], dtype=torch.long)
+    bond_orders = torch.tensor([1.0, 2.0])
+
+    with pytest.raises(RuntimeError):
+        checks.structure_check(
+            numbers, positions, bonds=bonds, bond_orders=bond_orders
+        )
+
+
 def test_structure_check_lattice_periodic_valid() -> None:
     numbers = torch.randint(1, 118, (5,))
     positions = torch.randn((5, 3))

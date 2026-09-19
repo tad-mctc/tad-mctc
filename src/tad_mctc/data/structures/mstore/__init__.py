@@ -33,6 +33,7 @@ generated module's docstring for its exact source file and commit.
 
 from __future__ import annotations
 
+import torch
 from torch import Tensor
 
 from ....io.structure import Structure
@@ -85,10 +86,20 @@ datasets: dict[str, dict[str, dict[str, Tensor]]] = {
 }
 
 
-def get_structure(collection: str, record: str) -> Structure:
+def get_structure(
+    collection: str,
+    record: str,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+) -> Structure:
     """
     Look up one structure by dataset and record id, mirroring mstore's own
     ``get_structure(mol, collection, record)``.
+
+    Unrelated to :func:`tad_mctc.data.structures.glu_ala.get_structure`,
+    which shares this name but not its shape (one positional argument,
+    not two) or its data source -- the two are never meant to be
+    interchangeable; only the module path tells them apart.
 
     Parameters
     ----------
@@ -97,6 +108,13 @@ def get_structure(collection: str, record: str) -> Structure:
     record : str
         Record id within that dataset, mstore's own bare spelling (e.g.
         ``"acetic"``, not any locally-invented alias).
+    device : torch.device | None, optional
+        Device to move the structure to. ``None`` keeps the cached
+        dataset's device. Passing a ``DD`` via ``**dd`` works, since its
+        keys match these parameter names.
+    dtype : torch.dtype | None, optional
+        Floating dtype for the structure's floating-point fields. ``None``
+        keeps the cached dataset's dtype.
 
     Returns
     -------
@@ -125,7 +143,7 @@ def get_structure(collection: str, record: str) -> Structure:
             f"'{collection}'. Available: {sorted(collection_dict)}"
         ) from None
 
-    return Structure(**record_dict)
+    return Structure(**record_dict).to(device=device, dtype=dtype)
 
 
 def list_collections() -> list[str]:

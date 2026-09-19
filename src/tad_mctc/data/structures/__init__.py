@@ -23,21 +23,25 @@ Test-fixture structures for tad-mctc, merging two sources into one public
 
 - :mod:`tad_mctc.data.structures.other` -- bespoke structures with no
   verified upstream origin.
+- :mod:`tad_mctc.data.structures.solids` -- real periodic bulk solids with
+  a verified crystallographic origin that is not mstore (mstore has no
+  covalent-network or ionic bulk solid to mirror).
 - :mod:`tad_mctc.data.structures.mstore` -- structures with a verified,
   coordinate-confirmed origin in https://github.com/grimme-lab/mstore,
   organized per dataset there.
 
-`structures` holds only `other`'s bespoke entries. An mstore record is
-reached exclusively through
-:func:`tad_mctc.data.structures.mstore.get_structure` (e.g.
-``get_structure("mb16_43", "SiH4")``) -- `structures` used to re-key 11 of
-them under historical compound names (`"MB16_43_01"`, `"SiH4"`, ...), but
-those aliases were removed so that mstore's own records stay the one
+`structures` holds only `other`'s and `solids`' entries -- both are
+verified-or-not-but-not-mstore, sourced by this repository itself rather
+than mirrored from an upstream testsuite. An mstore record is reached
+exclusively through :func:`tad_mctc.data.structures.mstore.get_structure`
+(e.g. ``get_structure("mb16_43", "SiH4")``) -- `structures` used to re-key
+11 of them under historical compound names (`"MB16_43_01"`, `"SiH4"`, ...),
+but those aliases were removed so that mstore's own records stay the one
 canonical way to reach mstore data, with no second name pointing at the
 same object.
 
 A third, sibling source, :mod:`tad_mctc.data.structures.glu_ala`, is
-likewise never merged into `structures`: a 26-structure, 28-to-53,250-atom
+likewise never merged into `structures`: a 28-structure, 28-to-212,994-atom
 size ladder for scaling benchmarks (see `examples/scaling/glu_ala.py`),
 reached through its own `get_structure`/`list_records`.
 """
@@ -46,17 +50,45 @@ from __future__ import annotations
 
 from typing import Any
 
+import torch
 from torch import Tensor
 
 from ...io.structure import Structure
+from .mstore import get_structure
 from .other import other
+from .solids import solids
 
-__all__ = ["structures", "merge_nested_dicts"]
+__all__ = ["merge_nested_dicts", "resolve_structure", "structures"]
 
 
 structures: dict[str, Structure] = {
-    name: Structure(**record) for name, record in other.items()
+    name: Structure(**record) for name, record in {**other, **solids}.items()
 }
+
+
+def resolve_structure(
+    collection: str,
+    record: str,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+) -> Structure:
+    """
+    Resolve one ``(collection, record)`` lookup to a ``Structure``, moved to
+    ``device``/``dtype`` in the same call -- the same two-argument shape as
+    :func:`tad_mctc.data.structures.mstore.get_structure` (and mstore's own
+    Fortran ``get_structure``). ``"other"`` and ``"solids"`` are not mstore
+    collections, so they resolve through :data:`structures` (keyed by
+    record name) instead of :func:`get_structure`.
+
+    This is the one place downstream "tad-*" packages should reach for a
+    named structure -- :mod:`tad_mctc.data.structures._reference_manifest`'s
+    own, narrower ``resolve_reference_structure`` delegates here too, rather
+    than keeping a second copy of this branch for its ``SAMPLE_LIST`` use
+    case.
+    """
+    if collection in ("other", "solids"):
+        return structures[record].to(device=device, dtype=dtype)
+    return get_structure(collection, record, device=device, dtype=dtype)
 
 
 def merge_nested_dicts(
