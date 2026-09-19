@@ -23,6 +23,8 @@ not propagated -- unlike every other geometry field, this repository
 threads charge/uhf only via the ``.CHRG``/``.UHF`` sidecar mechanism.
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

@@ -18,6 +18,8 @@
 Test the VASP POSCAR/CONTCAR file reader.
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

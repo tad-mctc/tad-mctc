@@ -20,6 +20,8 @@ Test the MDL Molfile (V2000/V3000) and SDF reader, mirroring mctc-lib's
 mctc-lib's own ``test_read_ctfile.f90``).
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

@@ -20,6 +20,8 @@ Test the Protein Data Bank (PDB) file reader, mirroring mctc-lib's
 mctc-lib's own ``test_read_pdb.f90``).
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

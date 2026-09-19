@@ -22,6 +22,8 @@ not supported (see the reader's module docstring) and is checked
 separately as its own rejection case.
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

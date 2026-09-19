@@ -31,7 +31,16 @@ Example
 from __future__ import annotations
 
 from pathlib import Path
-from typing import IO, Any, Literal, Protocol, runtime_checkable
+from typing import (
+    IO,
+    Any,
+    Literal,
+    Optional,
+    Protocol,
+    Tuple,
+    Union,
+    runtime_checkable,
+)
 
 import torch
 
@@ -46,8 +55,15 @@ __all__ = [
     "create_path_reader_periodic",
 ]
 
-CJSONResult = tuple[
-    Tensor, Tensor, Tensor | None, Tensor | None, Tensor | None, Tensor | None
+# plain assignments, evaluated at import time -- `tuple[...]`/`X | None`
+# need Python 3.9+/3.10+, so this needs `typing`'s generics for py38.
+CJSONResult = Tuple[
+    Tensor,
+    Tensor,
+    Optional[Tensor],
+    Optional[Tensor],
+    Optional[Tensor],
+    Optional[Tensor],
 ]
 """Return shape for a reader that can independently carry a periodic
 lattice (`lattice`, `periodic`) and bond connectivity (`bonds`,
@@ -56,9 +72,9 @@ these four are not all-or-nothing together, so the tuple is always this
 fixed length with `None` standing in for whichever pieces the file didn't
 have (currently only cjson; see `read.cjson.read_cjson_fileobj`)."""
 
-JSONResult = (
-    tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor] | CJSONResult
-)
+JSONResult = Union[
+    Tuple[Tensor, Tensor], Tuple[Tensor, Tensor, Tensor, Tensor], CJSONResult
+]
 """Return shape for the general JSON sniff-and-dispatch reader
 (`read.json.read_json_fileobj`): whichever of its three delegates'
 shapes actually matched -- plain qcschema/cjson-without-anything-set

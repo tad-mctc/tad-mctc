@@ -18,6 +18,8 @@
 Test the general file reader.
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

@@ -20,6 +20,8 @@ Test the Q-Chem ``$molecule`` block reader, mirroring mctc-lib's
 coordinate) support.
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

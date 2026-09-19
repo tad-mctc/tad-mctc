@@ -34,6 +34,8 @@ Python equivalent to port: the reader never parses those keys, so no
 error can occur for them.
 """
 
+from __future__ import annotations
+
 import json
 import tempfile
 from pathlib import Path
@@ -94,7 +96,7 @@ def test_read(dtype: torch.dtype) -> None:
             [-1.43472674945442, +0.00000000000000, +0.37144274876492],
             [+1.43472674945442, +0.00000000000000, +0.37144274876492],
         ],
-        **dd
+        **dd,
     )
 
     # Create a temporary directory to save the file

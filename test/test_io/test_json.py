@@ -21,6 +21,8 @@ pymatgen, or cjson reader based on which schema-identifying keys it
 contains, without re-parsing the file twice.
 """
 
+from __future__ import annotations
+
 import json
 import tempfile
 from pathlib import Path

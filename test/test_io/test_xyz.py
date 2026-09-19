@@ -18,9 +18,12 @@
 Test the XYZ file reader and writer.
 """
 
+from __future__ import annotations
+
 import io
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -30,13 +33,26 @@ from tad_mctc.batch import pack
 from tad_mctc.exceptions import EmptyFileError, FormatErrorXYZ
 from tad_mctc.io import read, write
 from tad_mctc.io.read.xyz import _parse_atom_block
-from tad_mctc.typing import DD
+from tad_mctc.typing import DD, Tensor
 from tad_mctc.units import length
 
 from ..conftest import DEVICE
 from ..utils import load_pair, load_sample, resolve_structure
 
 _SAMPLE_SOURCES: list[tuple[str, str]] = [("heavy28", "h2o")]
+
+
+def _read2(text: str) -> tuple[Tensor, Tensor]:
+    return cast(
+        "tuple[Tensor, Tensor]", read.xyz.read_xyz_fileobj(io.StringIO(text))
+    )
+
+
+def _read4(text: str) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    return cast(
+        "tuple[Tensor, Tensor, Tensor, Tensor]",
+        read.xyz.read_xyz_fileobj(io.StringIO(text)),
+    )
 
 
 def test_read_fail() -> None:
@@ -250,7 +266,7 @@ def test_valid1_xyz() -> None:
         "H    -0.5400907   -0.8496512   -2.1052499 \n"
     )
 
-    numbers, positions = read.xyz.read_xyz_fileobj(io.StringIO(text))  # type: ignore[misc]
+    numbers, positions = _read2(text)
 
     ref_numbers = torch.tensor([8, 1, 1, 8, 1, 1, 8, 1, 1])
     ref_positions = (
@@ -308,7 +324,7 @@ def test_valid2_xyz_exotic_symbols() -> None:
         "H          4.40017       -5.16929       -0.94780\n"
     )
 
-    numbers, _ = read.xyz.read_xyz_fileobj(io.StringIO(text))  # type: ignore[misc]
+    numbers = _read2(text)[0]
 
     ref_numbers = torch.tensor(
         [
@@ -353,7 +369,7 @@ def test_valid3_xyz_lowercase_and_extra_column() -> None:
         "h  4.40017 -5.16929 -0.94780  0.06926350\n"
     )
 
-    numbers, _ = read.xyz.read_xyz_fileobj(io.StringIO(text))  # type: ignore[misc]
+    numbers = _read2(text)[0]
 
     ref_numbers = torch.tensor(
         [
@@ -388,7 +404,7 @@ def test_valid4_xyz_trajectory() -> None:
         "H    -0.5400907   -0.8496512   -2.1052499 \n"
     )
 
-    numbers, positions = read.xyz.read_xyz_fileobj(io.StringIO(text))  # type: ignore[misc]
+    numbers, positions = _read2(text)
 
     ref_numbers = torch.tensor([8, 1, 1])
     ref_positions = (
@@ -430,7 +446,7 @@ def test_valid5_xyz_numeric_symbol() -> None:
         "1     2.0242676    1.0811246    0.4301417 \n"
     )
 
-    numbers, _ = read.xyz.read_xyz_fileobj(io.StringIO(text))  # type: ignore[misc]
+    numbers = _read2(text)[0]
 
     ref_numbers = torch.tensor([8, 1, 1])
     assert numbers.shape == (3,)
@@ -572,9 +588,7 @@ def test_valid6_extxyz_forces_column_before_species() -> None:
         "0.4 0.5 0.6 O 4.0 5.0 6.0\n"
     )
 
-    numbers, positions, lattice, periodic = read.xyz.read_xyz_fileobj(  # type: ignore[misc]
-        io.StringIO(text)
-    )
+    numbers, positions, lattice, periodic = _read4(text)
 
     ref_lattice = torch.diag(torch.tensor([5.0, 6.0, 7.0])) * length.AA2AU
     ref_positions = (
@@ -601,7 +615,7 @@ def test_valid7_extxyz_z_column_bracket_pbc_all_false() -> None:
         "4.0 5.0 6.0 8\n"
     )
 
-    numbers, positions = read.xyz.read_xyz_fileobj(io.StringIO(text))  # type: ignore[misc]
+    numbers, positions = _read2(text)
 
     ref_positions = (
         torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) * length.AA2AU
@@ -741,7 +755,7 @@ def test_extxyz_lattice_without_properties_is_ignored() -> None:
         "H 0.0 0.0 0.0\n"
     )
 
-    numbers, positions = read.xyz.read_xyz_fileobj(io.StringIO(text))  # type: ignore[misc]
+    numbers, positions = _read2(text)
 
     assert numbers.shape == (1,)
     assert (numbers == torch.tensor([1])).all()

@@ -18,6 +18,8 @@
 Test the XYZ file reader and writer.
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

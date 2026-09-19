@@ -19,6 +19,8 @@ Test periodic (``$periodic``/``$lattice``/``$cell``) support in the
 Turbomole coord reader, mirroring mctc-lib's ``mctc_io_read_turbomole``.
 """
 
+from __future__ import annotations
+
 import math
 import tempfile
 from pathlib import Path

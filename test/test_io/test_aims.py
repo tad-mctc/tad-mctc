@@ -19,6 +19,8 @@ Test the FHI-aims ``geometry.in`` file reader, mirroring mctc-lib's
 ``mctc_io_read_aims`` test cases.
 """
 
+from __future__ import annotations
+
 import tempfile
 from pathlib import Path
 

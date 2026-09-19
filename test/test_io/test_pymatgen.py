@@ -20,6 +20,8 @@ mctc-lib's ``mctc_io_read_pymatgen`` test cases (fixture content taken
 directly from mctc-lib's own ``test_read_pymatgen.f90``).
 """
 
+from __future__ import annotations
+
 import json
 import tempfile
 from pathlib import Path
