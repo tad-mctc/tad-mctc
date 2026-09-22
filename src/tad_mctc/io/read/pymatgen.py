@@ -40,10 +40,11 @@ import torch
 
 from ...convert import symbol_to_number
 from ...exceptions import FormatErrorPymatgen
-from ...typing import DD, Tensor, get_default_dtype
+from ...typing import DD
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
-from .frompath import create_path_reader_periodic
+from ..structure import Structure
+from ._finalize import finalize_geometry, resolve_dd
+from .frompath import create_path_reader
 
 __all__ = ["read_pymatgen"]
 
@@ -69,10 +70,10 @@ def read_pymatgen_from_dict(
     ddi: DD,
     device: torch.device | None = None,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> Structure:
     """
-    Builds atomic numbers and positions (plus lattice/periodicity for a
-    periodic ``Structure``) from an already-parsed pymatgen JSON object,
+    Builds a structure (with lattice/periodicity for a periodic pymatgen
+    ``Structure``) from an already-parsed pymatgen JSON object,
     factored out of :func:`read_pymatgen_fileobj` so a sniff-and-dispatch
     caller (:func:`tad_mctc.io.read.json.read_json_fileobj`) can reuse it
     without re-parsing the same JSON text a second time.
@@ -164,17 +165,8 @@ def read_pymatgen_from_dict(
     positions = torch.tensor(coords, **dd) * length.AA2AU
 
     if not periodic_flag:
-        assert shape_checks(numbers, positions, allow_batched=False)
-        assert content_checks(
-            numbers,
-            positions,
-            allow_batched=False,
-            check_coldfusion=kwargs.get("check_coldfusion", False),
-            coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-        )
-        assert deflatable_check(positions, fileobj, **kwargs)
-
-        return numbers, positions
+        positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
+        return Structure(numbers=numbers, positions=positions)
 
     lattice_obj = data.get("lattice")
     if not isinstance(lattice_obj, dict):
@@ -200,17 +192,11 @@ def read_pymatgen_from_dict(
 
     periodic = torch.ones(3, dtype=torch.bool, device=device)
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-    )
-    assert deflatable_check(positions, fileobj, **kwargs)
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
 
-    return numbers, positions, lattice, periodic
+    return Structure(
+        numbers=numbers, positions=positions, lattice=lattice, periodic=periodic
+    )
 
 
 def read_pymatgen_fileobj(
@@ -219,11 +205,10 @@ def read_pymatgen_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> Structure:
     """
-    Reads a pymatgen JSON ``Molecule``/``Structure`` and returns atomic
-    numbers and positions as tensors, plus lattice vectors and a
-    periodicity mask for a periodic ``Structure``.
+    Reads a pymatgen JSON ``Molecule``/``Structure`` into a structure, with
+    lattice vectors and a periodicity mask for a periodic ``Structure``.
 
     Parameters
     ----------
@@ -238,11 +223,10 @@ def read_pymatgen_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
-        Tensors of atomic numbers and positions (shape ``(nat, 3)``,
-        atomic units). A ``Structure`` additionally carries a lattice
-        tensor (shape ``(3, 3)``, rows are lattice vectors in bohr) and an
-        all-``True`` periodicity mask (shape ``(3,)``).
+    Structure
+        Atomic numbers and positions (shape ``(nat, 3)``, bohr). A pymatgen
+        ``Structure`` also carries the lattice (rows are lattice vectors,
+        bohr) and an all-``True`` periodicity mask.
 
     Raises
     ------
@@ -250,11 +234,7 @@ def read_pymatgen_fileobj(
         The file is not valid JSON, or is valid JSON that does not
         conform with the expected pymatgen schema.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     try:
         data = json.load(fileobj)
@@ -266,4 +246,4 @@ def read_pymatgen_fileobj(
     )
 
 
-read_pymatgen = create_path_reader_periodic(read_pymatgen_fileobj)
+read_pymatgen = create_path_reader(read_pymatgen_fileobj)

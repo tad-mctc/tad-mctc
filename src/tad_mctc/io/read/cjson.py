@@ -21,13 +21,9 @@ I/O Read: Chemical JSON (cjson)
 Reader for the Chemical JSON (Avogadro) format. Mirrors mctc-lib's
 ``mctc_io_read_cjson`` (``src/mctc/io/read/cjson.F90``).
 
-Unlike every other multi-field reader in this package, a periodic lattice
-and bond connectivity are independently optional here -- a cjson file can
-have neither, either, or both. ``read_cjson_fileobj`` therefore always
-returns the same 6-tuple (numbers, positions, lattice, periodic, bonds,
-bond_orders), with ``None`` standing in for whichever of the last four
-the file didn't have, rather than the content-dependent 2-vs-4-tuple used
-elsewhere.
+A periodic lattice and bond connectivity are independently optional here:
+a cjson file can have neither, either, or both, and the returned structure
+leaves whichever it lacks unset.
 
 mctc-lib (as of writing) applies its Angstrom->bohr conversion to the raw
 coordinate array unconditionally, before the fractional->cartesian lattice
@@ -52,11 +48,12 @@ import torch
 
 from ...data import pse
 from ...exceptions import FormatErrorCJSON
-from ...typing import DD, get_default_dtype
+from ...typing import DD
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
+from ..structure import Structure
 from ._cell import cell_to_lattice
-from .frompath import CJSONResult, create_path_reader_cjson
+from ._finalize import finalize_geometry, resolve_dd
+from .frompath import create_path_reader
 
 __all__ = ["read_cjson"]
 
@@ -85,10 +82,10 @@ def read_cjson_from_dict(
     ddi: DD,
     device: torch.device | None = None,
     **kwargs: Any,
-) -> CJSONResult:
+) -> Structure:
     """
-    Builds atomic numbers, positions, lattice/periodicity and
-    bonds/bond_orders from an already-parsed cjson JSON object, factored
+    Builds a structure (with lattice/periodicity and bonds/bond_orders if
+    present) from an already-parsed cjson JSON object, factored
     out of :func:`read_cjson_fileobj` so a sniff-and-dispatch caller
     (:func:`tad_mctc.io.read.json.read_json_fileobj`) can reuse it
     without re-parsing the same JSON text a second time.
@@ -192,7 +189,12 @@ def read_cjson_from_dict(
     # fractional coordinates are dimensionless -- only the (already bohr)
     # lattice carries a unit, so Angstrom->bohr applies to cartesian
     # coordinates only (see the module docstring)
-    positions = geo_t * length.AA2AU if cartesian else geo_t @ lattice
+    if cartesian:
+        positions = geo_t * length.AA2AU
+    else:
+        # fractional coordinates are only read above when a lattice is set
+        assert lattice is not None
+        positions = geo_t @ lattice
 
     bonds = None
     bond_orders = None
@@ -239,17 +241,16 @@ def read_cjson_from_dict(
         else None
     )
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-    )
-    assert deflatable_check(positions, fileobj, **kwargs)
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
 
-    return numbers, positions, lattice, periodic, bonds, bond_orders
+    return Structure(
+        numbers=numbers,
+        positions=positions,
+        lattice=lattice,
+        periodic=periodic,
+        bonds=bonds,
+        bond_orders=bond_orders,
+    )
 
 
 def read_cjson_fileobj(
@@ -258,12 +259,11 @@ def read_cjson_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> CJSONResult:
+) -> Structure:
     """
-    Reads a Chemical JSON file and returns atomic numbers and positions
-    as tensors, plus lattice vectors, a periodicity mask, bond indices
-    and bond orders -- the latter four each independently ``None`` if the
-    file didn't have that piece of information.
+    Reads a Chemical JSON file into a structure, with lattice vectors, a
+    periodicity mask, bond indices and bond orders where the file has
+    them.
 
     Parameters
     ----------
@@ -278,8 +278,9 @@ def read_cjson_fileobj(
 
     Returns
     -------
-    CJSONResult
-        See the module docstring.
+    Structure
+        Atomic numbers and positions (bohr), plus lattice and periodicity
+        mask, and bonds and bond orders, each only if the file has them.
 
     Raises
     ------
@@ -287,11 +288,7 @@ def read_cjson_fileobj(
         The file is not valid JSON, or is valid JSON that does not
         conform with the expected cjson schema.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     try:
         data = json.load(fileobj)
@@ -301,4 +298,4 @@ def read_cjson_fileobj(
     return read_cjson_from_dict(data, fileobj, dd, ddi, device=device, **kwargs)
 
 
-read_cjson = create_path_reader_cjson(read_cjson_fileobj)
+read_cjson = create_path_reader(read_cjson_fileobj)

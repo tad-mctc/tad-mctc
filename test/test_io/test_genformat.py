@@ -61,8 +61,8 @@ def test_read_cluster() -> None:
     with tmpdir:
         result = read.read_genformat(filepath, **dd)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     ref_numbers = torch.tensor([8, 1, 1])
     ref_positions = (
@@ -104,8 +104,8 @@ def test_read_cluster_multi_species() -> None:
     with tmpdir:
         result = read.read_genformat(filepath, **dd)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     ref_numbers = torch.tensor([6, 35, 1, 1, 1, 8, 6, 1, 1])
     ref_positions = (
@@ -156,9 +156,10 @@ def test_read_supercell() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_genformat(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_genformat(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_lattice = torch.eye(3, **dd) * 3.567 * length.AA2AU
     ref_positions = (
@@ -202,7 +203,8 @@ def test_read_supercell_nonzero_origin() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        _, positions, _, _ = read.read_genformat(filepath, **dd)  # type: ignore[misc]
+        structure = read.read_genformat(filepath, **dd)
+        positions = structure.positions
 
     # position (0,0,0)*AA2AU minus the (also AA2AU-converted) origin (1.0, 0, 0)
     ref_positions = torch.tensor([[-length.AA2AU, 0.0, 0.0]], **dd)
@@ -226,9 +228,10 @@ def test_read_fractional() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_genformat(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_genformat(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_lattice = (
         torch.tensor(

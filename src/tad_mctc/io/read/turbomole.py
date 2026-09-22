@@ -25,11 +25,14 @@ Periodicity (``$periodic``/``$lattice``/``$cell``) mirrors mctc-lib's
 can be periodic along 0 to 3 axes (molecule, wire, slab, or bulk), with the
 lattice given either as explicit vectors (``$lattice``) or as length/angle
 cell parameters (``$cell``, converted to vectors the same way mctc-lib's
-``cell_to_dlat`` does). Since periodicity is optional -- unlike a VASP
-POSCAR, most coord files are plain molecules -- ``read_turbomole_fileobj``
-returns the usual (numbers, positions) pair for a non-periodic file and
-only reaches for the richer (numbers, positions, lattice, periodic)
-4-tuple when the file actually declares one or more periodic axes.
+``cell_to_dlat`` does). Unlike a VASP POSCAR, most coord files are plain
+molecules, so the returned structure carries a lattice and periodicity
+mask only when the file declares one or more periodic axes.
+
+For a wire or slab, each non-periodic axis gets a 1 bohr placeholder
+lattice vector, so the cell always has a non-zero volume. For ``$cell``
+this is what mctc-lib does too; for ``$lattice`` mctc-lib leaves those
+rows zero.
 """
 
 from __future__ import annotations
@@ -41,11 +44,12 @@ import torch
 
 from ...convert import symbol_to_number
 from ...exceptions import EmptyFileError, FormatErrorTM
-from ...typing import DD, Tensor, get_default_dtype
+from ...typing import Tensor
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
+from ..structure import Structure
 from ._cell import cell_to_lattice
-from .frompath import create_path_reader, create_path_reader_periodic
+from ._finalize import finalize_geometry, resolve_dd
+from .frompath import create_path_reader
 
 __all__ = ["read_coord", "read_turbomole", "read_turbomole_energy"]
 
@@ -59,11 +63,11 @@ def read_turbomole_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> Structure:
     """
-    Reads a Turbomole coord file and returns atomic numbers and positions as
-    tensors, plus lattice vectors and a periodicity mask if the file
-    declares one or more periodic axes via ``$periodic``.
+    Reads a Turbomole coord file into a structure, with lattice vectors and
+    a periodicity mask if the file declares one or more periodic axes via
+    ``$periodic``.
 
     Parameters
     ----------
@@ -78,11 +82,10 @@ def read_turbomole_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
-        Tensors of atomic numbers and positions (shape ``(nat, 3)``, atomic
-        units). If the file declares a periodic axis, a lattice tensor
-        (shape ``(3, 3)``, rows are lattice vectors in bohr) and a boolean
-        periodicity mask (shape ``(3,)``) are appended.
+    Structure
+        Atomic numbers and positions (shape ``(nat, 3)``, bohr). If the
+        file declares a periodic axis, also the lattice (rows are lattice
+        vectors, bohr) and the periodicity mask.
 
     Raises
     ------
@@ -92,11 +95,7 @@ def read_turbomole_fileobj(
         The file does not conform with the expected Turbomole format, or
         mixes ``$periodic``/``$lattice``/``$cell`` inconsistently.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     lines: list[str] = fileobj.readlines()
 
@@ -238,7 +237,11 @@ def read_turbomole_fileobj(
     numbers = torch.tensor(numbers_list, **ddi)
     coords_t = torch.tensor(coords, **dd)
 
-    lattice = torch.zeros((3, 3), **dd)
+    # A non-periodic axis keeps a 1 bohr unit vector as a placeholder, as
+    # the `$cell` path below gets from mctc-lib's `cell_to_dlat`. `$lattice`
+    # only gives the periodic block, and mctc-lib leaves the rest zero; that
+    # singular cell cannot be inverted to fold atoms into the central cell.
+    lattice = torch.eye(3, **dd)
     if has_cell:
         conv = 1.0 if lattice_in_bohr else length.AA2AU
         needed = _CELLPAR_COUNT[periodic_dims]
@@ -317,29 +320,23 @@ def read_turbomole_fileobj(
             @ lattice[:periodic_dims, :periodic_dims]
         )
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-    )
-    assert deflatable_check(positions, fileobj, **kwargs)
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
 
     if periodic_dims == 0:
-        return numbers, positions
+        return Structure(numbers=numbers, positions=positions)
 
     periodic = torch.zeros(3, dtype=torch.bool, device=device)
     periodic[:periodic_dims] = True
 
-    return numbers, positions, lattice, periodic
+    return Structure(
+        numbers=numbers, positions=positions, lattice=lattice, periodic=periodic
+    )
 
 
-read_turbomole = create_path_reader_periodic(read_turbomole_fileobj)
+read_turbomole = create_path_reader(read_turbomole_fileobj)
 
 
-read_coord = create_path_reader_periodic(read_turbomole_fileobj)
+read_coord = create_path_reader(read_turbomole_fileobj)
 
 
 ################################################################################

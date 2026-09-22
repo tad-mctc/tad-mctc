@@ -23,36 +23,28 @@ from __future__ import annotations
 import io
 import tempfile
 from pathlib import Path
-from typing import cast
 
 import numpy as np
 import pytest
 import torch
 
 from tad_mctc.batch import pack
+from tad_mctc.data.structures import get_structure
 from tad_mctc.exceptions import EmptyFileError, FormatErrorXYZ
 from tad_mctc.io import read, write
 from tad_mctc.io.read.xyz import _parse_atom_block
-from tad_mctc.typing import DD, Tensor
+from tad_mctc.io.structure import Structure
+from tad_mctc.typing import DD
 from tad_mctc.units import length
 
 from ..conftest import DEVICE
-from ..utils import load_pair, load_sample, resolve_structure
+from ..utils import load_pair, load_sample
 
 _SAMPLE_SOURCES: list[tuple[str, str]] = [("heavy28", "h2o")]
 
 
-def _read2(text: str) -> tuple[Tensor, Tensor]:
-    return cast(
-        "tuple[Tensor, Tensor]", read.xyz.read_xyz_fileobj(io.StringIO(text))
-    )
-
-
-def _read4(text: str) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-    return cast(
-        "tuple[Tensor, Tensor, Tensor, Tensor]",
-        read.xyz.read_xyz_fileobj(io.StringIO(text)),
-    )
+def _read(text: str) -> Structure:
+    return read.xyz.read_xyz_fileobj(io.StringIO(text))
 
 
 def test_read_fail() -> None:
@@ -65,7 +57,7 @@ def test_read_fail() -> None:
 
 
 def test_write_fail() -> None:
-    sample = resolve_structure("heavy28", "h2o")
+    sample = get_structure("heavy28", "h2o")
     numbers = sample.numbers
     positions = sample.positions
 
@@ -81,7 +73,7 @@ def test_write_fail() -> None:
 
 
 def test_write_batch_fail() -> None:
-    sample = resolve_structure("heavy28", "h2o")
+    sample = get_structure("heavy28", "h2o")
 
     with tempfile.TemporaryDirectory() as tmpdirname:
         filepath = Path(tmpdirname) / "dummy.xyz"
@@ -106,7 +98,7 @@ def test_write_batch_fail() -> None:
 
 
 def test_write_comment_fail() -> None:
-    sample = resolve_structure("heavy28", "h2o")
+    sample = get_structure("heavy28", "h2o")
     numbers = sample.numbers
     positions = sample.positions
 
@@ -139,9 +131,8 @@ def test_write_and_read(
         write.write_xyz(filepath, numbers, positions)
 
         # Read from XYZ file
-        read_numbers, read_positions = read.read_xyz(  # type: ignore[misc]
-            filepath, batch_agnostic=batch_agnostic, **dd
-        )
+        structure = read.read_xyz(filepath, batch_agnostic=batch_agnostic, **dd)
+        read_numbers, read_positions = structure.numbers, structure.positions
 
     if batch_agnostic is True:
         numbers = numbers.unsqueeze(0)
@@ -183,7 +174,8 @@ def test_write_and_read_batch(
         write.write_xyz(filepath, numbers2, positions2, mode="a")
 
         # Read from XYZ file
-        read_numbers, read_positions = read.read_xyz(filepath, **dd)  # type: ignore[misc]
+        structure = read.read_xyz(filepath, **dd)
+        read_numbers, read_positions = structure.numbers, structure.positions
 
     # Check if the read data matches the written data
     assert (read_numbers == numbers_batch).all()
@@ -214,7 +206,8 @@ def test_write_batch_and_read_batch(
         write.write_xyz(filepath, numbers, positions, mode="w")
 
         # Read from XYZ file
-        read_numbers, read_positions = read.read_xyz(filepath, **dd)  # type: ignore[misc]
+        structure = read.read_xyz(filepath, **dd)
+        read_numbers, read_positions = structure.numbers, structure.positions
 
     # Check if the read data matches the written data
     assert read_numbers.dtype == numbers.dtype
@@ -266,7 +259,9 @@ def test_valid1_xyz() -> None:
         "H    -0.5400907   -0.8496512   -2.1052499 \n"
     )
 
-    numbers, positions = _read2(text)
+    structure = _read(text)
+
+    numbers, positions = structure.numbers, structure.positions
 
     ref_numbers = torch.tensor([8, 1, 1, 8, 1, 1, 8, 1, 1])
     ref_positions = (
@@ -324,7 +319,7 @@ def test_valid2_xyz_exotic_symbols() -> None:
         "H          4.40017       -5.16929       -0.94780\n"
     )
 
-    numbers = _read2(text)[0]
+    numbers = _read(text).numbers
 
     ref_numbers = torch.tensor(
         [
@@ -369,7 +364,7 @@ def test_valid3_xyz_lowercase_and_extra_column() -> None:
         "h  4.40017 -5.16929 -0.94780  0.06926350\n"
     )
 
-    numbers = _read2(text)[0]
+    numbers = _read(text).numbers
 
     ref_numbers = torch.tensor(
         [
@@ -404,7 +399,9 @@ def test_valid4_xyz_trajectory() -> None:
         "H    -0.5400907   -0.8496512   -2.1052499 \n"
     )
 
-    numbers, positions = _read2(text)
+    structure = _read(text)
+
+    numbers, positions = structure.numbers, structure.positions
 
     ref_numbers = torch.tensor([8, 1, 1])
     ref_positions = (
@@ -446,7 +443,7 @@ def test_valid5_xyz_numeric_symbol() -> None:
         "1     2.0242676    1.0811246    0.4301417 \n"
     )
 
-    numbers = _read2(text)[0]
+    numbers = _read(text).numbers
 
     ref_numbers = torch.tensor([8, 1, 1])
     assert numbers.shape == (3,)
@@ -588,7 +585,12 @@ def test_valid6_extxyz_forces_column_before_species() -> None:
         "0.4 0.5 0.6 O 4.0 5.0 6.0\n"
     )
 
-    numbers, positions, lattice, periodic = _read4(text)
+    structure = _read(text)
+
+    numbers, positions = structure.numbers, structure.positions
+
+    lattice, periodic = structure.lattice, structure.periodic
+    assert lattice is not None and periodic is not None
 
     ref_lattice = torch.diag(torch.tensor([5.0, 6.0, 7.0])) * length.AA2AU
     ref_positions = (
@@ -606,8 +608,8 @@ def test_valid6_extxyz_forces_column_before_species() -> None:
 def test_valid7_extxyz_z_column_bracket_pbc_all_false() -> None:
     """mctc-lib's ``valid7-extxyz``: no ``species`` column, atomic numbers
     given via a ``Z`` property instead; ``pbc=[F,F,F]`` (bracketed, no
-    quotes) means the file is not periodic, so the plain 2-tuple is
-    returned (mirrors mctc-lib's own ``count(struc%periodic) == 0``)."""
+    quotes) means the file is not periodic, so the structure has no
+    lattice (mirrors mctc-lib's own ``count(struc%periodic) == 0``)."""
     text = (
         "2\n"
         "Properties=pos:R:3:Z:I:1 pbc=[F,F,F]\n"
@@ -615,7 +617,9 @@ def test_valid7_extxyz_z_column_bracket_pbc_all_false() -> None:
         "4.0 5.0 6.0 8\n"
     )
 
-    numbers, positions = _read2(text)
+    structure = _read(text)
+
+    numbers, positions = structure.numbers, structure.positions
 
     ref_positions = (
         torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]) * length.AA2AU
@@ -635,6 +639,31 @@ def test_invalid1_extxyz_bad_lattice_value_count() -> None:
                 "H 0.0 0.0 0.0",
             )
         )
+
+
+def test_extxyz_periodic_pbc_without_lattice_raises() -> None:
+    """A periodic axis without its lattice vector cannot be evaluated, so
+    this is rejected (mctc-lib keeps a zero cell instead)."""
+    with pytest.raises(FormatErrorXYZ, match="no 'Lattice'"):
+        read.xyz.read_xyz_fileobj(
+            _extxyz_single(
+                'Properties=species:S:1:pos:R:3 pbc="T T F"',
+                "H 0.5 0.5 0.5",
+            )
+        )
+
+
+def test_extxyz_non_periodic_pbc_without_lattice_is_a_molecule() -> None:
+    """An all-false ``pbc`` without a ``Lattice``, as ASE writes for a
+    molecule, reads as a plain molecule."""
+    structure = read.xyz.read_xyz_fileobj(
+        _extxyz_single(
+            'Properties=species:S:1:pos:R:3 pbc="F F F"',
+            "H 0.5 0.5 0.5",
+        )
+    )
+
+    assert structure.lattice is None and structure.periodic is None
 
 
 def test_invalid2_extxyz_bad_pbc_value_count() -> None:
@@ -782,10 +811,13 @@ def test_invalid_extxyz_lattice_non_numeric_value() -> None:
 def test_extxyz_lattice_three_values_is_diagonal() -> None:
     """``Lattice`` with exactly 3 values fills only the diagonal of an
     otherwise-zero lattice matrix, mirroring mctc-lib's ``parse_lattice``."""
-    numbers, positions, lattice, periodic = _read4(
+    structure = _read(
         '1\nProperties=species:S:1:pos:R:3 Lattice="1.0 2.0 3.0"\n'
         "H 0.0 0.0 0.0\n"
     )
+    numbers, positions = structure.numbers, structure.positions
+    lattice, periodic = structure.lattice, structure.periodic
+    assert lattice is not None
 
     assert (numbers == torch.tensor([1])).all()
     assert positions.shape == (1, 3)
@@ -841,7 +873,8 @@ def test_extxyz_header_tolerates_extra_whitespace_and_escapes() -> None:
         'comment=  "a\\b" escaped=[a "b\\]c" d] nested=[[a] b]\n'
         "H 0.0 0.0 0.0\n"
     )
-    numbers, positions = _read2(text)
+    structure = _read(text)
+    numbers, positions = structure.numbers, structure.positions
 
     assert (numbers == torch.tensor([1])).all()
     assert positions.shape == (1, 3)
@@ -883,7 +916,9 @@ def test_extxyz_lattice_without_properties_is_ignored() -> None:
         "H 0.0 0.0 0.0\n"
     )
 
-    numbers, positions = _read2(text)
+    structure = _read(text)
+
+    numbers, positions = structure.numbers, structure.positions
 
     assert numbers.shape == (1,)
     assert (numbers == torch.tensor([1])).all()

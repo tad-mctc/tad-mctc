@@ -64,7 +64,8 @@ def test_read_valid() -> None:
 
     tmpdir, filepath = _write(_VALID1)
     with tmpdir:
-        numbers, positions = read.read_gaussian(filepath, **dd)
+        structure = read.read_gaussian(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
 
     ref_numbers = torch.tensor([7, 1, 1, 1])
     ref_positions = torch.tensor(

@@ -53,8 +53,8 @@ def write_turbomole_fileobj(
     fmt : str, optional
         Format string for the position coordinates.
     """
-    assert shape_checks(numbers, positions)
-    assert content_checks(numbers, positions)
+    shape_checks(numbers, positions)
+    content_checks(numbers, positions)
 
     fmt = kwargs.pop("fmt", "%20.14f")
 

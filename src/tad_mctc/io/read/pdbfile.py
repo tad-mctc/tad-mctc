@@ -49,9 +49,9 @@ import torch
 
 from ...convert import symbol_to_number
 from ...exceptions import FormatErrorPDB
-from ...typing import DD, Tensor, get_default_dtype
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
+from ..structure import Structure
+from ._finalize import finalize_geometry, resolve_dd
 from .frompath import create_path_reader
 
 __all__ = ["read_pdb"]
@@ -92,7 +92,7 @@ def read_pdb_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor]:
+) -> Structure:
     """
     Reads a PDB file and returns atomic numbers and positions as tensors.
 
@@ -109,20 +109,15 @@ def read_pdb_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor)
-        Tensors of atomic numbers and positions. Positions is a tensor of
-        shape (nat, 3) in atomic units.
+    Structure
+        Atomic numbers and positions (shape ``(nat, 3)``, bohr).
 
     Raises
     ------
     FormatErrorPDB
         The file does not conform with the expected fixed-column format.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     numbers_list: list[int] = []
     coords: list[list[float]] = []
@@ -168,17 +163,9 @@ def read_pdb_fileobj(
     numbers = torch.tensor(numbers_list, **ddi)
     positions = torch.tensor(coords, **dd) * length.AA2AU
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-    )
-    assert deflatable_check(positions, fileobj, **kwargs)
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
 
-    return numbers, positions
+    return Structure(numbers=numbers, positions=positions)
 
 
 read_pdb = create_path_reader(read_pdb_fileobj)

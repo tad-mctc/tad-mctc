@@ -2,6 +2,7 @@
 import torch
 
 import tad_mctc as mctc
+from tad_mctc.io.structure import Structure
 
 numbers = mctc.convert.symbol_to_number("C C C C N C S H H H H H".split())
 
@@ -23,7 +24,9 @@ positions = torch.tensor(
     ]
 )
 
+structure = Structure(numbers=numbers, positions=positions)
+
 # calculate EEQ coordination number
-cn = mctc.ncoord.cn_eeq(numbers, positions)
+cn = mctc.ncoord.cn_eeq(structure)
 torch.set_printoptions(precision=10)
 print(cn)

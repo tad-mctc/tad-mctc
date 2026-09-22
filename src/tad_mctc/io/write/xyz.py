@@ -73,8 +73,8 @@ def write_xyz_fileobj(
         raise ValueError("Comment line should not have line breaks.")
 
     def _write(num: Tensor, pos: Tensor) -> None:
-        assert shape_checks(num, pos, allow_batched=False)
-        assert content_checks(num, pos)
+        shape_checks(num, pos, allow_batched=False)
+        content_checks(num, pos)
 
         fileobj.write(f"{len(num)}\n{comment}\n")
         for n, p in zip(num, pos):

@@ -33,25 +33,41 @@
 !> library defaults -- ``cn_d3`` and ``cn_gfn2`` need no overrides, ``cn_d4``
 !> needs an explicit ``cutoff``, and ``cn_eeq``/``cn_eeq_en`` need an
 !> explicit ``kcn``. ``cn_eeq`` here matches
-!> ``test/test_ncoord/test_cn_eeq.py``'s own reference construction (which
-!> rebuilds ``coordination_number`` directly with no CN cap), not the public
-!> ``tad_mctc.ncoord.eeq.cn_eeq`` function (which additionally caps the CN
-!> via ``cut=8``).
+!> ``test/test_ncoord/test_molecular.py``'s own ``_cn_eeq_uncapped``
+!> (``replace(cn_eeq, cn_max=None)``, no CN cap), not the public
+!> ``tad_mctc.ncoord.eeq.cn_eeq`` model (which additionally caps the CN
+!> via ``cn_max=8``).
 !>
-!> This program is molecular only (no periodic boundary conditions):
-!> ``mctc_io``'s ``new(mol, num, xyz)`` constructor leaves ``mol%periodic``
-!> false, so ``ncoord_type%get_cn`` builds a single lattice point at the
-!> origin internally -- the correct (and only) input for a finite system.
+!> Molecular by default: with no lattice on stdin, ``mctc_io``'s
+!> ``new(mol, num, xyz)`` leaves ``mol%periodic`` false, so
+!> ``ncoord_type%get_cn`` builds a single lattice point at the origin
+!> internally -- the correct (and only) input for a finite system. A
+!> lattice on stdin is not a different code path: ``get_cn`` (via
+!> ``mctc_ncoord``'s ``type.f90``) always calls ``get_lattice_points(
+!> mol%periodic, mol%lattice, self%cutoff, lattr)``, and it is *that* call
+!> which turns non-periodic into "one lattice point at the origin".
 !>
 !> Input is read from standard input, as plain whitespace-separated text:
 !>
 !>     <number of atoms>
 !>     <atomic number> <x> <y> <z>   (repeated once per atom, x/y/z in Bohr)
+!>     <0 or 1>                      (1 if a lattice follows, 0 if not)
+!>
+!> and, only when that last flag is ``1``:
+!>
+!>     <a_x> <a_y> <a_z>             (first lattice vector, in Bohr)
+!>     <b_x> <b_y> <b_z>             (second lattice vector, in Bohr)
+!>     <c_x> <c_y> <c_z>             (third lattice vector, in Bohr)
+!>     <0 or 1> <0 or 1> <0 or 1>    (which of a/b/c is periodic)
+!>
+!> matching tad-mctc's own convention of lattice vectors as *rows* -- this
+!> program transposes them into mctc-lib's column convention
+!> (``mol%lattice(:, i)`` is the i-th vector) before calling ``new()``.
 !>
 !> Output is a single line of JSON on standard output, one ``cn_*``/
 !> ``dcn_*dr`` pair per counting function:
 !>
-!>     {"cn_d3": [...], "dcn3dr": [[[...]]], "cn_d4": [...], ...,
+!>     {"cn_d3": [...], "dcn_d3dr": [[[...]]], "cn_d4": [...], ...,
 !>      "cn_eeqbc": [...], "dcn_eeqbcdr": [[[...]]], "cn_eeqbc_en": [...],
 !>      "dcn_eeqbc_endr": [[[...]]]}
 !>
@@ -61,6 +77,7 @@
 !> the Python side.
 program gen_refs_fortran
    use, intrinsic :: iso_fortran_env, only : output_unit, error_unit, input_unit
+   use mctc_cutoff, only : wrap_to_central_cell
    use mctc_env, only : wp, error_type
    use mctc_io, only : structure_type, new
    use mctc_ncoord, only : new_ncoord, cn_count, ncoord_type
@@ -68,9 +85,13 @@ program gen_refs_fortran
 
    type(structure_type) :: mol
 
-   integer :: nat, iat
+   integer :: nat, iat, is_periodic, ivec
    integer, allocatable :: num(:)
    real(wp), allocatable :: xyz(:, :)
+
+   real(wp) :: lattice(3, 3)
+   logical :: periodic(3)
+   integer :: periodic_flag(3)
 
    real(wp), allocatable :: cn_d3(:), cn_d4(:), cn_eeq(:), cn_gfn2(:), cn_eeq_en(:)
    real(wp), allocatable :: dcn_d3dr(:, :, :), dcn_d4dr(:, :, :), dcn_eeqdr(:, :, :)
@@ -120,7 +141,35 @@ program gen_refs_fortran
       read(input_unit, *) num(iat), xyz(1, iat), xyz(2, iat), xyz(3, iat)
    end do
 
-   call new(mol, num, xyz)
+   read(input_unit, *) is_periodic
+   if (is_periodic == 1) then
+      ! mctc-lib stores lattice vectors as columns (lattice(:, i) is the
+      ! i-th vector, see mctc/cutoff.f90's own get_lattice_points), so
+      ! reading input row `ivec` (tad-mctc's row convention) straight into
+      ! column `ivec` here is the transpose, with no separate step.
+      do ivec = 1, 3
+         read(input_unit, *) lattice(1, ivec), lattice(2, ivec), lattice(3, ivec)
+      end do
+      read(input_unit, *) periodic_flag(1), periodic_flag(2), periodic_flag(3)
+      periodic = periodic_flag /= 0
+
+      ! `get_translations` (mctc/cutoff.f90), which `get_cn` uses to size
+      ! its periodic image search, sizes that search from the lattice
+      ! alone -- it has no way to see that an atom sits outside the
+      ! primary cell, and silently under-counts real neighbours for one
+      ! that does. mctc-lib's own `wrap_to_central_cell` establishes the
+      ! precondition that search assumes; a raw crystallographic geometry
+      ! (e.g. mstore's x23 cells, some of whose atoms sit more than one
+      ! full lattice vector outside `[0, 1)`) is not guaranteed to satisfy
+      ! it on its own, so this tool must apply it itself before `new()`,
+      ! same as tad-mctc's own periodic paths do (`wrap_to_central_cell`
+      ! in `tad_mctc.ncoord.common`/`tad_mctc.neighbor.list`).
+      call wrap_to_central_cell(xyz, lattice, periodic)
+
+      call new(mol, num, xyz, lattice=lattice, periodic=periodic)
+   else
+      call new(mol, num, xyz)
+   end if
 
    allocate(cn_d3(nat), cn_d4(nat), cn_eeq(nat), cn_gfn2(nat), cn_eeq_en(nat))
    allocate(dcn_d3dr(3, nat, nat), dcn_d4dr(3, nat, nat), dcn_eeqdr(3, nat, nat))
@@ -136,9 +185,9 @@ program gen_refs_fortran
    ! mctc-lib's default of 25); kcn/rcov/en/k4/k5/k6 match mctc-lib defaults
    call eval(mol, cn_count%dftd4, cn_d4, dcn_d4dr, cutoff=30.0_wp)
 
-   ! test_ncoord/test_cn_eeq.py's own reference rebuilds coordination_number
-   ! directly (not tad_mctc.ncoord.eeq.cn_eeq) with kcn=7.5, cutoff=25 and no
-   ! CN cap (cn_max=None by default) -- match that, not cn_eeq's cut=8 cap.
+   ! test_ncoord/test_molecular.py's own `_cn_eeq_uncapped` (not the public
+   ! tad_mctc.ncoord.eeq.cn_eeq) uses kcn=7.5, cutoff=25 and no CN cap
+   ! (cn_max=None) -- match that, not cn_eeq's cn_max=8 cap.
    call eval(mol, cn_count%erf, cn_eeq, dcn_eeqdr, kcn=7.5_wp)
 
    ! tad_mctc.ncoord.gfn2.cn_gfn2: dexp counting, ka=10/kb=20/r_shift=2/
@@ -212,7 +261,7 @@ contains
 
       write(unit, "(a)", advance="no") '{"cn_d3": '
       call write_vector(unit, cn_d3)
-      write(unit, "(a)", advance="no") ', "dcn3dr": '
+      write(unit, "(a)", advance="no") ', "dcn_d3dr": '
       call write_grad(unit, dcn_d3dr)
 
       write(unit, "(a)", advance="no") ', "cn_d4": '

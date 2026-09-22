@@ -15,8 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test derivative (w.r.t. positions) of the exponential and error counting
-functions used for the coordination number within the EEQ model and D4.
+Autograd `gradcheck`/`gradgradcheck` of every coordination-number variant
+w.r.t. positions, for molecules and periodic cells alike.
 """
 
 from __future__ import annotations
@@ -25,138 +25,68 @@ import pytest
 import torch
 
 from tad_mctc.autograd import dgradcheck, dgradgradcheck
-from tad_mctc.batch import pack
-from tad_mctc.ncoord import (
-    cn_d3,
-    cn_d4,
-    cn_eeq,
-    cn_eeqbc,
-)
-from tad_mctc.typing import DD, Callable, CNFunction, Tensor
+from tad_mctc.io.structure import Structure
+from tad_mctc.typing import DD, Callable, Tensor
 
+from .._variants import VARIANTS
 from ...conftest import DEVICE
-from ..samples import samples
+from ...utils import load_batch, load_structure
+from ..samples import BATCH_PAIRS, REPRESENTATIVES, pair_id
 
 tol = 1e-8
-sample_list = ["SiH4", "PbH4-BiH3", "MB16_43_01"]
+
+DD_DOUBLE: DD = {"device": DEVICE, "dtype": torch.double}
 
 
 def gradchecker(
-    dtype: torch.dtype,
-    name: str,
-    cnf: CNFunction,
-) -> tuple[
-    Callable[[Tensor], Tensor],  # autograd function
-    Tensor,  # differentiable variables
-]:
-    dd: DD = {"device": DEVICE, "dtype": dtype}
-
-    sample = samples[name]
-    numbers = sample["numbers"].to(DEVICE)
-    positions = sample["positions"].to(**dd)
-
-    # variables to be differentiated
-    positions.requires_grad_(True)
+    structure: Structure, variant_name: str
+) -> tuple[Callable[[Tensor], Tensor], Tensor]:
+    """The CN as a function of positions alone, and the positions to
+    differentiate it at."""
+    cn_function = VARIANTS[variant_name].call
 
     def func(pos: Tensor) -> Tensor:
-        return cnf(numbers, pos)
+        return cn_function(structure.replace(positions=pos))
 
+    positions = structure.positions.detach().clone().requires_grad_(True)
     return func, positions
 
 
 @pytest.mark.grad
-@pytest.mark.parametrize("dtype", [torch.double])
-@pytest.mark.parametrize("name", sample_list)
-@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
-def test_gradcheck(
-    dtype: torch.dtype,
-    name: str,
-    cn_function: CNFunction,
-) -> None:
-    """
-    Check a single analytical gradient of parameters against numerical
-    gradient from `torch.autograd.gradcheck`.
-    """
-    func, diffvars = gradchecker(dtype, name, cn_function)
+@pytest.mark.parametrize("source", REPRESENTATIVES, ids=lambda s: s[1])
+@pytest.mark.parametrize("variant_name", list(VARIANTS))
+def test_gradcheck(source: tuple[str, str], variant_name: str) -> None:
+    structure = load_structure(*source, DD_DOUBLE)
+    func, diffvars = gradchecker(structure, variant_name)
     assert dgradcheck(func, diffvars, atol=tol)
 
 
 @pytest.mark.grad
-@pytest.mark.parametrize("dtype", [torch.double])
-@pytest.mark.parametrize("name", sample_list)
-@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
-def test_gradgradcheck(
-    dtype: torch.dtype, name: str, cn_function: CNFunction
-) -> None:
-    """
-    Check a single analytical gradient of parameters against numerical
-    gradient from `torch.autograd.gradgradcheck`.
-    """
-    func, diffvars = gradchecker(dtype, name, cn_function)
+@pytest.mark.parametrize("source", REPRESENTATIVES, ids=lambda s: s[1])
+@pytest.mark.parametrize("variant_name", list(VARIANTS))
+def test_gradgradcheck(source: tuple[str, str], variant_name: str) -> None:
+    structure = load_structure(*source, DD_DOUBLE)
+    func, diffvars = gradchecker(structure, variant_name)
     assert dgradgradcheck(func, diffvars, atol=tol)
 
 
-def gradchecker_batch(
-    dtype: torch.dtype,
-    name1: str,
-    name2: str,
-    cnf: CNFunction,
-) -> tuple[
-    Callable[[Tensor], Tensor],  # autograd function
-    Tensor,  # differentiable variables
-]:
-    dd: DD = {"device": DEVICE, "dtype": dtype}
-
-    sample1, sample2 = samples[name1], samples[name2]
-    numbers = pack(
-        [
-            sample1["numbers"].to(DEVICE),
-            sample2["numbers"].to(DEVICE),
-        ]
-    )
-    positions = pack(
-        [
-            sample1["positions"].to(**dd),
-            sample2["positions"].to(**dd),
-        ]
-    )
-
-    # variable to be differentiated
-    positions = positions.requires_grad_(True)
-
-    def func(pos: Tensor) -> Tensor:
-        return cnf(numbers, pos)
-
-    return func, positions
-
-
 @pytest.mark.grad
-@pytest.mark.parametrize("dtype", [torch.double])
-@pytest.mark.parametrize("name1", ["SiH4"])
-@pytest.mark.parametrize("name2", sample_list)
-@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
+@pytest.mark.parametrize("pair", BATCH_PAIRS, ids=pair_id)
+@pytest.mark.parametrize("variant_name", list(VARIANTS))
 def test_gradcheck_batch(
-    dtype: torch.dtype, name1: str, name2: str, cn_function: CNFunction
+    pair: tuple[tuple[str, str], tuple[str, str]], variant_name: str
 ) -> None:
-    """
-    Check a single analytical gradient of parameters against numerical
-    gradient from `torch.autograd.gradcheck`.
-    """
-    func, diffvars = gradchecker_batch(dtype, name1, name2, cn_function)
+    structure = load_batch(pair, DD_DOUBLE)
+    func, diffvars = gradchecker(structure, variant_name)
     assert dgradcheck(func, diffvars, atol=tol)
 
 
 @pytest.mark.grad
-@pytest.mark.parametrize("dtype", [torch.double])
-@pytest.mark.parametrize("name1", ["SiH4"])
-@pytest.mark.parametrize("name2", sample_list)
-@pytest.mark.parametrize("cn_function", [cn_d3, cn_d4, cn_eeq, cn_eeqbc])
+@pytest.mark.parametrize("pair", BATCH_PAIRS, ids=pair_id)
+@pytest.mark.parametrize("variant_name", list(VARIANTS))
 def test_gradgradcheck_batch(
-    dtype: torch.dtype, name1: str, name2: str, cn_function: CNFunction
+    pair: tuple[tuple[str, str], tuple[str, str]], variant_name: str
 ) -> None:
-    """
-    Check a single analytical gradient of parameters against numerical
-    gradient from `torch.autograd.gradgradcheck`.
-    """
-    func, diffvars = gradchecker_batch(dtype, name1, name2, cn_function)
+    structure = load_batch(pair, DD_DOUBLE)
+    func, diffvars = gradchecker(structure, variant_name)
     assert dgradgradcheck(func, diffvars, atol=tol)

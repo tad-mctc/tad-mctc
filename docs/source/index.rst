@@ -108,7 +108,8 @@ The following example shows how to calculate the coordination number used in the
     )
 
     # calculate EEQ coordination number
-    cn = mctc.ncoord.cn_eeq(numbers, positions)
+    structure = mctc.io.structure.Structure(numbers=numbers, positions=positions)
+    cn = mctc.ncoord.cn_eeq(structure)
     torch.set_printoptions(precision=10)
     print(cn)
     # tensor([3.0519218445, 3.0177774429, 3.0132560730, 3.0197706223,
@@ -155,7 +156,8 @@ The next example shows the calculation of the coordination number used in DFT-D4
     ))
 
     # calculate coordination number
-    cn = mctc.ncoord.cn_d4(numbers, positions)
+    structure = mctc.io.structure.Structure(numbers=numbers, positions=positions)
+    cn = mctc.ncoord.cn_d4(structure)
     torch.set_printoptions(precision=10)
     print(cn)
     # tensor([[2.6886456013, 2.6886456013, 2.6314170361, 2.6314167976,

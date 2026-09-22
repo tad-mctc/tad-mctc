@@ -24,7 +24,7 @@ import pytest
 import torch
 
 from tad_mctc.data.getters import get_atomic_masses
-from tad_mctc.data.structures.mstore import get_structure
+from tad_mctc.data.structures import get_structure
 from tad_mctc.io.structure import Structure
 from tad_mctc.properties.general import center_of_mass, enn
 from tad_mctc.typing import DD

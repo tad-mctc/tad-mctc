@@ -29,12 +29,13 @@ a comment line is only treated as an Extended XYZ header if it contains a
 (a 9- or 3-value list, bohr after conversion) and ``pbc`` (3 booleans,
 ``pbc`` overriding the all-``True`` default that ``Lattice`` alone
 implies) are both optional and, together, are how periodicity is
-declared. Unlike every other case in this reader, mctc-lib's own
+declared. A ``pbc`` marking a periodic axis needs a ``Lattice``, whereas
+mctc-lib accepts it and keeps a zero cell. Unlike every other case in this reader, mctc-lib's own
 ``read_xyz`` handles exactly one frame -- multi-frame batching is this
 package's own pre-existing extension, so a periodic frame is only
 supported when the whole file is a single frame; a multi-frame file with
 periodicity in any frame raises :class:`FormatErrorXYZ` rather than
-inventing a per-frame-batched lattice/periodic shape.
+inventing a per-frame-batched lattice/periodic convention.
 """
 
 from __future__ import annotations
@@ -50,10 +51,11 @@ import torch
 from ...batch import pack
 from ...convert import symbol_to_number
 from ...exceptions import EmptyFileError, FormatErrorXYZ
-from ...typing import DD, Tensor, get_default_dtype
+from ...typing import DD, Tensor
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
-from .frompath import create_path_reader, create_path_reader_periodic
+from ..structure import Structure
+from ._finalize import finalize_geometry, resolve_dd
+from .frompath import create_path_reader
 
 
 def _resolve_xyz_symbol(symbol: str) -> int:
@@ -358,6 +360,15 @@ def _parse_extxyz_header(
     if "pbc" in pairs:
         periodic = _parse_pbc_value(pairs["pbc"], fileobj)
 
+    # mctc-lib keeps such a mask with a zero cell, but a periodic axis
+    # without its lattice vector cannot be evaluated. An all-false `pbc`
+    # (as ASE writes for a molecule) needs no lattice.
+    if lattice is None and periodic is not None and any(periodic):
+        raise FormatErrorXYZ(
+            f"'{fileobj}' marks periodic axes with 'pbc' but gives no "
+            "'Lattice' for them."
+        )
+
     return _ExtxyzHeader(
         species_col=species_col,
         z_col=z_col,
@@ -486,14 +497,13 @@ def read_xyz_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> Structure:
     """
-    Reads an XYZ file and returns atomic numbers and positions as tensors.
-    Handles multiple structures by batching them together. If the file has
-    exactly one frame and its comment line is an Extended XYZ header
-    declaring periodicity (a ``Lattice`` and/or ``pbc`` key), a lattice
-    tensor and periodicity mask are appended (see the module docstring).
-    Positions are converted to atomic units (bohrs).
+    Reads an XYZ file into a structure. Multiple frames are batched
+    together. If the file has exactly one frame and its comment line is an
+    Extended XYZ header declaring periodicity (a ``Lattice`` and/or ``pbc``
+    key), the structure also carries a lattice and periodicity mask (see
+    the module docstring). Positions are converted to atomic units (bohrs).
 
     Parameters
     ----------
@@ -508,28 +518,24 @@ def read_xyz_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
-        (Possibly batched) tensors of atomic numbers and positions. Positions
-        is a tensor of shape (batch_size, nat, 3) in atomic units. A
-        single-frame Extended XYZ file declaring periodicity additionally
-        carries a lattice tensor (shape (3, 3), bohr) and a periodicity
-        mask (shape (3,)).
+    Structure
+        (Possibly batched) atomic numbers and positions (shape
+        ``(batch_size, nat, 3)`` for several frames, bohr). A single-frame
+        Extended XYZ file declaring periodicity also carries the lattice
+        (bohr) and the periodicity mask.
 
     Raises
     ------
     FormatErrorXYZ
-        The file does not conform with the expected format, or more than
-        one frame declares periodicity (unsupported: mctc-lib itself only
+        The file does not conform with the expected format, a ``pbc``
+        marks a periodic axis without a ``Lattice``, or more than one
+        frame declares periodicity (unsupported: mctc-lib itself only
         ever handles a single frame, so there is no established
         multi-frame lattice/periodic convention to follow here).
     """
     natoms_line: str
 
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     numbers_images: list[Tensor] = []
     positions_images: list[Tensor] = []
@@ -580,11 +586,8 @@ def read_xyz_fileobj(
 
             if header.periodic is not None and any(header.periodic):
                 n_periodic_frames += 1
-                frame_lattice = (
-                    header.lattice
-                    if header.lattice is not None
-                    else torch.zeros((3, 3), **dd)
-                )
+                # the header parser only allows a periodic axis with a lattice
+                frame_lattice = header.lattice
                 frame_periodic = torch.tensor(
                     header.periodic, dtype=torch.bool, device=device
                 )
@@ -598,15 +601,7 @@ def read_xyz_fileobj(
         numbers = torch.tensor(numbers_np, **ddi)
         positions = torch.tensor(coords, **dd) * length.AA2AU
 
-        assert shape_checks(numbers, positions, allow_batched=False)
-        assert content_checks(
-            numbers,
-            positions,
-            allow_batched=False,
-            check_coldfusion=kwargs.get("check_coldfusion", False),
-            coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-        )
-        assert deflatable_check(positions, fileobj, **kwargs)
+        positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
 
         numbers_images.append(numbers)
         positions_images.append(positions)
@@ -624,18 +619,24 @@ def read_xyz_fileobj(
         p = positions_images[0]
 
         if n_periodic_frames == 1:
-            assert frame_lattice is not None and frame_periodic is not None
-            return n, p, frame_lattice, frame_periodic
+            return Structure(
+                numbers=n,
+                positions=p,
+                lattice=frame_lattice,
+                periodic=frame_periodic,
+            )
 
         if kwargs.get("batch_agnostic", False):
-            return n.unsqueeze(0), p.unsqueeze(0)
+            return Structure(numbers=n.unsqueeze(0), positions=p.unsqueeze(0))
 
-        return n, p
+        return Structure(numbers=n, positions=p)
 
-    return pack(numbers_images), pack(positions_images)
+    return Structure(
+        numbers=pack(numbers_images), positions=pack(positions_images)
+    )
 
 
-read_xyz = create_path_reader_periodic(read_xyz_fileobj)
+read_xyz = create_path_reader(read_xyz_fileobj)
 
 
 def read_xyz_qm9_fileobj(
@@ -643,7 +644,8 @@ def read_xyz_qm9_fileobj(
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
-) -> tuple[Tensor, Tensor]:
+    **kwargs: Any,
+) -> Structure:
     """
     Reads the XYZ file of the QM9 dataset, which does not conform with the
     standard format, and returns atomic numbers and positions as tensors.
@@ -663,18 +665,13 @@ def read_xyz_qm9_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor)
-        Tensors of atomic numbers and positions. Positions is a tensor of shape
-        (nat, 3) in atomic units.
+    Structure
+        Atomic numbers and positions (shape ``(nat, 3)``, bohr).
     """
     line: list[str]
     natoms_line: str
 
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     natoms_line = fileobj.readline()
     natoms = int(natoms_line.strip())
@@ -694,11 +691,9 @@ def read_xyz_qm9_fileobj(
     )
     positions = torch.tensor(coords, **dd) * length.AA2AU
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(numbers, positions, allow_batched=False)
-    assert deflatable_check(positions, fileobj)
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
 
-    return numbers, positions
+    return Structure(numbers=numbers, positions=positions)
 
 
 read_xyz_qm9 = create_path_reader(read_xyz_qm9_fileobj)

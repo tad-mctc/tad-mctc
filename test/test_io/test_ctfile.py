@@ -161,7 +161,9 @@ def test_read_v2000_molfile() -> None:
     with tmpdir:
         result = read.read_molfile(filepath, **dd)
 
-    numbers, positions, lattice, periodic, bonds, bond_orders = result
+    numbers, positions = result.numbers, result.positions
+    lattice, periodic = result.lattice, result.periodic
+    bonds, bond_orders = result.bonds, result.bond_orders
     assert lattice is None
     assert periodic is None
     assert bonds is not None
@@ -172,7 +174,7 @@ def test_read_v2000_molfile() -> None:
     assert bonds.shape == (12, 2)
     # first bond record "2 1 4" -> 0-indexed (1, 0), aromatic (order 4)
     assert (bonds[0] == torch.tensor([1, 0])).all()
-    assert bond_orders[0] == pytest.approx(4.0)
+    assert bond_orders[0].item() == pytest.approx(4.0)
 
     ref_first = torch.tensor([-0.0090, -0.0157, -0.0000], **dd) * length.AA2AU
     assert pytest.approx(ref_first.cpu()) == positions[0].cpu()
@@ -195,7 +197,8 @@ def test_read_v2000_symbol_quirks() -> None:
     )
     tmpdir, filepath = _write(content, "mol")
     with tmpdir:
-        numbers, _, _, _, _, _ = read.read_molfile(filepath)
+        structure = read.read_molfile(filepath)
+        numbers = structure.numbers
 
     assert (numbers == torch.tensor([6, 8, 1])).all()
 
@@ -217,9 +220,9 @@ def test_read_v2000_with_charge_property_ignored() -> None:
     )
     tmpdir, filepath = _write(content, "mol")
     with tmpdir:
-        numbers, positions, _, _, bonds, bond_orders = read.read_molfile(
-            filepath
-        )
+        structure = read.read_molfile(filepath)
+        numbers, positions = structure.numbers, structure.positions
+        bonds, bond_orders = structure.bonds, structure.bond_orders
 
     assert (numbers == torch.tensor([7, 1])).all()
     assert bonds is not None and bond_orders is not None
@@ -267,9 +270,9 @@ def test_read_v2000_short_property_columns() -> None:
     )
     tmpdir, filepath = _write(content, "mol")
     with tmpdir:
-        numbers, positions, _, _, bonds, bond_orders = read.read_molfile(
-            filepath
-        )
+        structure = read.read_molfile(filepath)
+        numbers, positions = structure.numbers, structure.positions
+        bonds, bond_orders = structure.bonds, structure.bond_orders
 
     assert bonds is not None and bond_orders is not None
     assert numbers.shape == (12,)
@@ -277,7 +280,7 @@ def test_read_v2000_short_property_columns() -> None:
     assert bonds.shape == (12, 2)
     assert positions.shape == (12, 3)
     assert (bonds[0] == torch.tensor([1, 0])).all()
-    assert bond_orders[0] == pytest.approx(4.0)
+    assert bond_orders[0].item() == pytest.approx(4.0)
 
 
 def test_read_v2000_fail_missing_header_line() -> None:
@@ -330,9 +333,10 @@ def test_read_v3000_molfile() -> None:
     properties and a ``COLLECTION`` block, both ignored."""
     tmpdir, filepath = _write(_V3000_COMPOUND, "mol")
     with tmpdir:
-        numbers, positions, lattice, periodic, bonds, bond_orders = (
-            read.read_molfile(filepath)
-        )
+        structure = read.read_molfile(filepath)
+    numbers, positions = structure.numbers, structure.positions
+    lattice, periodic = structure.lattice, structure.periodic
+    bonds, bond_orders = structure.bonds, structure.bond_orders
 
     assert lattice is None
     assert periodic is None
@@ -345,7 +349,7 @@ def test_read_v3000_molfile() -> None:
     # (mctc-lib's own field order is index/type/atom1/atom2) -> 0-indexed
     # (1, 0)
     assert (bonds[0] == torch.tensor([1, 0])).all()
-    assert bond_orders[0] == pytest.approx(1.0)
+    assert bond_orders[0].item() == pytest.approx(1.0)
 
 
 # Shared atom/bond blocks for mctc-lib's "Compound 11" V3000 fixture family
@@ -517,7 +521,7 @@ def test_read_v3000_skips_unrecognized_ctab_entry() -> None:
     )
     tmpdir, filepath = _write(content, "mol")
     with tmpdir:
-        numbers, *_ = read.read_molfile(filepath)
+        numbers = read.read_molfile(filepath).numbers
 
     assert numbers.shape == (17,)
 
@@ -582,7 +586,9 @@ def test_read_sdf_wrapper() -> None:
     )
     tmpdir, filepath = _write(content, "sdf")
     with tmpdir:
-        numbers, positions, _, _, bonds, _ = read.read_sdf(filepath)
+        structure = read.read_sdf(filepath)
+        numbers, positions = structure.numbers, structure.positions
+        bonds = structure.bonds
 
     assert numbers.shape == (12,)
     assert bonds is not None
@@ -658,11 +664,11 @@ def test_read_sdf_v3000() -> None:
     with tmpdir2:
         result_mol = read.read_molfile(filepath2)
 
-    for got, expected in zip(result_sdf, result_mol):
-        if got is None or expected is None:
-            assert got is expected
-        else:
-            assert torch.equal(got, expected)
+    for field in ("numbers", "positions", "bonds", "bond_orders"):
+        assert torch.equal(
+            getattr(result_sdf, field), getattr(result_mol, field)
+        )
+    assert result_sdf.lattice is None and result_mol.lattice is None
 
 
 def test_read_fail_notfound() -> None:

@@ -56,8 +56,8 @@ def test_sniff_qcschema_by_schema_name() -> None:
     with tmpdir:
         result = read.read_json(filepath)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
     assert (numbers == torch.tensor([8, 1, 1])).all()
     assert positions.shape == (3, 3)
 
@@ -76,7 +76,7 @@ def test_sniff_qcschema_default_fallback() -> None:
     with tmpdir:
         result = read.read_json(filepath)
 
-    assert len(result) == 2
+    assert result.lattice is None
 
 
 def test_sniff_pymatgen_by_module_and_class() -> None:
@@ -92,8 +92,8 @@ def test_sniff_pymatgen_by_module_and_class() -> None:
     with tmpdir:
         result = read.read_json(filepath)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
     assert (numbers == torch.tensor([8, 1])).all()
     assert positions.shape == (2, 3)
 
@@ -110,8 +110,9 @@ def test_sniff_cjson_by_chemical_json_key() -> None:
     with tmpdir:
         result = read.read_json(filepath)
 
-    assert len(result) == 6
-    numbers, positions, lattice, periodic, bonds, bond_orders = result
+    numbers, positions = result.numbers, result.positions
+    lattice, periodic = result.lattice, result.periodic
+    bonds, bond_orders = result.bonds, result.bond_orders
     assert (numbers == torch.tensor([8, 1])).all()
     assert lattice is None
     assert periodic is None
@@ -137,8 +138,8 @@ def test_sniff_qcschema_precedence_over_pymatgen() -> None:
     with tmpdir:
         result = read.read_json(filepath)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
     assert (numbers == torch.tensor([8, 1, 1])).all()
     assert positions.shape == (3, 3)
 
@@ -168,8 +169,8 @@ def test_sniff_qcschema_by_schema_version_only() -> None:
     with tmpdir:
         result = read.read_json(filepath)
 
-    assert len(result) == 2
-    numbers, _ = result
+    assert result.lattice is None
+    numbers = result.numbers
     assert (numbers == torch.tensor([8, 1, 1])).all()
 
 
@@ -184,8 +185,6 @@ def test_sniff_cjson_by_spaced_key_alias() -> None:
     tmpdir, filepath = _write(data)
     with tmpdir:
         result = read.read_json(filepath)
-
-    assert len(result) == 6
 
 
 def test_read_fail_notfound() -> None:

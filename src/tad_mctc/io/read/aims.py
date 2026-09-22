@@ -22,11 +22,9 @@ Reader for FHI-aims ``geometry.in`` files. Mirrors mctc-lib's
 ``mctc_io_read_aims`` (``src/mctc/io/read/aims.f90``).
 
 Periodicity is implicit in the number of ``lattice_vector`` lines (0 to 3)
-rather than an explicit declaration like Turbomole's ``$periodic`` -- so,
-as with Turbomole, ``read_aims_fileobj`` returns the plain (numbers,
-positions) pair for a non-periodic file and only reaches for the richer
-(numbers, positions, lattice, periodic) 4-tuple once at least one
-``lattice_vector`` line is present.
+rather than an explicit declaration like Turbomole's ``$periodic``; the
+returned structure carries a lattice and periodicity mask only once at
+least one ``lattice_vector`` line is present.
 
 Element symbols follow mctc-lib's own quirky ``to_number``: only the first
 two alphabetic characters are kept (so ``18O`` -> ``O``, ``C*`` -> ``C``),
@@ -41,10 +39,10 @@ import torch
 
 from ...convert import symbol_to_number
 from ...exceptions import FormatErrorAIMS
-from ...typing import DD, Tensor, get_default_dtype
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
-from .frompath import create_path_reader_periodic
+from ..structure import Structure
+from ._finalize import finalize_geometry, resolve_dd
+from .frompath import create_path_reader
 
 __all__ = ["read_aims"]
 
@@ -64,11 +62,11 @@ def read_aims_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> Structure:
     """
-    Reads an FHI-aims ``geometry.in`` file and returns atomic numbers and
-    positions as tensors, plus lattice vectors and a periodicity mask if
-    the file declares one or more ``lattice_vector`` lines.
+    Reads an FHI-aims ``geometry.in`` file into a structure, with lattice
+    vectors and a periodicity mask if the file declares one or more
+    ``lattice_vector`` lines.
 
     Parameters
     ----------
@@ -83,22 +81,17 @@ def read_aims_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
-        Tensors of atomic numbers and positions (shape ``(nat, 3)``, atomic
-        units). If the file declares a ``lattice_vector``, a lattice tensor
-        (shape ``(3, 3)``, rows are lattice vectors in bohr) and a boolean
-        periodicity mask (shape ``(3,)``) are appended.
+    Structure
+        Atomic numbers and positions (shape ``(nat, 3)``, bohr). If the
+        file declares a ``lattice_vector``, also the lattice (rows are
+        lattice vectors, bohr) and the periodicity mask.
 
     Raises
     ------
     FormatErrorAIMS
         The file does not conform with the expected ``geometry.in`` format.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     numbers_list: list[int] = []
     cart_rows: list[list[float]] = []
@@ -157,21 +150,13 @@ def read_aims_fileobj(
 
     periodic_dims = len(lattice_rows)
     if periodic_dims == 0:
-        positions = cart
+        positions = finalize_geometry(numbers, cart, fileobj, **kwargs)
+        return Structure(numbers=numbers, positions=positions)
 
-        assert shape_checks(numbers, positions, allow_batched=False)
-        assert content_checks(
-            numbers,
-            positions,
-            allow_batched=False,
-            check_coldfusion=kwargs.get("check_coldfusion", False),
-            coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-        )
-        assert deflatable_check(positions, fileobj, **kwargs)
-
-        return numbers, positions
-
-    lattice = torch.zeros((3, 3), **dd)
+    # A non-periodic axis keeps a 1 bohr unit vector as a placeholder, as in
+    # the Turbomole reader: mctc-lib leaves it zero, but that singular cell
+    # cannot be inverted to fold atoms into the central cell.
+    lattice = torch.eye(3, **dd)
     lattice[:periodic_dims] = torch.tensor(lattice_rows, **dd) * length.AA2AU
 
     # mctc-lib's own simplification: the fractional -> cartesian transform
@@ -189,17 +174,11 @@ def read_aims_fileobj(
     periodic = torch.zeros(3, dtype=torch.bool, device=device)
     periodic[:periodic_dims] = True
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
+
+    return Structure(
+        numbers=numbers, positions=positions, lattice=lattice, periodic=periodic
     )
-    assert deflatable_check(positions, fileobj, **kwargs)
-
-    return numbers, positions, lattice, periodic
 
 
-read_aims = create_path_reader_periodic(read_aims_fileobj)
+read_aims = create_path_reader(read_aims_fileobj)

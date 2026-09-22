@@ -61,8 +61,8 @@ def test_read_gaussian_dispatch() -> None:
     p = Path(__file__).parent.resolve() / "files" / "mol.ein"
 
     result = read.read(p)
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     assert (numbers == torch.tensor([7, 1, 1, 1], device=DEVICE)).all()
     assert positions.shape == (4, 3)
@@ -83,8 +83,8 @@ def test_read_qcjson_dispatch() -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
     assert (numbers == torch.tensor([8, 1], device=DEVICE)).all()
     assert positions.shape == (2, 3)
 
@@ -99,8 +99,8 @@ def test_read_qchem_dispatch() -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     assert (numbers == torch.tensor([8, 1], device=DEVICE)).all()
     assert positions.shape == (2, 3)
@@ -120,8 +120,8 @@ def test_read_pdb_dispatch() -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     assert (numbers == torch.tensor([7, 6], device=DEVICE)).all()
     assert positions.shape == (2, 3)
@@ -137,8 +137,8 @@ def test_read_genformat_dispatch() -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     assert (numbers == torch.tensor([8, 1], device=DEVICE)).all()
     assert positions.shape == (2, 3)
@@ -158,8 +158,8 @@ def test_read_pymatgen_dispatch() -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     assert (numbers == torch.tensor([8, 1], device=DEVICE)).all()
     assert positions.shape == (2, 3)
@@ -167,8 +167,8 @@ def test_read_pymatgen_dispatch() -> None:
 
 def test_read_cjson_dispatch() -> None:
     """The general dispatcher recognizes the ``.cjson`` extension and
-    returns the 6-tuple carrying lattice/periodic and bonds/bond_orders
-    (all ``None`` here, since this fixture has neither)."""
+    returns a structure without lattice/periodic and bonds/bond_orders,
+    since this fixture has neither."""
     content = (
         '{"chemicalJson": 1, "atoms": {"elements": {"number": [8, 1]}, '
         '"coords": {"3d": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0]}}}'
@@ -180,8 +180,9 @@ def test_read_cjson_dispatch() -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 6
-    numbers, positions, lattice, periodic, bonds, bond_orders = result
+    numbers, positions = result.numbers, result.positions
+    lattice, periodic = result.lattice, result.periodic
+    bonds, bond_orders = result.bonds, result.bond_orders
 
     assert (numbers == torch.tensor([8, 1], device=DEVICE)).all()
     assert positions.shape == (2, 3)
@@ -194,8 +195,8 @@ def test_read_cjson_dispatch() -> None:
 def test_read_json_dispatch_sniffs_cjson() -> None:
     """A bare ``.json`` extension goes through the sniff-and-dispatch
     reader, not straight to qcschema -- a ``chemicalJson`` key routes it
-    to cjson and its 6-tuple return shape, distinct from ``.cjson``
-    itself only in how the format was inferred."""
+    to cjson, distinct from ``.cjson`` itself only in how the format was
+    inferred."""
     content = (
         '{"chemicalJson": 1, "atoms": {"elements": {"number": [8, 1]}, '
         '"coords": {"3d": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0]}}}'
@@ -207,8 +208,7 @@ def test_read_json_dispatch_sniffs_cjson() -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 6
-    numbers, positions, *_ = result
+    numbers, positions = result.numbers, result.positions
     assert (numbers == torch.tensor([8, 1], device=DEVICE)).all()
     assert positions.shape == (2, 3)
 
@@ -252,16 +252,17 @@ _V2000_ETHANE_FRAGMENT = (
 
 def test_read_molfile_dispatch() -> None:
     """The general dispatcher recognizes the ``.mol`` extension and
-    returns the 6-tuple, with bonds/bond_orders set and lattice/periodic
-    ``None`` (molfiles are never periodic)."""
+    returns a structure with bonds/bond_orders set and no lattice/periodic
+    (molfiles are never periodic)."""
     with tempfile.TemporaryDirectory() as tmpdirname:
         filepath = Path(tmpdirname) / "mol.mol"
         filepath.write_text(_V2000_ETHANE_FRAGMENT, encoding="utf-8")
 
         result = read.read(filepath)
 
-    assert len(result) == 6
-    numbers, positions, lattice, periodic, bonds, bond_orders = result
+    numbers, positions = result.numbers, result.positions
+    lattice, periodic = result.lattice, result.periodic
+    bonds, bond_orders = result.bonds, result.bond_orders
 
     assert (numbers == torch.tensor([7, 1], device=DEVICE)).all()
     assert positions.shape == (2, 3)
@@ -281,8 +282,7 @@ def test_read_sdf_dispatch() -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 6
-    numbers, positions, _, _, bonds, _ = result
+    numbers, positions, bonds = result.numbers, result.positions, result.bonds
 
     assert (numbers == torch.tensor([7, 1], device=DEVICE)).all()
     assert positions.shape == (2, 3)
@@ -326,7 +326,8 @@ def test_types(dtype: torch.dtype, file: str) -> None:
     )
 
     ftype = None if "qm9" not in file else "qm9"
-    numbers, positions = read.read(p, ftype=ftype, **dd)  # type: ignore[misc]
+    structure = read.read(p, ftype=ftype, **dd)
+    numbers, positions = structure.numbers, structure.positions
 
     assert (ref_numbers == numbers).all()
     assert pytest.approx(ref_positions.cpu()) == positions.cpu()
@@ -356,12 +357,13 @@ def _poscar_reference() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 @pytest.mark.parametrize("ftype", [None, "poscar", "vasp"])
 def test_read_poscar_dispatch_by_filename(ftype: str | None) -> None:
     """The general dispatcher recognizes a bare ``POSCAR`` filename (no
-    extension to infer from) and returns a 3-tuple including the lattice."""
+    extension to infer from) and returns a structure with a lattice."""
     p = Path(__file__).parent.resolve() / "files" / "POSCAR"
 
     result = read.read(p, ftype=ftype)
-    assert len(result) == 3
-    numbers, positions, lattice = result
+    assert result.lattice is not None
+    numbers, positions = result.numbers, result.positions
+    lattice = result.lattice
 
     ref_numbers, ref_positions, ref_lattice = _poscar_reference()
     assert (ref_numbers == numbers).all()
@@ -383,8 +385,9 @@ def test_read_poscar_dispatch_by_extension(suffix: str) -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 3
-    numbers, positions, lattice = result
+    assert result.lattice is not None
+    numbers, positions = result.numbers, result.positions
+    lattice = result.lattice
 
     ref_numbers, ref_positions, ref_lattice = _poscar_reference()
     assert (ref_numbers == numbers).all()
@@ -406,7 +409,7 @@ def test_read_structure_poscar_lattice() -> None:
 
 def test_read_structure_non_periodic_lattice_is_none() -> None:
     """``read_structure`` leaves ``lattice`` unset for a non-periodic file,
-    i.e., the POSCAR-only 3-tuple return does not leak into other formats."""
+    i.e., a lattice appears only for periodic formats."""
     p = Path(__file__).parent.resolve() / "files" / "mol.xyz"
 
     structure = read.read_structure(p)
@@ -431,8 +434,8 @@ def test_read_aims_dispatch_by_filename(ftype: str | None) -> None:
 
         result = read.read(filepath, ftype=ftype)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     assert (numbers == torch.tensor([6, 1])).all()
     ref_positions = torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]) * (
@@ -481,8 +484,8 @@ def test_read_coord_dispatch_by_extension() -> None:
 
         result = read.read(filepath)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     assert (numbers == torch.tensor([8, 1, 1], device=DEVICE)).all()
     assert positions.shape == (3, 3)

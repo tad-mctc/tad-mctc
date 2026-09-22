@@ -15,24 +15,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test `get_structure`, `list_collections` and `list_records` as the one way
-to reach an mstore record.
+Test that every mstore dataset is reachable through `get_structure`.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from tad_mctc.data.structures.mstore import (
-    datasets,
-    get_structure,
-    list_collections,
-    list_records,
-)
-
-
-def test_list_collections_matches_datasets() -> None:
-    assert sorted(list_collections()) == sorted(datasets)
+from tad_mctc.data.structures import get_structure, list_records
+from tad_mctc.data.structures.mstore import datasets
 
 
 @pytest.mark.parametrize(
@@ -57,18 +48,3 @@ def test_get_structure_looks_up_real_records(
 def test_list_records_matches_dataset_keys() -> None:
     for collection in datasets:
         assert sorted(list_records(collection)) == sorted(datasets[collection])
-
-
-def test_list_records_raises_on_unknown_collection() -> None:
-    with pytest.raises(KeyError, match="Unknown mstore collection"):
-        list_records("not-a-real-collection")
-
-
-def test_get_structure_error_lists_valid_collections() -> None:
-    with pytest.raises(KeyError, match="x23"):
-        get_structure("not-a-real-collection", "acetic")
-
-
-def test_get_structure_error_lists_valid_records() -> None:
-    with pytest.raises(KeyError, match="acetic"):
-        get_structure("x23", "not-a-real-record")

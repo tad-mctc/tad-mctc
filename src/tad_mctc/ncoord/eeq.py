@@ -23,99 +23,57 @@ Calculation of coordination number for the EEQ model.
 
 from __future__ import annotations
 
-import torch
+from functools import partial
 
-from ..data import en as eneg
-from ..data import radii
-from ..typing import DD, CountingFunction, Tensor
+from ..typing import Tensor
 from . import defaults
-from .common import coordination_number, cut_coordination_number
+from .common import CNModel, cut_coordination_number
 from .count import erf_count
 
-__all__ = ["cn_eeq", "cn_eeq_en", "cut_coordination_number"]
+__all__ = ["cn_eeq", "cn_eeq_en", "cut_coordination_number", "en_difference"]
 
 
-def cn_eeq(
-    numbers: Tensor,
-    positions: Tensor,
-    counting_function: CountingFunction = erf_count,
-) -> Tensor:
+def en_difference(en_i: Tensor, en_j: Tensor) -> Tensor:
     """
-    Compute fractional coordination number using an exponential counting
-    function.
+    Antisymmetric electronegativity pair weight used by the EN-weighted EEQ
+    and EEQBC coordination numbers.
 
     Parameters
     ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
-    positions : Tensor
-        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
-    counting_function : CountingFunction, optional
-        Counting function used for the EEQ coordination number.
-        Defaults to the error function counting function
-        :func:`tad_mctc.ncoord.count.erf_count`.
+    en_i, en_j : Tensor
+        Pauling electronegativities of the two atoms in a pair.
 
     Returns
     -------
     Tensor
-        Coordination numbers for all atoms (shape: ``(..., nat)``).
+        ``en_j - en_i``: the weight on atom ``j``'s count as it is added to
+        ``cn[i]``.
     """
-    dd: DD = {"device": positions.device, "dtype": positions.dtype}
-    cutoff = torch.tensor(defaults.CUTOFF_EEQ, **dd)
-    rcov = radii.COV_D3(**dd)[numbers]
-
-    return coordination_number(
-        numbers,
-        positions,
-        counting_function=counting_function,
-        rcov=rcov,
-        cutoff=cutoff,
-        cn_max=defaults.CUTOFF_EEQ_MAX,
-    )
+    return en_j - en_i
 
 
-def cn_eeq_en(
-    numbers: Tensor,
-    positions: Tensor,
-    counting_function: CountingFunction = erf_count,
-) -> Tensor:
-    """
-    Compute the electronegativity-weighted coordination number using the
-    Pauling scale stored in :mod:`tad_mctc.data.en`.
+cn_eeq = CNModel(
+    count=partial(erf_count, kcn=defaults.KCN_EEQ),
+    cutoff=defaults.CUTOFF_EEQ,
+    cn_max=defaults.CUTOFF_EEQ_MAX,
+)
+"""
+The EEQ coordination number: the error-function counting function with
+EEQ's steepness, cutoff and CN cap (:mod:`tad_mctc.ncoord.defaults`).
+Callable as ``cn_eeq(structure)``: the molecular, all-pairs path when
+``structure.lattice is None``, the periodic path (auto-building a shift
+table every call) otherwise. ``cn_eeq.with_precomputed_shifts(structure,
+shifts=...)`` is the ``vmap``/``jacrev``-over-``lattice``-safe periodic
+alternative, reusing a precomputed shift table instead of rebuilding one.
+"""
 
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
-    positions : Tensor
-        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
-    counting_function : CountingFunction, optional
-        Counting function used for the EEQ coordination number.
-        Defaults to the error function counting function
-        :func:`tad_mctc.ncoord.count.erf_count`.
-
-    Returns
-    -------
-    Tensor
-        Electronegativity-weighted coordination numbers for all atoms
-        (shape: ``(..., nat)``).
-    """
-    dd: DD = {"device": positions.device, "dtype": positions.dtype}
-
-    cutoff = torch.tensor(defaults.CUTOFF_EEQ, **dd)
-    rcov = radii.COV_D3(**dd)[numbers]
-    en = eneg.PAULING(**dd)[numbers]
-    kcn = torch.tensor(defaults.KCN_EEQ_EN, **dd)
-
-    weight = en.unsqueeze(-2) - en.unsqueeze(-1)
-
-    return coordination_number(
-        numbers,
-        positions,
-        counting_function=counting_function,
-        rcov=rcov,
-        cutoff=cutoff,
-        cn_max=None,
-        pair_weight=weight,
-        kcn=kcn,
-    )
+cn_eeq_en = CNModel(
+    count=partial(erf_count, kcn=defaults.KCN_EEQ_EN),
+    cutoff=defaults.CUTOFF_EEQ,
+    pair_weight=en_difference,
+)
+"""
+The electronegativity-weighted EEQ coordination number: same steepness
+family as :data:`cn_eeq` but with :data:`defaults.KCN_EEQ_EN`, no CN cap,
+and the antisymmetric electronegativity pair weight :func:`en_difference`.
+"""

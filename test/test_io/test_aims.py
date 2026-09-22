@@ -29,6 +29,7 @@ import torch
 
 from tad_mctc.exceptions import FormatErrorAIMS
 from tad_mctc.io import read
+from tad_mctc.ncoord import cn_d3
 from tad_mctc.typing import DD
 from tad_mctc.units import length
 
@@ -59,8 +60,8 @@ def test_read_cartesian_no_lattice() -> None:
     with tmpdir:
         result = read.read_aims(filepath, **dd)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     ref_numbers = torch.tensor([6, 6, 1])
     ref_positions = (
@@ -89,7 +90,8 @@ def test_read_comments_and_blank_lines_ignored() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, _ = read.read_aims(filepath)  # type: ignore[misc]
+        structure = read.read_aims(filepath)
+        numbers = structure.numbers
 
     assert (numbers == torch.tensor([6, 7])).all()
 
@@ -112,9 +114,10 @@ def test_read_full_3d_lattice_cartesian() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_aims(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_aims(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_numbers = torch.tensor([22, 8])
     ref_lattice = (
@@ -153,9 +156,9 @@ def test_read_mixed_cartesian_and_fractional() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_aims(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_aims(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
 
     # Hand-computed (not via the lattice-multiplication the implementation
     # itself performs): for cubic diamond, the second atom sits at
@@ -210,8 +213,10 @@ def test_read_fractional_equals_cartesian() -> None:
     tmpdir1, filepath1 = _write(cartesian_content)
     tmpdir2, filepath2 = _write(fractional_content)
     with tmpdir1, tmpdir2:
-        _, positions1, _, _ = read.read_aims(filepath1, **dd)  # type: ignore[misc]
-        _, positions2, _, _ = read.read_aims(filepath2, **dd)  # type: ignore[misc]
+        structure = read.read_aims(filepath1, **dd)
+        positions1 = structure.positions
+        structure = read.read_aims(filepath2, **dd)
+        positions2 = structure.positions
 
     assert pytest.approx(positions1.cpu()) == positions2.cpu()
 
@@ -226,13 +231,35 @@ def test_read_partial_periodicity() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_aims(  # type: ignore[misc]
-            filepath
-        )
+        structure = read.read_aims(filepath)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     assert (numbers == torch.tensor([5, 7])).all()
     assert (periodic == torch.tensor([True, False, False])).all()
     assert lattice.shape == (3, 3)
+
+
+def test_read_partial_periodicity_placeholder_axes() -> None:
+    """The non-periodic axes of a wire get 1 bohr unit vectors instead of
+    mctc-lib's zero rows, so the cell stays invertible and the periodic CN
+    can be evaluated."""
+    content = (
+        "atom             -1.05835465887935   1.85522662363901   0.00000000000000 B\n"
+        "atom             -1.05835465887935   1.57910813351869   1.38575958673374 N\n"
+        "lattice_vector    4.23341864610095   0.00000000000000   0.00000000000000\n"
+    )
+    tmpdir, filepath = _write(content)
+    with tmpdir:
+        structure = read.read_aims(filepath, dtype=torch.double)
+        lattice = structure.lattice
+        assert lattice is not None
+
+    assert (lattice[1:] == torch.eye(3, dtype=torch.double)[1:]).all()
+
+    cn = cn_d3(structure)
+    assert torch.isfinite(cn).all()
 
 
 ################################################################################
@@ -252,7 +279,8 @@ def test_read_symbol_quirks() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, _ = read.read_aims(filepath)  # type: ignore[misc]
+        structure = read.read_aims(filepath)
+        numbers = structure.numbers
 
     assert (numbers == torch.tensor([6, 6, 8, 1])).all()
 

@@ -21,85 +21,71 @@ Data: Structures - glu_ala
 The `glu_ala_a_0001_to_2048` size ladder from
 https://www.ergoscf.org/xyz/gluala.php -- 26 extended glutamine-alanine
 peptide conformers, 28 to 53,250 atoms -- packed into `data.npz` by
-`tools/glu_ala/convert.py`. The much larger `glu_ala_b_512_to_65536`
-ladder (up to 1.7 million atoms) is never packaged; see
-`examples/scaling/glu_ala.py`, which downloads and reads both ladders
-directly instead.
+`tools/glu_ala/convert.py`.
 
-`data.npz` is read lazily and cached at module scope: only the arrays a
-given :func:`get_structure` call actually names are ever decompressed.
 Record ids are the ladder's own zero-padded filenames (``"0001"`` ..
-``"2048"``), not atom counts.
+``"2048"``), not atom counts. `data.npz` is opened on first access and
+only the arrays of the requested record are decompressed, so importing
+this module stays cheap. Look records up through
+:func:`tad_mctc.data.structures.get_structure` with collection
+``"glu_ala"``.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterator, Mapping
 
 import numpy as np
 import torch
+from torch import Tensor
 
-from ....io.structure import Structure
 from ....typing import get_default_dtype
 
-__all__ = ["get_structure", "list_records"]
+__all__ = ["glu_ala"]
 
 _DATA_PATH = Path(__file__).parent / "data.npz"
-_data: np.lib.npyio.NpzFile | None = None
 
 
-def _load() -> np.lib.npyio.NpzFile:
-    global _data
-    data = _data
-    if data is None:
-        data = np.load(_DATA_PATH)
-        _data = data
-    return data
-
-
-def list_records() -> list[str]:
+class _GluAlaRecords(Mapping[str, dict[str, Tensor]]):
     """
-    List every record id in the packaged glu_ala ladder, the source
-    ladder's own zero-padded filenames.
-
-    Returns
-    -------
-    list[str]
-        The record ids, in the source ladder's own (ascending) order.
+    Read-only mapping from record id to that record's `numbers` and
+    `positions` (bohr), backed by `data.npz`.
     """
-    labels = {name.rsplit("_", 1)[0] for name in _load().files}
-    return sorted(labels, key=int)
+
+    def __init__(self) -> None:
+        self._data: np.lib.npyio.NpzFile | None = None
+
+    def _load(self) -> np.lib.npyio.NpzFile:
+        if self._data is None:
+            self._data = np.load(_DATA_PATH)
+
+        assert self._data is not None
+        return self._data
+
+    def __getitem__(self, record: str) -> dict[str, Tensor]:
+        data = self._load()
+        try:
+            numbers = data[f"{record}_numbers"]
+            positions = data[f"{record}_positions"]
+        except KeyError:
+            raise KeyError(record) from None
+
+        # `data.npz` stores compact dtypes (uint8, float32) to keep the
+        # package small; convert to the library's usual types.
+        return {
+            "numbers": torch.from_numpy(numbers.astype(np.int64)),
+            "positions": torch.from_numpy(positions).to(get_default_dtype()),
+        }
+
+    def __iter__(self) -> Iterator[str]:
+        # npz keys are "<record>_numbers" and "<record>_positions"
+        records = {name.rsplit("_", 1)[0] for name in self._load().files}
+        return iter(sorted(records, key=int))
+
+    def __len__(self) -> int:
+        return len(self._load().files) // 2
 
 
-def get_structure(record: str) -> Structure:
-    """
-    Look up one glu_ala structure by record id.
-
-    Parameters
-    ----------
-    record : str
-        Record id, one of :func:`list_records`'s entries (e.g. ``"0064"``).
-
-    Returns
-    -------
-    Structure
-        The requested structure, positions in bohr.
-
-    Raises
-    ------
-    KeyError
-        If ``record`` is not found, listing the valid options.
-    """
-    data = _load()
-    try:
-        numbers = data[f"{record}_numbers"]
-        positions = data[f"{record}_positions"]
-    except KeyError:
-        raise KeyError(
-            f"Unknown glu_ala record '{record}'. Available: {list_records()}"
-        ) from None
-
-    return Structure(
-        numbers=torch.from_numpy(numbers.astype(np.int64)),
-        positions=torch.from_numpy(positions).to(get_default_dtype()),
-    )
+glu_ala: Mapping[str, dict[str, Tensor]] = _GluAlaRecords()
+"""The glu_ala ladder, keyed by record id in ascending size."""

@@ -15,15 +15,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test the optional `charge`/`uhf` fields on `Structure` and the mstore
-records that carry them.
+Test the `get_structure` resolver, the optional `charge`/`uhf` fields on
+`Structure` and the mstore records that carry them.
 """
 
 from __future__ import annotations
 
+import pytest
 import torch
 
-from tad_mctc.data.structures import merge_nested_dicts
+from tad_mctc.data.structures import (
+    collections,
+    get_structure,
+    list_collections,
+    list_records,
+)
 from tad_mctc.data.structures.mstore import mb16_43
 from tad_mctc.io.structure import Structure
 
@@ -66,17 +72,53 @@ def test_mb16_43_closed_shell_records_have_no_uhf_key() -> None:
         assert "uhf" not in mb16_43[record]
 
 
-def test_merge_nested_dicts_carries_optional_keys() -> None:
-    source: dict[str, dict[str, torch.Tensor]] = {
-        "mol": {
-            "numbers": torch.tensor([3, 1]),
-            "positions": torch.zeros((2, 3)),
-            "uhf": torch.tensor(1),
-        },
-    }
-    target: dict[str, dict[str, int]] = {"mol": {"cn": 4}}
+def test_list_collections_covers_every_source() -> None:
+    names = list_collections()
 
-    merged = merge_nested_dicts(source, target)
+    assert "other" in names
+    assert "glu_ala" in names
+    assert "x23" in names
+    assert len(names) == len(set(names))
 
-    assert merged["mol"]["cn"] == 4
-    assert merged["mol"]["uhf"] == torch.tensor(1)
+
+def test_get_structure_other_looks_up_real_record() -> None:
+    structure = get_structure("other", "diamond")
+    assert structure.lattice is not None
+    assert structure.numbers.shape[-1] == 8
+
+
+def test_get_structure_record_is_scoped_to_its_collection() -> None:
+    # "diamond" exists only in "other"; another collection must not find it
+    assert "diamond" not in collections["x23"]
+    with pytest.raises(KeyError, match="in collection 'x23'"):
+        get_structure("x23", "diamond")
+
+
+def test_get_structure_moves_to_device_and_dtype() -> None:
+    structure = get_structure("other", "diamond", dtype=torch.float32)
+
+    assert structure.positions.dtype == torch.float32
+    assert structure.lattice is not None
+    assert structure.lattice.dtype == torch.float32
+    assert structure.numbers.dtype == torch.long
+
+
+def test_get_structure_error_lists_valid_collections() -> None:
+    with pytest.raises(KeyError, match="Unknown collection 'nope'"):
+        get_structure("nope", "acetic")
+
+    with pytest.raises(KeyError, match="x23"):
+        get_structure("nope", "acetic")
+
+
+def test_get_structure_error_lists_valid_records() -> None:
+    with pytest.raises(KeyError, match="Unknown record 'nope'"):
+        get_structure("other", "nope")
+
+    with pytest.raises(KeyError, match="diamond"):
+        get_structure("other", "nope")
+
+
+def test_list_records_raises_on_unknown_collection() -> None:
+    with pytest.raises(KeyError, match="Unknown collection 'nope'"):
+        list_records("nope")

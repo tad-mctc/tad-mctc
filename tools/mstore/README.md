@@ -23,9 +23,8 @@ no other source of nondeterminism.
 
 Each generated module's docstring names its source file and the exact
 mstore commit passed on the command line. `datasets` in
-`src/tad_mctc/data/structures/mstore/__init__.py` is hand-maintained (it
-also carries `get_structure`'s docstring and error handling), so after
-adding or removing a whole dataset, update its imports and dict by hand;
+`src/tad_mctc/data/structures/mstore/__init__.py` is hand-maintained, so
+after adding or removing a whole dataset, update its imports and dict by hand;
 the converter only regenerates the per-dataset data files.
 
 The parser fails loudly -- raises, never skips -- on any record it cannot

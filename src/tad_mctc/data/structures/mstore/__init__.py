@@ -27,16 +27,14 @@ than any locally-invented naming. Records mirror geometry and, where
 mstore's source subroutine sets them, lattice, charge and uhf; see each
 generated module's docstring for its exact source file and commit.
 
-:func:`get_structure` is the Pythonic analogue of mstore's own
-``get_structure(mol, collection, record)``.
+This package only supplies data; look records up through
+:func:`tad_mctc.data.structures.get_structure`.
 """
 
 from __future__ import annotations
 
-import torch
 from torch import Tensor
 
-from ....io.structure import Structure
 from .amino20x4 import amino20x4
 from .amylose import amylose
 from .but14diol import but14diol
@@ -64,9 +62,6 @@ __all__ = [
     "upu23",
     "x23",
     "datasets",
-    "get_structure",
-    "list_collections",
-    "list_records",
 ]
 
 
@@ -84,107 +79,3 @@ datasets: dict[str, dict[str, dict[str, Tensor]]] = {
     "upu23": upu23,
     "x23": x23,
 }
-
-
-def get_structure(
-    collection: str,
-    record: str,
-    device: torch.device | None = None,
-    dtype: torch.dtype | None = None,
-) -> Structure:
-    """
-    Look up one structure by dataset and record id, mirroring mstore's own
-    ``get_structure(mol, collection, record)``.
-
-    Unrelated to :func:`tad_mctc.data.structures.glu_ala.get_structure`,
-    which shares this name but not its shape (one positional argument,
-    not two) or its data source -- the two are never meant to be
-    interchangeable; only the module path tells them apart.
-
-    Parameters
-    ----------
-    collection : str
-        Dataset name, one of :data:`datasets`' keys (e.g. ``"x23"``).
-    record : str
-        Record id within that dataset, mstore's own bare spelling (e.g.
-        ``"acetic"``, not any locally-invented alias).
-    device : torch.device | None, optional
-        Device to move the structure to. ``None`` keeps the cached
-        dataset's device. Passing a ``DD`` via ``**dd`` works, since its
-        keys match these parameter names.
-    dtype : torch.dtype | None, optional
-        Floating dtype for the structure's floating-point fields. ``None``
-        keeps the cached dataset's dtype.
-
-    Returns
-    -------
-    Structure
-        The requested structure.
-
-    Raises
-    ------
-    KeyError
-        If ``collection`` or ``record`` is not found, listing the valid
-        options for whichever lookup failed.
-    """
-    try:
-        collection_dict = datasets[collection]
-    except KeyError:
-        raise KeyError(
-            f"Unknown mstore collection '{collection}'. Available: "
-            f"{sorted(datasets)}"
-        ) from None
-
-    try:
-        record_dict = collection_dict[record]
-    except KeyError:
-        raise KeyError(
-            f"Unknown record '{record}' in mstore collection "
-            f"'{collection}'. Available: {sorted(collection_dict)}"
-        ) from None
-
-    return Structure(**record_dict).to(device=device, dtype=dtype)
-
-
-def list_collections() -> list[str]:
-    """
-    List every mirrored dataset name, mirroring mstore's own
-    ``list_collections``.
-
-    Returns
-    -------
-    list[str]
-        The keys of :data:`datasets`.
-    """
-    return list(datasets)
-
-
-def list_records(collection: str) -> list[str]:
-    """
-    List every record id in one dataset, mirroring mstore's own
-    ``list_records``.
-
-    Parameters
-    ----------
-    collection : str
-        Dataset name, one of :data:`datasets`' keys (e.g. ``"x23"``).
-
-    Returns
-    -------
-    list[str]
-        The record ids in that dataset.
-
-    Raises
-    ------
-    KeyError
-        If ``collection`` is not found, listing the valid collections.
-    """
-    try:
-        collection_dict = datasets[collection]
-    except KeyError:
-        raise KeyError(
-            f"Unknown mstore collection '{collection}'. Available: "
-            f"{sorted(datasets)}"
-        ) from None
-
-    return list(collection_dict)

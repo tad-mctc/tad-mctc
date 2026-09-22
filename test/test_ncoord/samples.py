@@ -15,97 +15,94 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Coordination number reference values, computed by the mctc-lib Fortran
-library itself (see ``tools/refs`` for how and why) rather than hand-copied
-from another testsuite. One JSON file per molecule lives in
-``test/references/`` and is loaded here, merged with the molecular
-geometries from :mod:`tad_mctc.data.molecules`.
+Coordination number references computed by mctc-lib itself (see
+``tools/refs``), one JSON file per structure under
+``test/references/<collection>/<record>.json``. `refs` holds every file
+found there, molecules and periodic cells alike, keyed by its
+``(collection, record)`` pair -- the same pair `test/utils.py`'s loaders
+take.
 """
 
 from __future__ import annotations
 
 import json
-from functools import lru_cache
 from pathlib import Path
 from typing import TypedDict
 
 import torch
 
-from tad_mctc.data.molecules import merge_nested_dicts, mols
-from tad_mctc.typing import Molecule, Tensor
+from tad_mctc.data.structures import get_structure
+from tad_mctc.typing import Tensor
 
 _REFERENCES_DIR = Path(__file__).resolve().parents[1] / "references"
 
 
 class Refs(TypedDict):
-    """Format of reference values."""
+    """One CN/dCN-dr pair per counting-function variant: `cn_<variant>` is
+    the coordination number, `dcn_<variant>dr` its derivative w.r.t.
+    positions."""
 
     cn_d3: Tensor
-    """DFT-D3 coordination number."""
-
-    dcn3dr: Tensor
-    """Derivative of DFT-D3 coordination number w.r.t. positions."""
-
+    dcn_d3dr: Tensor
     cn_d4: Tensor
-    """DFT-D4 coordination number"""
-
     dcn_d4dr: Tensor
-    """Derivative of DFT-D4 coordination number w.r.t. positions."""
-
     cn_eeq: Tensor
-    """EEQ coordination number."""
-
     dcn_eeqdr: Tensor
-    """Derivative of EEQ coordination number w.r.t. positions."""
-
     cn_gfn2: Tensor
-    """GFN2-xTB coordination number."""
-
     dcn_gfn2dr: Tensor
-    """Derivative of GFN2-xTB coordination number w.r.t. positions."""
-
     cn_eeq_en: Tensor
-    """Electronegativity-weighted EEQ coordination number."""
-
     dcn_eeq_endr: Tensor
-    """Derivative of electronegativity-weighted EEQ coordination number
-    w.r.t. positions."""
-
     cn_eeqbc: Tensor
-    """EEQBC coordination number."""
-
     dcn_eeqbcdr: Tensor
-    """Derivative of EEQBC coordination number w.r.t. positions."""
-
     cn_eeqbc_en: Tensor
-    """Electronegativity-weighted EEQBC coordination number."""
-
     dcn_eeqbc_endr: Tensor
-    """Derivative of electronegativity-weighted EEQBC coordination number
-    w.r.t. positions."""
 
 
-class Record(Molecule, Refs):
-    """Store for molecular information and reference values."""
-
-
-@lru_cache
-def _load(name: str) -> dict:
-    return json.loads((_REFERENCES_DIR / f"{name}.json").read_text())
-
-
-def _refs(name: str) -> Refs:
-    data = _load(name)
+def _refs(path: Path) -> Refs:
+    data = json.loads(path.read_text())
     return {
         key: torch.tensor(data[key], dtype=torch.double)
         for key in Refs.__annotations__
     }  # type: ignore[return-value]
 
 
-refs: dict[str, Refs] = {
-    path.stem: _refs(path.stem)
-    for path in sorted(_REFERENCES_DIR.glob("*.json"))
+def _source(path: Path) -> tuple[str, str]:
+    """The ``(collection, record)`` pair a reference file belongs to."""
+    return path.parent.name, path.stem
+
+
+refs: dict[tuple[str, str], Refs] = {
+    _source(path): _refs(path)
+    for path in sorted(_REFERENCES_DIR.glob("*/*.json"))
 }
 
 
-samples: dict[str, Record] = merge_nested_dicts(mols, refs)
+def is_periodic(source: tuple[str, str]) -> bool:
+    """Whether `source` resolves to a `Structure` with a lattice."""
+    return get_structure(*source).lattice is not None
+
+
+REPRESENTATIVES: list[tuple[str, str]] = [
+    ("mb16_43", "SiH4"),  # small molecule
+    ("mb16_43", "01"),  # mid-size molecule, many elements
+    ("other", "periodic_one_atom"),  # interacts only with its own images
+    ("other", "periodic_triclinic"),  # non-orthogonal cell
+]
+"""Samples for the tests that do not need every `refs` entry
+(gradients, autograd checks)."""
+
+BATCH_PAIRS: list[tuple[tuple[str, str], tuple[str, str]]] = [
+    # different sizes, the smaller one padded
+    (("mb16_43", "01"), ("mb16_43", "SiH4")),
+    # different cells: the one-atom cell needs far more images, so the
+    # shared shift table must cover the more demanding lattice
+    (("other", "periodic_triclinic"), ("other", "periodic_one_atom")),
+]
+"""One molecular and one periodic pair to batch. Molecules and periodic
+cells are never mixed, as `pack_structures` rejects that."""
+
+
+def pair_id(pair: tuple[tuple[str, str], tuple[str, str]]) -> str:
+    """Readable pytest id for one `BATCH_PAIRS` entry, e.g. ``01+SiH4``."""
+    (_, record1), (_, record2) = pair
+    return f"{record1}+{record2}"

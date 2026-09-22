@@ -32,11 +32,8 @@ Reader for JSON/QCSchema files. Mirrors mctc-lib's ``mctc_io_read_qcschema``
   everything else) under a ``"molecule"`` key; version 2 places them
   directly at that level (the flat layout e.g. QCElemental emits).
 - ``extras.periodic.lattice`` (a flat 9-element array), if present, makes
-  the structure periodic in all 3 dimensions -- unlike every other tensor
-  this reader returns, QCSchema has no partial-periodicity concept, so
-  ``read_qcschema_fileobj`` returns the usual (numbers, positions) pair for
-  a non-periodic file and only reaches for the richer (numbers, positions,
-  lattice, periodic) 4-tuple when a lattice is actually present.
+  the structure periodic in all 3 dimensions, since QCSchema has no
+  partial-periodicity concept. Without it, the structure has no lattice.
 """
 
 from __future__ import annotations
@@ -46,9 +43,10 @@ from typing import IO, Any
 import torch
 
 from ...convert import symbol_to_number
-from ...typing import DD, Tensor, get_default_dtype
-from ..checks import content_checks, deflatable_check, shape_checks
-from .frompath import create_path_reader_periodic
+from ...typing import DD
+from ..structure import Structure
+from ._finalize import finalize_geometry, resolve_dd
+from .frompath import create_path_reader
 
 __all__ = ["read_qcschema"]
 
@@ -122,9 +120,9 @@ def read_qcschema_from_dict(
     dd: DD,
     ddi: DD,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> Structure:
     """
-    Builds atomic numbers and positions from an already-parsed QCSchema
+    Builds a structure from an already-parsed QCSchema
     JSON object, factored out of :func:`read_qcschema_fileobj` so a
     sniff-and-dispatch caller (:func:`tad_mctc.io.read.json.read_json_fileobj`)
     can reuse it without re-parsing the same JSON text a second time.
@@ -155,9 +153,7 @@ def read_qcschema_from_dict(
     numbers = torch.tensor(numbers_list, **ddi)
     positions = torch.tensor(coords, **dd)
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(numbers, positions, allow_batched=False)
-    assert deflatable_check(positions, fileobj, **kwargs)
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
 
     lattice = None
     extras = mol.get("extras")
@@ -173,10 +169,12 @@ def read_qcschema_from_dict(
             lattice = torch.tensor([float(v) for v in lat], **dd).reshape(3, 3)
 
     if lattice is None:
-        return numbers, positions
+        return Structure(numbers=numbers, positions=positions)
 
     periodic = torch.ones(3, dtype=torch.bool, device=dd["device"])
-    return numbers, positions, lattice, periodic
+    return Structure(
+        numbers=numbers, positions=positions, lattice=lattice, periodic=periodic
+    )
 
 
 def read_qcschema_fileobj(
@@ -185,13 +183,11 @@ def read_qcschema_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> Structure:
     """
-    Reads a JSON/QCSchema file with a single structure and returns atomic
-    numbers and positions as tensors, plus a lattice and an all-True
-    periodicity mask if the file declares one via
+    Reads a JSON/QCSchema file with a single structure, with a lattice and
+    an all-True periodicity mask if the file declares one via
     ``extras.periodic.lattice``.
-    Positions are converted to atomic units (bohrs).
 
     Parameters
     ----------
@@ -206,17 +202,12 @@ def read_qcschema_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
-        Tensors of atomic numbers and positions. Positions is a tensor of
-        shape (nat, 3) in atomic units. If the file declares a lattice via
-        ``extras.periodic.lattice``, it is appended (shape (3, 3), bohr)
-        along with an all-True periodicity mask (shape (3,)).
+    Structure
+        Atomic numbers and positions (shape ``(nat, 3)``, bohr). If the
+        file declares ``extras.periodic.lattice``, also the lattice (bohr)
+        and an all-True periodicity mask.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     # pylint: disable=import-outside-toplevel
     from json import loads as json_load
@@ -226,4 +217,4 @@ def read_qcschema_fileobj(
     return read_qcschema_from_dict(data, fileobj, dd, ddi, **kwargs)
 
 
-read_qcschema = create_path_reader_periodic(read_qcschema_fileobj)
+read_qcschema = create_path_reader(read_qcschema_fileobj)

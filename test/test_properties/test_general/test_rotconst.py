@@ -24,7 +24,7 @@ Test the calculation of the rotational constants.
 # import torch
 
 # from tad_mctc.data.mass import ATOMIC_MASS
-# from tad_mctc.data.structures import structures as samples
+# from tad_mctc.data.structures import get_structure
 # from tad_mctc.properties import general
 # from tad_mctc.typing import DD
 # from tad_mctc.units import AU2RCM

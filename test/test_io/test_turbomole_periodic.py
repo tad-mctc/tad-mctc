@@ -72,26 +72,26 @@ def _cell_to_lattice(
 
 
 ################################################################################
-# non-periodic regression: unchanged 2-tuple return
+# non-periodic input: no lattice
 ################################################################################
 
 
-def test_read_non_periodic_still_2_tuple() -> None:
+def test_read_non_periodic_has_no_lattice() -> None:
     content = "$coord\n0.0 0.0 0.0 h\n$end\n"
     tmpdir, filepath = _write(content)
     with tmpdir:
         result = read.read_turbomole(filepath)
 
-    assert len(result) == 2
+    assert result.lattice is None
 
 
-def test_read_explicit_periodic_zero_still_2_tuple() -> None:
+def test_read_explicit_periodic_zero_has_no_lattice() -> None:
     content = "$coord\n0.0 0.0 0.0 h\n$periodic 0\n$end\n"
     tmpdir, filepath = _write(content)
     with tmpdir:
         result = read.read_turbomole(filepath)
 
-    assert len(result) == 2
+    assert result.lattice is None
 
 
 ################################################################################
@@ -116,9 +116,10 @@ def test_read_periodic_cell_triclinic_frac() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_numbers = torch.tensor([12, 8])
     ref_lattice = _cell_to_lattice(
@@ -146,9 +147,10 @@ def test_read_periodic_cell_angs() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_lattice = (
         _cell_to_lattice(5.43, 5.43, 5.43, 90.0, 90.0, 90.0).to(**dd)
@@ -177,9 +179,10 @@ def test_read_periodic_cell_2d_slab() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_lattice = _cell_to_lattice(4.0, 4.0, 1.0, 90.0, 90.0, 90.0).to(**dd)
 
@@ -202,9 +205,10 @@ def test_read_periodic_cell_1d_wire() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_lattice = _cell_to_lattice(3.0, 1.0, 1.0, 90.0, 90.0, 90.0).to(**dd)
 
@@ -260,9 +264,9 @@ def test_read_valid2_cell_1d_bohr_real() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, _, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath
-        )
+        structure = read.read_turbomole(filepath)
+        numbers, positions = structure.numbers, structure.positions
+        periodic = structure.periodic
 
     assert positions.shape[0] == 32
     assert len(torch.unique(numbers)) == 1
@@ -289,9 +293,10 @@ def test_read_valid3_cell_2d_angs() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, _, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, lattice = structure.numbers, structure.lattice
+        assert lattice is not None
+        periodic = structure.periodic
 
     # mctc-lib's turbomole.f90 (periodic == 2 branch) only multiplies the
     # two *read* lengths (latvec(1)*conv, latvec(2)*conv) by the angstrom
@@ -329,9 +334,10 @@ def test_read_valid4_cell_before_coord() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, _, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, lattice = structure.numbers, structure.lattice
+        assert lattice is not None
+        periodic = structure.periodic
 
     ref_lattice = _cell_to_lattice(
         4.766080896955, 4.766080896955, 4.766080896955, 60.0, 60.0, 60.0
@@ -361,9 +367,10 @@ def test_read_valid6_cell_hexagonal() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, _, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, lattice = structure.numbers, structure.lattice
+        assert lattice is not None
+        periodic = structure.periodic
 
     ref_lattice = _cell_to_lattice(
         9.09903133, 9.09903130512, 30.4604956, 90.0, 90.0, 120.000000127
@@ -413,7 +420,9 @@ def test_read_valid10_cell_before_periodic_before_coord() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, _, _, periodic = read.read_turbomole(filepath)  # type: ignore[misc]
+        structure = read.read_turbomole(filepath)
+        numbers, periodic = structure.numbers, structure.periodic
+        assert periodic is not None
 
     assert numbers.shape[0] == 24
     assert len(torch.unique(numbers)) == 3
@@ -440,9 +449,10 @@ def test_read_periodic_lattice_cartesian() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_lattice = torch.eye(3, **dd) * 3.57 * length.AA2AU
 
@@ -467,9 +477,10 @@ def test_read_periodic_lattice_frac() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_lattice = torch.eye(3, **dd) * 4.0
     ref_positions = torch.tensor([[1.0, 1.0, 1.0]], **dd)
@@ -499,9 +510,10 @@ def test_read_valid5_lattice_triangular_angs() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     ref_lattice = (
         torch.tensor(
@@ -549,11 +561,13 @@ def test_read_valid11_lattice_2d_two_vectors() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, _, lattice, periodic = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        numbers, lattice = structure.numbers, structure.lattice
+        assert lattice is not None
+        periodic = structure.periodic
 
-    ref_lattice = torch.zeros(3, 3, **dd)
+    # the non-periodic z axis gets a 1 bohr placeholder vector
+    ref_lattice = torch.eye(3, **dd)
     ref_lattice[:2, :2] = torch.tensor(
         [[5.626898880882, -5.626898880882], [5.626898880882, 5.626898880882]],
         **dd,
@@ -563,6 +577,38 @@ def test_read_valid11_lattice_2d_two_vectors() -> None:
     assert len(torch.unique(numbers)) == 2
     assert (periodic == torch.tensor([True, True, False])).all()
     assert pytest.approx(ref_lattice.cpu()) == lattice.cpu()
+
+
+@pytest.mark.parametrize(
+    "periodic_dims, lattice_block, cell",
+    [
+        (1, " 7.0\n", " 7.0\n"),
+        (2, " 7.0 0.0\n 0.0 9.0\n", " 7.0 9.0 90.0\n"),
+    ],
+)
+def test_read_lattice_matches_cell_for_low_dim(
+    periodic_dims: int, lattice_block: str, cell: str
+) -> None:
+    """A wire or slab given as ``$lattice`` gets the same placeholder
+    vectors on its non-periodic axes as the same cell given as ``$cell``,
+    so its lattice is invertible."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    lattices = []
+    for group in (f"$lattice bohr\n{lattice_block}", f"$cell bohr\n{cell}"):
+        content = (
+            "$coord\n0.5 0.5 0.5 c\n"
+            f"$periodic {periodic_dims}\n{group}$end\n"
+        )
+        tmpdir, filepath = _write(content)
+        with tmpdir:
+            structure = read.read_turbomole(filepath, **dd)
+        assert structure.lattice is not None
+        lattices.append(structure.lattice)
+
+    from_lattice, from_cell = lattices
+    assert torch.linalg.det(from_lattice) > 0
+    assert torch.allclose(from_lattice, from_cell, atol=1e-12, rtol=0)
 
 
 ################################################################################

@@ -20,7 +20,7 @@ Utility functions for testing.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import numpy as np
 import pytest
@@ -28,8 +28,8 @@ import torch
 
 from tad_mctc.batch import pack
 from tad_mctc.convert import numpy_to_tensor, symmetrizef
-from tad_mctc.data.structures import resolve_structure
-from tad_mctc.io.structure import Structure
+from tad_mctc.data.structures import get_structure
+from tad_mctc.io.structure import Structure, pack_structures
 from tad_mctc.tools.compile import is_compile_supported
 from tad_mctc.typing import DD, Tensor
 
@@ -38,10 +38,10 @@ __all__ = [
     "_symrng",
     "DYNAMO_SUPPORTED",
     "DYNAMO_UNSUPPORTED_REASON",
+    "load_batch",
     "load_pair",
     "load_sample",
     "load_structure",
-    "resolve_structure",
     "run_compiled_or_skip",
 ]
 
@@ -57,18 +57,10 @@ def _symrng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
 
 
 def load_structure(collection: str, record: str, dd: DD) -> Structure:
-    """Resolve `(collection, record)` via `resolve_structure`, moved to
-    `dd` in the same call. `load_sample`/`load_pair` are a thin adapter
-    over this that keep only `numbers`/`positions`; a caller that also
-    needs `lattice`/`periodic` (`test_periodic.py`'s CN tests) uses this
-    directly instead of duplicating the resolve-and-move step. Resolves
-    fresh on every call rather than caching a `dict[str, Structure]`:
-    `get_structure`/`structures` lookups are cheap dict indexing plus one
-    `Structure` construction, so there is nothing worth caching, and doing
-    it here also avoids resolving once at a default dtype and `.to()`-
-    casting again per test, the way a precomputed `dict[str, Structure]`
-    would need to."""
-    return resolve_structure(
+    """Look up `(collection, record)` via `get_structure`, moved to `dd`.
+    `load_sample`/`load_pair` keep only `numbers`/`positions`; a caller
+    that also needs `lattice`/`periodic` uses this directly."""
+    return get_structure(
         collection, record, device=dd["device"], dtype=dd["dtype"]
     )
 
@@ -93,6 +85,13 @@ def load_pair(
     numbers = pack((numbers1, numbers2))
     positions = pack((positions1, positions2))
     return numbers, positions
+
+
+def load_batch(sources: Sequence[tuple[str, str]], dd: DD) -> Structure:
+    """Load `(collection, record)`-named structures, moved to `dd`, and pack
+    them into one batched `Structure`, keeping `lattice`/`periodic` (unlike
+    `load_pair`)."""
+    return pack_structures([load_structure(*source, dd) for source in sources])
 
 
 DYNAMO_SUPPORTED = is_compile_supported()
@@ -140,4 +139,3 @@ def run_compiled_or_skip(
         return compiled(*args)
     except Exception as exc:  # pylint: disable=broad-except
         pytest.skip(f"torch.compile unsupported here: {exc}")
-        return None

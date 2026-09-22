@@ -69,8 +69,9 @@ True
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 import torch
 from torch import Tensor
@@ -84,9 +85,10 @@ except ImportError:  # pragma: no cover
         _register_pytree_node as register_pytree_node,
     )
 
+from ..batch import pack
 from .checks.structure import structure_check
 
-__all__ = ["Structure"]
+__all__ = ["Structure", "pack_structures"]
 
 
 # The six fields that may be absent. Order here fixes the order in which
@@ -136,8 +138,11 @@ class Structure:
         Lattice vectors as rows, shape ``(..., 3, 3)``, in Bohr. Absent
         means a non-periodic structure.
     periodic : Tensor | None, optional
-        Boolean mask, shape ``(..., 3)``, marking which lattice axes are
-        periodic. Only meaningful alongside ``lattice``.
+        Boolean mask, shape ``(3,)`` or the lattice's ``(..., 3)``, marking
+        which lattice axes are periodic. Requires ``lattice``. Absent
+        alongside a lattice means periodic along every axis, and is filled
+        in on construction, as in mctc-lib's ``new_structure``; so a
+        structure with a lattice always has a mask.
     bonds : Tensor | None, optional
         Atom-index pairs describing bond connectivity, shape
         ``(..., nbond, 2)``. Absent means no connectivity information.
@@ -166,6 +171,15 @@ class Structure:
     bond_orders: Tensor | None = None
 
     def __post_init__(self) -> None:
+        if self.lattice is not None and self.periodic is None:
+            all_axes = torch.ones(
+                self.lattice.shape[:-1],
+                dtype=torch.bool,
+                device=self.lattice.device,
+            )
+            # The dataclass is frozen, so assign past its `__setattr__`.
+            object.__setattr__(self, "periodic", all_axes)
+
         structure_check(
             self.numbers,
             self.positions,
@@ -259,6 +273,124 @@ class Structure:
             A new, re-validated instance with the requested dtype.
         """
         return self.to(dtype=dtype)
+
+    def replace(self, **changes: Any) -> Structure:
+        """
+        Copy this structure with some fields swapped out, e.g. for a
+        perturbed positions tensor during a finite-difference check.
+
+        Thin wrapper around :func:`dataclasses.replace` so call sites do
+        not need their own import of it. Re-runs `structure_check` on the
+        new instance, same as the constructor. Called as
+        `dataclasses.replace` (module-qualified, not the bare name) so it
+        cannot be mistaken for a recursive call to this same-named method.
+
+        Fields not named in ``changes`` are copied as they are, including
+        a ``periodic`` mask that was filled in by default. To drop the
+        cell, clear both: ``replace(lattice=None, periodic=None)``.
+
+        Parameters
+        ----------
+        **changes : Any
+            Field name/value pairs to override, e.g. ``positions=pos``.
+            Typed `Any`, like `CNModel.replace`, because the dataclass
+            fields differ in type (required `Tensor` vs. optional
+            `Tensor | None`); `structure_check` validates the result.
+
+        Returns
+        -------
+        Structure
+            A new, re-validated instance with the given fields replaced.
+        """
+        return dataclasses.replace(self, **changes)
+
+
+# Unset means neutral / closed-shell, so a structure that leaves one of
+# these unset packs as zero next to one that sets it.
+_ZERO_DEFAULT_FIELDS = ("charge", "uhf")
+
+# Unset means "not periodic", which has no stackable stand-in value.
+_CELL_FIELDS = ("lattice", "periodic")
+
+
+def _stack_with_zero_default(values: list[Tensor | None]) -> Tensor:
+    """Stack `values`, replacing each unset entry with a zero shaped like
+    the set ones. At least one entry must be set."""
+    template = next(value for value in values if value is not None)
+    zero = torch.zeros_like(template)
+    return torch.stack([zero if value is None else value for value in values])
+
+
+def pack_structures(structures: Sequence[Structure]) -> Structure:
+    """
+    Pack several unbatched structures into one batched `Structure`.
+
+    `numbers` and `positions` are zero-padded to the largest structure
+    (see :func:`tad_mctc.batch.pack`). The per-structure fields are
+    stacked: ``lattice`` and ``periodic`` as they are, ``charge`` and
+    ``uhf`` with an unset value read as zero (neutral, closed-shell).
+    Several molecules or several periodic cells batch fine; a molecule
+    next to a periodic cell does not (see Raises).
+
+    mctc-lib has no batched structure type, so this is a PyTorch-side
+    addition. Padding is data-dependent: call this while building the
+    input, outside any `vmap`/`jacrev`/`torch.compile` region.
+
+    Parameters
+    ----------
+    structures : Sequence[Structure]
+        Unbatched structures, all on the same device and dtype.
+
+    Returns
+    -------
+    Structure
+        One structure with a leading batch dimension.
+
+    Raises
+    ------
+    ValueError
+        `structures` is empty, one of them is already batched, or some
+        set ``lattice``/``periodic`` and others do not -- a molecule next
+        to a periodic cell. To batch a molecule with periodic cells, give
+        it any ``lattice`` together with ``periodic=[False, False, False]``.
+    NotImplementedError
+        A structure sets ``bonds``, for which there is no padding
+        convention yet (zero-padding would invent bonds to atom 0).
+    """
+    if len(structures) == 0:
+        raise ValueError("Cannot pack an empty sequence of structures.")
+    if any(structure.numbers.ndim != 1 for structure in structures):
+        raise ValueError("Only unbatched structures can be packed.")
+    if any(structure.bonds is not None for structure in structures):
+        raise NotImplementedError("Packing structures with bonds.")
+
+    optional: dict[str, Tensor] = {}
+
+    # A structure with a lattice always has a mask (see `Structure`), so
+    # checking the lattice covers both cell fields.
+    has_lattice = [structure.lattice is not None for structure in structures]
+    if any(has_lattice) and not all(has_lattice):
+        raise ValueError(
+            "Cannot pack molecules with periodic structures: `lattice` is "
+            "set on some structures but not on others. To batch a molecule "
+            "with periodic cells, give it a lattice and "
+            "periodic=[False, False, False]."
+        )
+    if all(has_lattice):
+        for name in _CELL_FIELDS:
+            values = [getattr(structure, name) for structure in structures]
+            optional[name] = torch.stack(values)
+
+    for name in _ZERO_DEFAULT_FIELDS:
+        values = [getattr(structure, name) for structure in structures]
+        if any(value is not None for value in values):
+            optional[name] = _stack_with_zero_default(values)
+
+    return Structure(
+        numbers=pack([structure.numbers for structure in structures]),
+        positions=pack([structure.positions for structure in structures]),
+        **optional,
+    )
 
 
 def _flatten(structure: Structure) -> tuple[list[Tensor], tuple[str, ...]]:

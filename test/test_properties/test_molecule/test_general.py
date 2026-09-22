@@ -24,8 +24,7 @@ import pytest
 import torch
 
 from tad_mctc import storch
-from tad_mctc.data.structures import structures
-from tad_mctc.data.structures.mstore import get_structure
+from tad_mctc.data.structures import get_structure
 from tad_mctc.io.structure import Structure
 from tad_mctc.properties.general import sum_formula
 from tad_mctc.typing import DD
@@ -46,7 +45,7 @@ _SAMPLE_SOURCES: dict[str, tuple[str, str] | None] = {
 def _structure(name: str) -> Structure:
     source = _SAMPLE_SOURCES[name]
     if source is None:
-        return structures[name]
+        return get_structure("other", name)
     collection, record = source
     return get_structure(collection, record)
 

@@ -26,12 +26,13 @@ from pathlib import Path
 import pytest
 import torch
 
+from tad_mctc.data.structures import get_structure
 from tad_mctc.exceptions import EmptyFileError, FormatErrorTM, StructureError
 from tad_mctc.io import read, write
 from tad_mctc.typing import DD, PathLike
 
 from ..conftest import DEVICE
-from ..utils import load_sample, resolve_structure
+from ..utils import load_sample
 
 _SAMPLE_SOURCES: list[tuple[str, str]] = [
     ("mb16_43", "LiH"),
@@ -74,7 +75,7 @@ def test_read_fail_format() -> None:
 
 
 def test_write_fail() -> None:
-    sample = resolve_structure("heavy28", "h2o")
+    sample = get_structure("heavy28", "h2o")
     numbers = sample.numbers
     positions = sample.positions
 
@@ -111,9 +112,8 @@ def test_write_and_read(
             prepend_to_file(filepath, "something")
 
         # Read from XYZ file
-        read_numbers, read_positions = read.read_turbomole(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_turbomole(filepath, **dd)
+        read_numbers, read_positions = structure.numbers, structure.positions
 
     # Check if the read data matches the written data
     assert read_numbers.dtype == numbers.dtype
@@ -164,7 +164,8 @@ def test_read_valid_angs_unit() -> None:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
 
-        numbers, positions = read.read_turbomole(filepath)  # type: ignore[misc]
+        structure = read.read_turbomole(filepath)
+        numbers, positions = structure.numbers, structure.positions
 
     assert positions.shape[0] == 9
     assert len(torch.unique(numbers)) == 2
@@ -285,7 +286,8 @@ def test_read_scientific_notation() -> None:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
 
-        numbers, positions = read.read_turbomole(filepath)  # type: ignore[misc]
+        structure = read.read_turbomole(filepath)
+        numbers, positions = structure.numbers, structure.positions
 
     assert positions.shape[0] == 16
     assert len(torch.unique(numbers)) == 3

@@ -65,8 +65,8 @@ def test_read_cartesian_symbols() -> None:
     with tmpdir:
         result = read.read_qchem(filepath, **dd)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     ref_numbers = torch.tensor([8, 1, 1])
     ref_positions = (
@@ -100,7 +100,8 @@ def test_read_cartesian_blank_line_between_atoms_skipped() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions = read.read_qchem(filepath, **dd)
+        structure = read.read_qchem(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
 
     assert (numbers == torch.tensor([8, 1])).all()
     assert positions.shape == (2, 3)
@@ -119,7 +120,8 @@ def test_read_cartesian_atomic_numbers() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, _ = read.read_qchem(filepath)
+        structure = read.read_qchem(filepath)
+        numbers = structure.numbers
 
     assert (numbers == torch.tensor([8, 1, 1])).all()
 
@@ -159,7 +161,8 @@ def test_read_cartesian_lowercase_symbols_large() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions = read.read_qchem(filepath)
+        structure = read.read_qchem(filepath)
+        numbers, positions = structure.numbers, structure.positions
 
     assert numbers.shape[0] == 24
     assert positions.shape == (24, 3)
@@ -191,7 +194,8 @@ def test_read_zmatrix() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions = read.read_qchem(filepath, **dd)
+        structure = read.read_qchem(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
 
     assert (numbers == torch.tensor([15, 1, 1, 1, 8])).all()
     assert positions.shape == (5, 3)
@@ -215,7 +219,8 @@ def test_read_zmatrix_non_first_reference() -> None:
     content = "$molecule\n0 1\nO\nH 1 0.96\nH 2 0.96 1 104.5\n$end\n"
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions = read.read_qchem(filepath, **dd)
+        structure = read.read_qchem(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
 
     assert (numbers == torch.tensor([8, 1, 1])).all()
 

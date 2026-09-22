@@ -22,12 +22,9 @@ Reader for the MDL Molfile (``.mol``, V2000 and V3000) and SDF (``.sdf``)
 formats. Mirrors mctc-lib's ``mctc_io_read_ctfile``
 (``src/mctc/io/read/ctfile.f90``).
 
-Unlike every other reader that needs bond connectivity (cjson), a Molfile
-never carries a periodic lattice, so ``lattice``/``periodic`` are always
-``None`` here; ``bonds``/``bond_orders`` are (almost) always set, since
-the format always declares a bond count in its header (even if 0). The
-same 6-tuple ``CJSONResult`` shape is reused rather than adding a fourth
-bespoke tuple contract.
+A Molfile never carries a periodic lattice, so the returned structure has
+no ``lattice``/``periodic``; ``bonds``/``bond_orders`` are always set,
+since the format always declares a bond count in its header (even if 0).
 
 V2000's per-atom isotope/charge/hydrogen-count/valence columns and
 V2000's ``M  CHG``/V3000's ``CHG=``/``VAL=``/``HCOUNT=`` atom properties
@@ -47,10 +44,10 @@ import torch
 
 from ...convert import symbol_to_number
 from ...exceptions import FormatErrorCTFile
-from ...typing import DD, get_default_dtype
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
-from .frompath import CJSONResult, create_path_reader_cjson
+from ..structure import Structure
+from ._finalize import finalize_geometry, resolve_dd
+from .frompath import create_path_reader
 
 __all__ = ["read_molfile", "read_sdf"]
 
@@ -289,11 +286,10 @@ def read_molfile_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> CJSONResult:
+) -> Structure:
     """
-    Reads an MDL Molfile (V2000 or V3000) and returns atomic numbers and
-    positions as tensors, plus bond indices and bond orders. ``lattice``
-    and ``periodic`` are always ``None`` (Molfiles are never periodic).
+    Reads an MDL Molfile (V2000 or V3000) into a structure with bond
+    indices and bond orders. Molfiles are never periodic.
 
     Parameters
     ----------
@@ -308,19 +304,15 @@ def read_molfile_fileobj(
 
     Returns
     -------
-    CJSONResult
-        See the module docstring.
+    Structure
+        Atomic numbers, positions (bohr), bonds and bond orders.
 
     Raises
     ------
     FormatErrorCTFile
         The file does not conform with the expected Molfile format.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     lines = iter(fileobj)
     number_of_atoms, number_of_bonds, is_v3000 = _read_header(lines, fileobj)
@@ -339,17 +331,14 @@ def read_molfile_fileobj(
     bonds = torch.tensor(bonds_list, **ddi).reshape(-1, 2)
     bond_orders = torch.tensor(orders_list, **dd)
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-    )
-    assert deflatable_check(positions, fileobj, **kwargs)
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
 
-    return numbers, positions, None, None, bonds, bond_orders
+    return Structure(
+        numbers=numbers,
+        positions=positions,
+        bonds=bonds,
+        bond_orders=bond_orders,
+    )
 
 
 def read_sdf_fileobj(
@@ -358,7 +347,7 @@ def read_sdf_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> CJSONResult:
+) -> Structure:
     """
     Reads the first record of an SDF file (a Molfile connection table
     plus a trailing key-value data block terminated by ``$$$$``) and
@@ -379,7 +368,7 @@ def read_sdf_fileobj(
 
     Returns
     -------
-    CJSONResult
+    Structure
         See :func:`read_molfile_fileobj`.
 
     Raises
@@ -401,7 +390,7 @@ def read_sdf_fileobj(
     )
 
 
-read_molfile = create_path_reader_cjson(read_molfile_fileobj)
+read_molfile = create_path_reader(read_molfile_fileobj)
 
 
-read_sdf = create_path_reader_cjson(read_sdf_fileobj)
+read_sdf = create_path_reader(read_sdf_fileobj)

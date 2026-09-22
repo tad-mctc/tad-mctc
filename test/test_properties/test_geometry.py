@@ -24,8 +24,7 @@ import pytest
 import torch
 
 from tad_mctc.batch import pack
-from tad_mctc.data.structures import structures
-from tad_mctc.data.structures.mstore import get_structure
+from tad_mctc.data.structures import get_structure
 from tad_mctc.properties import geometry
 from tad_mctc.typing import DD
 
@@ -42,7 +41,7 @@ _SAMPLE_SOURCES: dict[str, tuple[str, str] | None] = {
     "SiH4": ("mb16_43", "SiH4"),
 }
 samples = {
-    name: structures[name] if source is None else get_structure(*source)
+    name: get_structure("other", name) if source is None else get_structure(*source)
     for name, source in _SAMPLE_SOURCES.items()
 }
 

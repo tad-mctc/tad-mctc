@@ -114,7 +114,7 @@ def test_pow_fail() -> None:
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("xlist", [[-1, 0, 2], [1, 2, 3]])
-def test_pow(dtype: torch.dtype, xlist: list) -> None:
+def test_pow(dtype: torch.dtype, xlist: list[int]) -> None:
     dd: DD = {"device": DEVICE, "dtype": dtype}
     x = torch.tensor(xlist, **dd)
 
