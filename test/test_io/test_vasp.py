@@ -26,7 +26,11 @@ from pathlib import Path
 import pytest
 import torch
 
-from tad_mctc.exceptions import EmptyFileError, FormatErrorVASP, StructureWarning
+from tad_mctc.exceptions import (
+    EmptyFileError,
+    FormatErrorVASP,
+    StructureWarning,
+)
 from tad_mctc.io import read
 from tad_mctc.typing import DD
 from tad_mctc.units import length

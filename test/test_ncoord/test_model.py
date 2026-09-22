@@ -52,7 +52,11 @@ from tad_mctc.ncoord.gfn2 import cn_gfn2
 from tad_mctc.neighbor.images import build_periodic_shifts
 
 from ..conftest import DEVICE
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON, run_compiled_or_skip
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    run_compiled_or_skip,
+)
 
 # ---------------------------------------------------------------------------
 # Presets: fields match the spec exactly
