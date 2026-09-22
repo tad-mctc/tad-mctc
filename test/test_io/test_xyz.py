@@ -30,7 +30,7 @@ import torch
 
 from tad_mctc.batch import pack
 from tad_mctc.data.structures import get_structure
-from tad_mctc.exceptions import EmptyFileError, FormatErrorXYZ
+from tad_mctc.exceptions import EmptyFileError, FormatErrorXYZ, StructureWarning
 from tad_mctc.io import read, write
 from tad_mctc.io.read.xyz import _parse_atom_block
 from tad_mctc.io.structure import Structure
@@ -811,10 +811,13 @@ def test_invalid_extxyz_lattice_non_numeric_value() -> None:
 def test_extxyz_lattice_three_values_is_diagonal() -> None:
     """``Lattice`` with exactly 3 values fills only the diagonal of an
     otherwise-zero lattice matrix, mirroring mctc-lib's ``parse_lattice``."""
-    structure = _read(
-        '1\nProperties=species:S:1:pos:R:3 Lattice="1.0 2.0 3.0"\n'
-        "H 0.0 0.0 0.0\n"
-    )
+    # The single atom sits at the origin, which collides with the
+    # deflate padding check's default padding value.
+    with pytest.warns(StructureWarning):
+        structure = _read(
+            '1\nProperties=species:S:1:pos:R:3 Lattice="1.0 2.0 3.0"\n'
+            "H 0.0 0.0 0.0\n"
+        )
     numbers, positions = structure.numbers, structure.positions
     lattice, periodic = structure.lattice, structure.periodic
     assert lattice is not None
@@ -873,7 +876,10 @@ def test_extxyz_header_tolerates_extra_whitespace_and_escapes() -> None:
         'comment=  "a\\b" escaped=[a "b\\]c" d] nested=[[a] b]\n'
         "H 0.0 0.0 0.0\n"
     )
-    structure = _read(text)
+    # The single atom sits at the origin, which collides with the
+    # deflate padding check's default padding value.
+    with pytest.warns(StructureWarning):
+        structure = _read(text)
     numbers, positions = structure.numbers, structure.positions
 
     assert (numbers == torch.tensor([1])).all()
@@ -916,7 +922,10 @@ def test_extxyz_lattice_without_properties_is_ignored() -> None:
         "H 0.0 0.0 0.0\n"
     )
 
-    structure = _read(text)
+    # The single atom sits at the origin, which collides with the
+    # deflate padding check's default padding value.
+    with pytest.warns(StructureWarning):
+        structure = _read(text)
 
     numbers, positions = structure.numbers, structure.positions
 
@@ -942,5 +951,7 @@ def test_extxyz_multiframe_periodic_unsupported() -> None:
         "H 0.0 0.0 0.0\n"
     )
 
-    with pytest.raises(FormatErrorXYZ):
+    # Each frame's single atom sits at the origin, which collides with the
+    # deflate padding check's default padding value.
+    with pytest.warns(StructureWarning), pytest.raises(FormatErrorXYZ):
         read.xyz.read_xyz_fileobj(io.StringIO(text))

@@ -246,10 +246,10 @@ def test_compile_fullgraph_fills_in_the_mask() -> None:
 def test_frozen_instance_cannot_be_mutated() -> None:
     """`Structure` is a value, not a place to assign into."""
     numbers, positions = _water()
-    structure = Structure(numbers=numbers, positions=positions)
+    struc = Structure(numbers=numbers, positions=positions)
 
     with pytest.raises(dataclasses.FrozenInstanceError):
-        structure.numbers = numbers
+        struc.numbers = numbers  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def test_pytree_omits_absent_optional_fields() -> None:

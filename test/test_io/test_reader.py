@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 import torch
 
+from tad_mctc.exceptions import StructureWarning
 from tad_mctc.io import read
 from tad_mctc.io.structure import Structure
 from tad_mctc.typing import DD
@@ -458,7 +459,10 @@ def test_read_structure_aims_periodic() -> None:
         filepath = Path(tmpdirname) / "geometry.in"
         filepath.write_text(content, encoding="utf-8")
 
-        structure = read.read_structure(filepath)
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            structure = read.read_structure(filepath)
 
     assert isinstance(structure, Structure)
     assert structure.lattice is not None

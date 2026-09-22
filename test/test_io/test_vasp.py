@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from tad_mctc.exceptions import EmptyFileError, FormatErrorVASP
+from tad_mctc.exceptions import EmptyFileError, FormatErrorVASP, StructureWarning
 from tad_mctc.io import read
 from tad_mctc.typing import DD
 from tad_mctc.units import length
@@ -245,7 +245,10 @@ def test_read_single_char_symbol() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        structure = read.read_poscar(filepath, **dd)
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            structure = read.read_poscar(filepath, **dd)
         numbers, positions = structure.numbers, structure.positions
 
     assert numbers.shape == (1,)

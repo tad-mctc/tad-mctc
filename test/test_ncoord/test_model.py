@@ -52,6 +52,7 @@ from tad_mctc.ncoord.gfn2 import cn_gfn2
 from tad_mctc.neighbor.images import build_periodic_shifts
 
 from ..conftest import DEVICE
+from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON, run_compiled_or_skip
 
 # ---------------------------------------------------------------------------
 # Presets: fields match the spec exactly
@@ -381,6 +382,7 @@ def test_dense_periodic_periodic_mask_leaves_slab_axis_unwrapped() -> None:
     assert torch.allclose(baseline, wrong_all_periodic, atol=1e-11, rtol=0)
 
 
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_dense_periodic_compiles_fullgraph() -> None:
     """The dense periodic path traces under `torch.compile(fullgraph=True)`
     in both `positions` and `lattice`: no data-dependent shape or control
@@ -398,10 +400,10 @@ def test_dense_periodic_compiles_fullgraph() -> None:
         structure = Structure(numbers=numbers, positions=p, lattice=lat)
         return cn_d3.with_precomputed_shifts(structure, shifts=shifts)
 
-    torch._dynamo.reset()
-    compiled = torch.compile(f, fullgraph=True, dynamic=False)
+    torch._dynamo.reset()  # pylint: disable=protected-access
+    compiled_value = run_compiled_or_skip(f, positions, lattice)
 
-    assert torch.allclose(compiled(positions, lattice), f(positions, lattice))
+    assert torch.allclose(compiled_value, f(positions, lattice))
 
 
 def test_dense_periodic_jacrev_wrt_lattice_matches_finite_differences() -> None:
@@ -637,6 +639,7 @@ def test_table_cache_survives_cold_fill_under_vmap() -> None:
     assert torch.allclose(eager, f(torch.tensor(1.0, dtype=torch.double)))
 
 
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_table_cache_survives_cold_fill_under_compile() -> None:
     """Same guarantee as the vmap test above, for a cold cache filled
     while `torch.compile(fullgraph=True)` is tracing."""
@@ -647,13 +650,12 @@ def test_table_cache_survives_cold_fill_under_compile() -> None:
     positions = sample.positions.double()
 
     _TABLE_CACHE.clear()
-    torch._dynamo.reset()
+    torch._dynamo.reset()  # pylint: disable=protected-access
 
     def f(p: torch.Tensor) -> torch.Tensor:
         return cn_d3(Structure(numbers=numbers, positions=p))
 
-    compiled = torch.compile(f, fullgraph=True, dynamic=False)
-    compiled_value = compiled(positions)
+    compiled_value = run_compiled_or_skip(f, positions)
 
     assert len(_TABLE_CACHE) > 0
     for cached in _TABLE_CACHE.values():
@@ -785,16 +787,13 @@ def test_cut_coordination_number_matches_log1p_formula() -> None:
     assert torch.allclose(got, want, atol=1e-12, rtol=0)
 
 
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_cut_coordination_number_compiles_fullgraph_with_tensor_cn_max() -> (
     None
 ):
     cn = torch.tensor([1.0, 5.0, 12.0], dtype=torch.double)
     cn_max = torch.tensor(8.0, dtype=torch.double)
 
-    torch._dynamo.reset()
-    compiled = torch.compile(
-        cut_coordination_number, fullgraph=True, dynamic=False
-    )
-    assert torch.allclose(
-        compiled(cn, cn_max), cut_coordination_number(cn, cn_max)
-    )
+    torch._dynamo.reset()  # pylint: disable=protected-access
+    compiled_value = run_compiled_or_skip(cut_coordination_number, cn, cn_max)
+    assert torch.allclose(compiled_value, cut_coordination_number(cn, cn_max))

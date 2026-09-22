@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from tad_mctc.exceptions import FormatErrorTM
+from tad_mctc.exceptions import FormatErrorTM, StructureWarning
 from tad_mctc.io import read
 from tad_mctc.typing import DD
 from tad_mctc.units import length
@@ -80,7 +80,10 @@ def test_read_non_periodic_has_no_lattice() -> None:
     content = "$coord\n0.0 0.0 0.0 h\n$end\n"
     tmpdir, filepath = _write(content)
     with tmpdir:
-        result = read.read_turbomole(filepath)
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            result = read.read_turbomole(filepath)
 
     assert result.lattice is None
 
@@ -89,7 +92,10 @@ def test_read_explicit_periodic_zero_has_no_lattice() -> None:
     content = "$coord\n0.0 0.0 0.0 h\n$periodic 0\n$end\n"
     tmpdir, filepath = _write(content)
     with tmpdir:
-        result = read.read_turbomole(filepath)
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            result = read.read_turbomole(filepath)
 
     assert result.lattice is None
 
@@ -147,7 +153,10 @@ def test_read_periodic_cell_angs() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        structure = read.read_turbomole(filepath, **dd)
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            structure = read.read_turbomole(filepath, **dd)
         numbers, positions = structure.numbers, structure.positions
         lattice, periodic = structure.lattice, structure.periodic
         assert lattice is not None
@@ -179,8 +188,12 @@ def test_read_periodic_cell_2d_slab() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        structure = read.read_turbomole(filepath, **dd)
-        numbers, positions = structure.numbers, structure.positions
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            structure = read.read_turbomole(filepath, **dd)
+
+        numbers = structure.numbers
         lattice, periodic = structure.lattice, structure.periodic
         assert lattice is not None
 
@@ -205,7 +218,10 @@ def test_read_periodic_cell_1d_wire() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        structure = read.read_turbomole(filepath, **dd)
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            structure = read.read_turbomole(filepath, **dd)
         numbers, positions = structure.numbers, structure.positions
         lattice, periodic = structure.lattice, structure.periodic
         assert lattice is not None
@@ -449,7 +465,10 @@ def test_read_periodic_lattice_cartesian() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        structure = read.read_turbomole(filepath, **dd)
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            structure = read.read_turbomole(filepath, **dd)
         numbers, positions = structure.numbers, structure.positions
         lattice, periodic = structure.lattice, structure.periodic
         assert lattice is not None
@@ -510,7 +529,10 @@ def test_read_valid5_lattice_triangular_angs() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        structure = read.read_turbomole(filepath, **dd)
+        # The last atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            structure = read.read_turbomole(filepath, **dd)
         numbers, positions = structure.numbers, structure.positions
         lattice, periodic = structure.lattice, structure.periodic
         assert lattice is not None

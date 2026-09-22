@@ -31,6 +31,7 @@ from typing import Any
 import pytest
 import torch
 
+from tad_mctc.exceptions import StructureWarning
 from tad_mctc.io import read
 
 
@@ -184,7 +185,10 @@ def test_sniff_cjson_by_spaced_key_alias() -> None:
     }
     tmpdir, filepath = _write(data)
     with tmpdir:
-        result = read.read_json(filepath)
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            result = read.read_json(filepath)
 
 
 def test_read_fail_notfound() -> None:
