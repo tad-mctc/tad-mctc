@@ -30,9 +30,9 @@ from tad_mctc.batch import pack
 from tad_mctc.ncoord import cn_eeq
 from tad_mctc.typing import DD, Tensor
 
-from ._variants import VARIANTS
 from ..conftest import DEVICE
 from ..utils import load_batch, load_structure
+from ._variants import VARIANTS
 from .samples import BATCH_PAIRS, pair_id, refs
 
 

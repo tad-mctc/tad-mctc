@@ -30,10 +30,11 @@ from tad_mctc.convert import tensor_to_numpy
 from tad_mctc.io.structure import Structure
 from tad_mctc.typing import DD, Tensor
 
-from .._variants import VARIANTS
 from ...conftest import DEVICE
 from ...utils import load_batch, load_structure
+from .._variants import VARIANTS
 from ..samples import BATCH_PAIRS, REPRESENTATIVES, is_periodic, pair_id, refs
+
 
 @pytest.mark.parametrize("variant_name", list(VARIANTS))
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])

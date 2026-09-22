@@ -41,7 +41,11 @@ _SAMPLE_SOURCES: dict[str, tuple[str, str] | None] = {
     "SiH4": ("mb16_43", "SiH4"),
 }
 samples = {
-    name: get_structure("other", name) if source is None else get_structure(*source)
+    name: (
+        get_structure("other", name)
+        if source is None
+        else get_structure(*source)
+    )
     for name, source in _SAMPLE_SOURCES.items()
 }
 

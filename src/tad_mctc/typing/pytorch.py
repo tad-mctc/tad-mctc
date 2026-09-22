@@ -26,7 +26,15 @@ tensor-like behavior (`.to` and `.type` methods) to classes.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, ClassVar, NoReturn, Protocol, TypedDict, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    NoReturn,
+    Protocol,
+    TypedDict,
+    cast,
+)
 
 import torch
 from torch import Tensor

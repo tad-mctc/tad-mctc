@@ -29,7 +29,9 @@ periodic = torch.tensor([True, True, True])
 # `torch.func`'s data-dependent-control-flow restriction. Build the table
 # once, outside the trace, at a cutoff that safely covers every lattice
 # the trace will see, and reuse it with `with_precomputed_shifts` instead.
-shifts = build_periodic_shifts(lattice, periodic, cutoff=mctc.ncoord.cn_d3.cutoff)
+shifts = build_periodic_shifts(
+    lattice, periodic, cutoff=mctc.ncoord.cn_d3.cutoff
+)
 
 # three slightly expanded copies of the same cell, e.g. as `vmap` would
 # see them while scanning a lattice-relaxation trajectory

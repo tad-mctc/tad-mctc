@@ -134,12 +134,8 @@ def test_batch(
         numbers,
         pack(
             (
-                _fortran_ref(
-                    (collection1, record1), numbers1.shape[-1], dd
-                ),
-                _fortran_ref(
-                    (collection2, record2), numbers2.shape[-1], dd
-                ),
+                _fortran_ref((collection1, record1), numbers1.shape[-1], dd),
+                _fortran_ref((collection2, record2), numbers2.shape[-1], dd),
             )
         ),
     )

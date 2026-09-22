@@ -33,9 +33,9 @@ from tad_mctc.ncoord import cn_d3
 from tad_mctc.neighbor.images import build_periodic_shifts
 from tad_mctc.typing import DD, Tensor
 
-from ._variants import VARIANTS
 from ..conftest import DEVICE
 from ..utils import load_structure
+from ._variants import VARIANTS
 
 
 def _load_periodic_sample(collection: str, record: str, dd: DD) -> Structure:

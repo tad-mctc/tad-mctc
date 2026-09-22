@@ -28,9 +28,9 @@ from tad_mctc.autograd import dgradcheck, dgradgradcheck
 from tad_mctc.io.structure import Structure
 from tad_mctc.typing import DD, Callable, Tensor
 
-from .._variants import VARIANTS
 from ...conftest import DEVICE
 from ...utils import load_batch, load_structure
+from .._variants import VARIANTS
 from ..samples import BATCH_PAIRS, REPRESENTATIVES, pair_id
 
 tol = 1e-8
