@@ -244,6 +244,34 @@ def test_count_image_rings_rejects_degenerate_cell() -> None:
             count_image_rings(lattice, periodic, cutoff=10.0)
 
 
+def test_count_image_rings_rejects_malformed_lattice_shape() -> None:
+    """A lattice that is not `(..., 3, 3)` cannot define interplanar
+    spacings, so it is rejected before any determinant is taken."""
+    lattice = torch.zeros(3, 2, device=DEVICE, dtype=torch.double)
+    periodic = torch.tensor([True, True, True], device=DEVICE)
+
+    for count_image_rings in (
+        count_image_rings_cp2k,
+        count_image_rings_mctclib,
+    ):
+        with pytest.raises(RuntimeError):
+            count_image_rings(lattice, periodic, cutoff=10.0)
+
+
+def test_count_image_rings_rejects_malformed_periodic_shape() -> None:
+    """`periodic` must broadcast against the lattice batch, either as a
+    bare `(3,)` mask or one matching the batch shape exactly."""
+    lattice = _TRICLINIC.to(DEVICE)
+    periodic = torch.tensor([True, True], device=DEVICE)
+
+    for count_image_rings in (
+        count_image_rings_cp2k,
+        count_image_rings_mctclib,
+    ):
+        with pytest.raises(RuntimeError):
+            count_image_rings(lattice, periodic, cutoff=10.0)
+
+
 def test_count_image_rings_left_handed_cell() -> None:
     """Swapping two lattice vectors flips the cell's handedness but not
     its geometry, so the ring counts swap along with the vectors."""
@@ -463,6 +491,28 @@ def test_periodic_shifts_rejects_non_bool_periodic_dtype() -> None:
             periodic=torch.tensor([1, 1, 1], device=DEVICE),
             cutoff=10.0,
         )
+
+
+def test_periodic_shifts_replace_swaps_fields_and_revalidates() -> None:
+    """`.replace()` is a thin wrapper around `dataclasses.replace`: it
+    both swaps the given fields and re-runs `__post_init__` on the
+    result, same as the constructor."""
+    bundle = PeriodicShifts(
+        shifts=torch.zeros(1, 3, dtype=torch.long, device=DEVICE),
+        periodic=torch.tensor([True, True, True], device=DEVICE),
+        cutoff=10.0,
+    )
+
+    new_periodic = torch.tensor([True, False, True], device=DEVICE)
+    replaced = bundle.replace(periodic=new_periodic)
+
+    assert replaced is not bundle
+    assert torch.equal(replaced.periodic, new_periodic)
+    assert torch.equal(replaced.shifts, bundle.shifts)
+    assert replaced.cutoff == bundle.cutoff
+
+    with pytest.raises(RuntimeError):
+        bundle.replace(periodic=torch.tensor([True, True], device=DEVICE))
 
 
 def test_build_periodic_shifts_returns_matching_bundle() -> None:

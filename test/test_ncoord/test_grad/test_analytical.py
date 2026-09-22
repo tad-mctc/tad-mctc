@@ -34,6 +34,7 @@ from tad_mctc.batch import pack, zero_masked_pairs
 from tad_mctc.data import radii
 from tad_mctc.io.structure import Structure
 from tad_mctc.ncoord import cn_d3, cn_d3_gradient
+from tad_mctc.ncoord import defaults
 from tad_mctc.typing import DD, CNFunc, CNGradFunction, Tensor
 
 from ...conftest import DEVICE
@@ -105,6 +106,27 @@ def test_rcov_table_convention(
     numdr = zero_masked_pairs(numbers, numgrad(cn_d3_scaled, structure))
 
     assert pytest.approx(dcndr.cpu(), abs=tol) == numdr.cpu()
+
+
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+@pytest.mark.parametrize("collection,record", sample_list)
+def test_explicit_cutoff(
+    dtype: torch.dtype, collection: str, record: str
+) -> None:
+    """``cutoff`` passed explicitly must take the same code path as the
+    default (which resolves ``None`` to ``defaults.CUTOFF_D3`` before
+    doing anything else), so passing that same value through explicitly
+    must reproduce the default-cutoff gradient exactly."""
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+
+    numbers, positions = load_sample(collection, record, dd)
+
+    dcndr_default = cn_d3_gradient(numbers, positions)
+    dcndr_explicit = cn_d3_gradient(
+        numbers, positions, cutoff=torch.tensor(defaults.CUTOFF_D3, **dd)
+    )
+
+    assert pytest.approx(dcndr_explicit.cpu()) == dcndr_default.cpu()
 
 
 @pytest.mark.parametrize("function", [(cn_d3, cn_d3_gradient)])
