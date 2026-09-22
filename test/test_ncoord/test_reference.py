@@ -51,7 +51,11 @@ def _assert_close(
     compound more roundoff, up to ~1e-5, and pass `abs_tol` instead.
     """
     if dtype == torch.double:
-        assert torch.allclose(cn, ref, atol=1e-11, rtol=0)
+        # `assert_close` over `allclose`: on failure it reports the max
+        # abs/rel deviation and the offending index instead of a bare
+        # `False`, which is what a rare, tolerance-boundary mismatch
+        # needs to be diagnosed rather than re-guessed at.
+        torch.testing.assert_close(cn, ref, atol=1e-11, rtol=0)
     elif abs_tol is None:
         assert pytest.approx(ref.cpu()) == cn.cpu()
     else:
