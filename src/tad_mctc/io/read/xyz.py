@@ -464,7 +464,7 @@ def _parse_atom_block(
     lines = itertools.islice(fileobj, natoms)
     block = "".join(lines)
 
-    if natoms == 0:
+    if natoms == 0 or not block.strip():
         return np.empty(0, dtype=np.int64), np.empty((0, 3), dtype=np.float64)
 
     data = np.loadtxt(

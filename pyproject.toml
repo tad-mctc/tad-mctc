@@ -91,5 +91,11 @@ omit = [
   "./src/tad_mctc/units/*",
 ]
 
+[tool.coverage.paths]
+source = [
+  "src/tad_mctc",
+  "*/site-packages/tad_mctc",
+]
+
 [tool.coverage.report]
 fail_under = 90
