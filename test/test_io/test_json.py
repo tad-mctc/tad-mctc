@@ -188,7 +188,7 @@ def test_sniff_cjson_by_spaced_key_alias() -> None:
         # The single atom sits at the origin, which collides with the
         # deflate padding check's default padding value.
         with pytest.warns(StructureWarning):
-            result = read.read_json(filepath)
+            read.read_json(filepath)
 
 
 def test_read_fail_notfound() -> None:
