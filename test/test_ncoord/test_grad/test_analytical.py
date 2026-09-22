@@ -33,8 +33,7 @@ from tad_mctc.autograd import numgrad
 from tad_mctc.batch import pack, zero_masked_pairs
 from tad_mctc.data import radii
 from tad_mctc.io.structure import Structure
-from tad_mctc.ncoord import cn_d3, cn_d3_gradient
-from tad_mctc.ncoord import defaults
+from tad_mctc.ncoord import cn_d3, cn_d3_gradient, defaults
 from tad_mctc.typing import DD, CNFunc, CNGradFunction, Tensor
 
 from ...conftest import DEVICE
