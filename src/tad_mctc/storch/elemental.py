@@ -27,6 +27,7 @@ from typing import Any
 
 import torch
 
+from ..tools import is_compiling
 from ..typing import Tensor
 from .utils import get_eps
 
@@ -252,7 +253,10 @@ def sqrt(x: Tensor, *, eps: Tensor | float | int | None = None) -> Tensor:
             f"but {type(eps)} was given."
         )
 
-    if eps < 0.0:
+    # `eps < 0.0` reads a tensor's value, which is data-dependent control
+    # flow that `torch.compile(fullgraph=True)` (Dynamo) rejects. Skip the
+    # domain check while compiling; eager mode still validates.
+    if not is_compiling() and eps < 0.0:
         raise ValueError(
             f"Value for clamping must be larger than 0.0, but {eps} was given."
         )

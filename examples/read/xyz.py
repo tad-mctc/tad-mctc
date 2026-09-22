@@ -6,7 +6,7 @@ from pathlib import Path
 from tad_mctc.io import read
 
 path = Path(__file__).resolve().parent / "co2.xyz"
-numbers, positions = read.read_xyz(path)
+structure = read.read_structure(path)
 
-print(numbers)
-print(positions)
+print(structure.numbers)
+print(structure.positions)

@@ -65,7 +65,8 @@ def test_read(dtype: torch.dtype) -> None:
     # Create a temporary directory to save the file
     filepath = Path(__file__).parent / "files" / "qm9.xyz"
     with open(filepath, encoding="utf-8") as fp:
-        read_numbers, read_positions = read.xyz.read_xyz_qm9_fileobj(fp, **dd)
+        structure = read.xyz.read_xyz_qm9_fileobj(fp, **dd)
+        read_numbers, read_positions = structure.numbers, structure.positions
 
     # Check if the read data matches the written data
     assert read_numbers.dtype == numbers.dtype
@@ -98,9 +99,10 @@ def test_read_fortran_exponent() -> None:
         "H     0.7592247    0.0000000    0.1965590   0.294853\n"
     )
 
-    read_numbers, read_positions = read.xyz.read_xyz_qm9_fileobj(
+    structure = read.xyz.read_xyz_qm9_fileobj(
         io.StringIO(text), device=DEVICE, dtype=torch.double
     )
+    read_numbers, read_positions = structure.numbers, structure.positions
 
     assert (numbers == read_numbers).all()
     ref = positions * length.AA2AU

@@ -2,6 +2,7 @@
 import torch
 
 import tad_mctc as mctc
+from tad_mctc.io.structure import Structure
 
 # S22 system 4: formamide dimer
 numbers = mctc.batch.pack(
@@ -43,7 +44,9 @@ positions = mctc.batch.pack(
     )
 )
 
+structure = Structure(numbers=numbers, positions=positions)
+
 # calculate DFT-D4 coordination number
-cn = mctc.ncoord.cn_d4(numbers, positions)
+cn = mctc.ncoord.cn_d4(structure)
 torch.set_printoptions(precision=10)
 print(cn)

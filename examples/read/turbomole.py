@@ -6,7 +6,7 @@ from pathlib import Path
 from tad_mctc.io import read
 
 path = Path(__file__).resolve().parent / "h2o.coord"
-numbers, positions = read.read_turbomole(path)
+structure = read.read_structure(path)
 
-print(numbers)
-print(positions)
+print(structure.numbers)
+print(structure.positions)

@@ -58,7 +58,6 @@ from typing import IO, Any, NoReturn
 
 import torch
 
-from ... import storch
 from ...autograd import is_functorch_tensor
 from ...batch import deflate, real_pairs
 from ...data import pse
@@ -77,6 +76,14 @@ __all__ = [
     "dimension_check",
     "structure_check",
 ]
+
+# Below this interatomic distance (Bohr), atoms are considered fused. Real
+# bonds never go this short (H-H, the shortest, is ~1.4 Bohr). It also has to
+# clear the noise floor of the default (mm-based) `cdist` mode used below,
+# which grows with distance from the origin -- in float32, that floor is
+# still a few times below 0.5 for positions within ~300 Bohr of the origin,
+# but keep this in mind for very large or far-shifted structures.
+_COLDFUSION_THRESHOLD = 0.5
 
 
 def coldfusion_check(
@@ -102,8 +109,8 @@ def coldfusion_check(
     positions : Tensor
         A 2D tensor of shape (n_atoms, 3) containing atomic positions.
     threshold : Tensor | float | int | None, optional
-        Threshold for acceptable interatomic distances. Defaults to `None`,
-        which resolves to `torch.tensor(torch.finfo(dtype).eps ** 0.75, **dd)`.
+        Threshold for acceptable interatomic distances (Bohr). Defaults to
+        `None`, which resolves to `_COLDFUSION_THRESHOLD` (`0.5`).
     check : bool, optional
         Run the check at all. Defaults to `True`. A known-good geometry
         (e.g. a trusted reference structure at a scale where even the
@@ -134,16 +141,16 @@ def coldfusion_check(
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
 
     if threshold is None:
-        threshold = torch.tensor(torch.finfo(dd["dtype"]).eps ** 0.75, **dd)
+        threshold = torch.tensor(_COLDFUSION_THRESHOLD, **dd)
     elif not isinstance(threshold, Tensor):
         threshold = torch.tensor(threshold, **dd)
 
+    # Default (mm-based) `cdist` mode: faster, but loses precision on
+    # nearby points whose coordinates are far from the origin (see the
+    # comment above `_COLDFUSION_THRESHOLD` for why that is fine here).
     mask = real_pairs(numbers, mask_diagonal=True)
-    distances = torch.where(
-        mask,
-        storch.cdist(positions, positions),
-        torch.tensor(1e100, **dd),
-    )
+    pairwise = torch.cdist(positions, positions)
+    distances = torch.where(mask, pairwise, torch.tensor(1e100, **dd))
 
     # Check if any distance below the threshold is found
     if torch.any((distances < threshold) & mask):
@@ -164,8 +171,8 @@ def content_checks(
     """
     Check the content of the numbers and positions tensors.
 
-    This function should be asserted as it returns `True` on success and raises
-    an error on failure.
+    Raises on failure, so call it as a plain statement: wrapping it in
+    ``assert`` would skip the check under ``python -O``.
 
     Parameters
     ----------
@@ -209,7 +216,7 @@ def content_checks(
                 "residual padding. Remove before writing to file."
             )
 
-    assert coldfusion_check(
+    coldfusion_check(
         numbers,
         positions,
         check=check_coldfusion,
@@ -226,8 +233,10 @@ def deflatable_check(
     Check for the last coordinate being at the origin as this might clash with
     padding.
 
-    This function should be asserted as it returns ``True`` on success and
-    raises an error on failure.
+    Raises on failure (with ``raise_padding_exception=True``), so call it as
+    a plain statement: wrapping it in ``assert`` would skip the check under
+    ``python -O``. With ``shift_for_last=True``, a clash shifts
+    ``positions`` in place.
 
     Parameters
     ----------
@@ -346,10 +355,8 @@ def structure_check(
 ) -> bool | NoReturn:
     """
     Check a :class:`~tad_mctc.io.structure.Structure`'s tensors for consistent
-    shape, dtype and device. Ports the validation the removed ``Mol`` class
-    ran in its constructor and property setters to a plain function over
-    the tensor fields directly, so any caller can validate a ``Structure``
-    dict without needing a stateful wrapper object.
+    shape, dtype and device. A plain function over the tensor fields, so
+    any caller can validate them without building a ``Structure``.
 
     Parameters
     ----------
@@ -366,8 +373,9 @@ def structure_check(
         Lattice vectors as rows, shape ``(..., 3, 3)``. Not checked (the
         structure is not periodic) if ``None``.
     periodic : Tensor | None, optional
-        Boolean mask marking periodic lattice axes, shape ``(..., 3)``. Not
-        checked if ``None``.
+        Boolean mask marking periodic lattice axes, shape ``(3,)`` or the
+        lattice's ``(..., 3)``. Requires ``lattice``. Not checked if
+        ``None``.
     bonds : Tensor | None, optional
         Atom-index pairs describing bond connectivity, shape
         ``(..., nbond, 2)``. Not checked if ``None``.
@@ -386,7 +394,8 @@ def structure_check(
     ------
     RuntimeError
         A tensor has the wrong number of dimensions or an inconsistent
-        shape, or ``bond_orders`` is given without ``bonds``.
+        shape, ``bond_orders`` is given without ``bonds``, or
+        ``periodic`` without ``lattice``.
     DtypeError
         ``numbers``, ``periodic`` or ``bonds`` has the wrong dtype.
     DeviceError
@@ -420,6 +429,17 @@ def structure_check(
             raise DtypeError(
                 "Dtype of periodicity mask must be 'torch.bool', but is "
                 f"'{periodic.dtype}'."
+            )
+        if lattice is None:
+            raise RuntimeError(
+                "'periodic' was given without 'lattice': a periodicity mask "
+                "without the lattice vectors it refers to is meaningless."
+            )
+        if periodic.shape != (3,) and periodic.shape != lattice.shape[:-1]:
+            raise RuntimeError(
+                "Periodicity mask must be a '(3,)' tensor or match the "
+                f"lattice's batch shape '{tuple(lattice.shape[:-1])}', but "
+                f"shape is '{tuple(periodic.shape)}'."
             )
 
     if bond_orders is not None and bonds is None:

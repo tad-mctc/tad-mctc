@@ -328,7 +328,9 @@ def test_read_molecule_with_bonds() -> None:
     with tmpdir:
         result = read.read_cjson(filepath, **dd)
 
-    numbers, positions, lattice, periodic, bonds, bond_orders = result
+    numbers, positions = result.numbers, result.positions
+    lattice, periodic = result.lattice, result.periodic
+    bonds, bond_orders = result.bonds, result.bond_orders
     assert lattice is None
     assert periodic is None
     assert bonds is not None
@@ -355,7 +357,9 @@ def test_read_periodic_fractional() -> None:
     with tmpdir:
         result = read.read_cjson(filepath, **dd)
 
-    numbers, positions, lattice, periodic, bonds, bond_orders = result
+    numbers, positions = result.numbers, result.positions
+    lattice, periodic = result.lattice, result.periodic
+    bonds, bond_orders = result.bonds, result.bond_orders
     assert bonds is None
     assert bond_orders is None
     assert lattice is not None
@@ -409,7 +413,7 @@ def test_read_periodic_fractional_no_double_aatoau_scaling() -> None:
     with tmpdir:
         result = read.read_cjson(filepath, **dd)
 
-    _, positions, lattice, _, _, _ = result
+    positions, lattice = result.positions, result.lattice
     assert lattice is not None
 
     # cellpar length 1.0 Angstrom -> bohr for the lattice vector itself;
@@ -432,7 +436,8 @@ def test_read_molecule_bonds_without_order() -> None:
     with tmpdir:
         result = read.read_cjson(filepath, **dd)
 
-    numbers, _, _, _, bonds, bond_orders = result
+    numbers, bonds = result.numbers, result.bonds
+    bond_orders = result.bond_orders
     assert numbers.shape == (8,)
     assert bonds is not None
     assert bond_orders is not None
@@ -453,7 +458,7 @@ def test_read_molecule_bonds_object_without_connections() -> None:
     with tmpdir:
         result = read.read_cjson(filepath, **dd)
 
-    _, _, _, _, bonds, bond_orders = result
+    bonds, bond_orders = result.bonds, result.bond_orders
     assert bonds is None
     assert bond_orders is None
 
@@ -468,7 +473,9 @@ def test_read_molecule_varied_bond_orders() -> None:
     with tmpdir:
         result = read.read_cjson(filepath, **dd)
 
-    numbers, positions, lattice, periodic, bonds, bond_orders = result
+    numbers, positions = result.numbers, result.positions
+    lattice, periodic = result.lattice, result.periodic
+    bonds, bond_orders = result.bonds, result.bond_orders
     assert lattice is None
     assert periodic is None
     assert bonds is not None
@@ -541,7 +548,9 @@ def test_read_molecule_chemicaljson_alias() -> None:
     with tmpdir:
         result = read.read_cjson(filepath, **dd)
 
-    numbers, positions, lattice, periodic, bonds, bond_orders = result
+    numbers, positions = result.numbers, result.positions
+    lattice, periodic = result.lattice, result.periodic
+    bonds, bond_orders = result.bonds, result.bond_orders
     assert lattice is None
     assert periodic is None
     assert bonds is None
@@ -572,8 +581,10 @@ def test_read_periodic_camelcase_aliases_match_spaced_keys() -> None:
         result_spaced = read.read_cjson(filepath1, **dd)
         result_camel = read.read_cjson(filepath2, **dd)
 
-    numbers_s, positions_s, lattice_s, periodic_s, _, _ = result_spaced
-    numbers_c, positions_c, lattice_c, periodic_c, _, _ = result_camel
+    numbers_s, positions_s = result_spaced.numbers, result_spaced.positions
+    lattice_s, periodic_s = result_spaced.lattice, result_spaced.periodic
+    numbers_c, positions_c = result_camel.numbers, result_camel.positions
+    lattice_c, periodic_c = result_camel.lattice, result_camel.periodic
 
     assert lattice_s is not None and lattice_c is not None
     assert (numbers_s == numbers_c).all()

@@ -46,10 +46,10 @@ import torch
 
 from ...convert import symbol_to_number
 from ...exceptions import FormatErrorGenFormat
-from ...typing import DD, Tensor, get_default_dtype
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
-from .frompath import create_path_reader_periodic
+from ..structure import Structure
+from ._finalize import finalize_geometry, resolve_dd
+from .frompath import create_path_reader
 
 __all__ = ["read_genformat"]
 
@@ -77,11 +77,11 @@ def read_genformat_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor] | tuple[Tensor, Tensor, Tensor, Tensor]:
+) -> Structure:
     """
-    Reads a DFTB+ genFormat (.gen) file and returns atomic numbers and
-    positions as tensors, plus lattice vectors and a periodicity mask for
-    a supercell/fractional (periodic) file.
+    Reads a DFTB+ genFormat (.gen) file into a structure, with lattice
+    vectors and a periodicity mask for a supercell/fractional (periodic)
+    file.
 
     Parameters
     ----------
@@ -96,11 +96,10 @@ def read_genformat_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
-        Tensors of atomic numbers and positions (shape ``(nat, 3)``,
-        atomic units). A supercell/fractional file additionally carries a
-        lattice tensor (shape ``(3, 3)``, rows are lattice vectors in
-        bohr) and an all-``True`` periodicity mask (shape ``(3,)``).
+    Structure
+        Atomic numbers and positions (shape ``(nat, 3)``, bohr). A
+        supercell/fractional file also carries the lattice (rows are
+        lattice vectors, bohr) and an all-``True`` periodicity mask.
 
     Raises
     ------
@@ -108,11 +107,7 @@ def read_genformat_fileobj(
         The file does not conform with the expected format, or uses the
         unsupported helical (``H``) mode.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     lines = _iter_meaningful_lines(fileobj)
 
@@ -184,18 +179,8 @@ def read_genformat_fileobj(
 
     if not periodic_flag:
         positions = coords_t * length.AA2AU
-
-        assert shape_checks(numbers, positions, allow_batched=False)
-        assert content_checks(
-            numbers,
-            positions,
-            allow_batched=False,
-            check_coldfusion=kwargs.get("check_coldfusion", False),
-            coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-        )
-        assert deflatable_check(positions, fileobj, **kwargs)
-
-        return numbers, positions
+        positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
+        return Structure(numbers=numbers, positions=positions)
 
     origin_tokens = _next_line(lines, fileobj, "the origin").split()
     try:
@@ -233,17 +218,11 @@ def read_genformat_fileobj(
 
     periodic = torch.ones(3, dtype=torch.bool, device=device)
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
+
+    return Structure(
+        numbers=numbers, positions=positions, lattice=lattice, periodic=periodic
     )
-    assert deflatable_check(positions, fileobj, **kwargs)
-
-    return numbers, positions, lattice, periodic
 
 
-read_genformat = create_path_reader_periodic(read_genformat_fileobj)
+read_genformat = create_path_reader(read_genformat_fileobj)

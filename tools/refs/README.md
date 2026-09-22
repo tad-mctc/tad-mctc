@@ -47,8 +47,15 @@ Fortran source and `subprojects/mctc-lib.wrap` are tracked). Then:
 python tools/refs/gen_refs.py
 ```
 
-`gen_refs.py` writes one `test/references/<molecule>.json` per entry in
-its `SAMPLE_LIST`, in place; commit the result.
+`gen_refs.py` writes one `test/references/<collection>/<record>.json` per
+`(collection, record)` entry in its `SAMPLE_LIST`, in place; commit the
+result. `test/test_ncoord/samples.py` loads every JSON file it finds there,
+so adding a structure to `SAMPLE_LIST` and rerunning this script is all a
+new reference needs.
+`"other"` is not an mstore collection -- it names a bespoke entry from
+`tad_mctc.data.structures.other` (e.g. `("other", "C6H5I-CH3SH")`). Every
+entry is resolved through `tad_mctc.data.structures.get_structure` and
+written to the same `<collection>/<record>.json` shape.
 
 The steepness/cutoff parameters `gen_refs_fortran.f90` passes to each
 `new_ncoord` call were checked against `tad_mctc.ncoord.defaults` so that
@@ -61,3 +68,28 @@ The EEQBC coordination number (Froitzheim, Müller, Hansen, Grimme,
 steepness (`kcn=2.0`), radii-sum normalization exponent (`norm_exp=0.75`)
 and covalent radii table -- none of which match EEQ's or mctc-lib's
 `erf`/`erf_en` defaults.
+
+## Periodic cells
+
+Periodic cells sit in the same `SAMPLE_LIST` as the molecules and are
+regenerated in the same run -- no separate list, script or directory.
+Periodicity is not a different code path in mctc-lib: `ncoord_type%get_cn`
+always calls `get_lattice_points(mol%periodic, mol%lattice, ...)`, and a
+non-periodic `mol` (built via `new(mol, num, xyz)` with no lattice) is
+simply the case where that call returns a single lattice point at the
+origin. `gen_refs_fortran.f90` reads an optional lattice and periodicity
+mask straight off stdin after the atom list (see the header comment in
+that file for the exact format) and, when present, builds `mol` via
+`new(mol, num, xyz, lattice=lattice, periodic=periodic)` instead.
+
+One convention worth remembering: mctc-lib stores lattice vectors as
+*columns* (`lattice(:, i)` is the i-th vector -- see `mctc/cutoff.f90`'s
+`get_lattice_points`), while tad-mctc stores them as *rows*. The Fortran
+tool reads each row of stdin input straight into a column, which is the
+transpose, so nothing needs transposing on the Python side.
+
+For periodic entries, `"other"` names a bespoke cell from
+`tad_mctc.data.structures.other`: either a synthetic test cell or a real
+bulk solid (diamond, rock-salt NaCl) built from standard crystallographic
+lattice constants, since mstore has no covalent-network or ionic solid to
+mirror. Any other collection names an mstore record.

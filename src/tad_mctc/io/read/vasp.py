@@ -22,9 +22,8 @@ Reader for VASP ``POSCAR``/``CONTCAR`` geometry files.
 See https://www.vasp.at/wiki/index.php/POSCAR. Mirrors mctc-lib's
 ``mctc_io_read_vasp`` (``src/mctc/io/read/vasp.f90``).
 
-Unlike every other reader in this package, a POSCAR always carries a unit
-cell, so ``read_poscar_fileobj`` returns a 3-tuple (numbers, positions,
-lattice) instead of the usual (numbers, positions) pair.
+A POSCAR always carries a unit cell, so the returned structure is always
+periodic along all three axes, as in mctc-lib's ``new_structure``.
 """
 
 from __future__ import annotations
@@ -36,10 +35,10 @@ import torch
 
 from ...convert import symbol_to_number
 from ...exceptions import EmptyFileError, FormatErrorVASP
-from ...typing import DD, Tensor, get_default_dtype
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
-from .frompath import create_path_reader_lattice
+from ..structure import Structure
+from ._finalize import finalize_geometry, resolve_dd
+from .frompath import create_path_reader
 
 __all__ = ["read_poscar"]
 
@@ -77,13 +76,12 @@ def read_poscar_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor, Tensor]:
+) -> Structure:
     """
-    Reads a VASP POSCAR/CONTCAR file and returns atomic numbers, positions,
-    and lattice vectors as tensors. Both VASP5+ (element symbols on their
-    own line) and pre-VASP5 (element symbols on the comment line) formats
-    are supported, as are ``Selective dynamics`` and ``Direct``/fractional
-    coordinates.
+    Reads a VASP POSCAR/CONTCAR file into a periodic structure. Both VASP5+
+    (element symbols on their own line) and pre-VASP5 (element symbols on
+    the comment line) formats are supported, as are ``Selective dynamics``
+    and ``Direct``/fractional coordinates.
 
     Parameters
     ----------
@@ -98,9 +96,9 @@ def read_poscar_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor, Tensor)
-        Tensors of atomic numbers, positions, and lattice vectors (as rows).
-        Positions and lattice are given in atomic units (bohr).
+    Structure
+        Atomic numbers, positions, lattice vectors (as rows) and an
+        all-``True`` periodicity mask. Positions and lattice are in bohr.
 
     Raises
     ------
@@ -109,11 +107,7 @@ def read_poscar_fileobj(
     FormatErrorVASP
         The file does not conform with the expected POSCAR format.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     raw_lines = fileobj.readlines()
     if not raw_lines:
@@ -204,17 +198,12 @@ def read_poscar_fileobj(
         **ddi,
     )
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
+    periodic = torch.ones(3, dtype=torch.bool, device=device)
+
+    return Structure(
+        numbers=numbers, positions=positions, lattice=lattice, periodic=periodic
     )
-    assert deflatable_check(positions, fileobj, **kwargs)
-
-    return numbers, positions, lattice
 
 
-read_poscar = create_path_reader_lattice(read_poscar_fileobj)
+read_poscar = create_path_reader(read_poscar_fileobj)

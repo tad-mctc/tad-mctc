@@ -102,9 +102,8 @@ def test_read(dtype: torch.dtype) -> None:
     # Create a temporary directory to save the file
     filepath = Path(__file__).parent / "files" / "mol.json"
     with open(filepath, encoding="utf-8") as fp:
-        read_numbers, read_positions = read.qcschema.read_qcschema_fileobj(  # type: ignore[misc]
-            fp, **dd
-        )
+        structure = read.qcschema.read_qcschema_fileobj(fp, **dd)
+        read_numbers, read_positions = structure.numbers, structure.positions
 
     # Check if the read data matches the written data
     assert read_numbers.dtype == numbers.dtype
@@ -139,7 +138,8 @@ def test_valid1_qcschema() -> None:
     }
     tmpdir, filepath = _write(data)
     with tmpdir:
-        numbers, positions = read.read_qcschema(filepath, device=DEVICE)  # type: ignore[misc]
+        structure = read.read_qcschema(filepath, device=DEVICE)
+        numbers, positions = structure.numbers, structure.positions
 
     assert (numbers == torch.tensor([8, 1, 1], device=DEVICE)).all()
     ref = torch.tensor(
@@ -379,7 +379,8 @@ def test_valid2_qcschema() -> None:
     }
     tmpdir, filepath = _write(data)
     with tmpdir:
-        numbers, positions = read.read_qcschema(filepath, device=DEVICE)  # type: ignore[misc]
+        structure = read.read_qcschema(filepath, device=DEVICE)
+        numbers, positions = structure.numbers, structure.positions
 
     # mirrors mctc-lib's assertions on `struc%nat` and `struc%nid`
     assert numbers.shape == (38,)
@@ -412,7 +413,8 @@ def test_valid3_qcschema() -> None:
     }
     tmpdir, filepath = _write(data)
     with tmpdir:
-        numbers, positions = read.read_qcschema(filepath, device=DEVICE)  # type: ignore[misc]
+        structure = read.read_qcschema(filepath, device=DEVICE)
+        numbers, positions = structure.numbers, structure.positions
 
     assert (numbers == torch.tensor([8, 1, 1], device=DEVICE)).all()
     assert positions.shape == (3, 3)
@@ -451,7 +453,8 @@ def test_valid4_qcschema() -> None:
     }
     tmpdir, filepath = _write(data)
     with tmpdir:
-        numbers, positions = read.read_qcschema(filepath, device=DEVICE)  # type: ignore[misc]
+        structure = read.read_qcschema(filepath, device=DEVICE)
+        numbers, positions = structure.numbers, structure.positions
 
     assert (numbers == torch.tensor([8, 1, 1], device=DEVICE)).all()
     assert positions.shape == (3, 3)
@@ -519,9 +522,10 @@ def test_extras1_qcschema() -> None:
     }
     tmpdir, filepath = _write(data)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_qcschema(  # type: ignore[misc]
-            filepath, device=DEVICE
-        )
+        structure = read.read_qcschema(filepath, device=DEVICE)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None and periodic is not None
 
     assert numbers.shape == (6,)
     assert positions.shape == (6, 3)
@@ -570,7 +574,7 @@ def test_extras_periodic_without_lattice_qcschema() -> None:
     with tmpdir:
         result = read.read_qcschema(filepath)
 
-    assert len(result) == 2
+    assert result.lattice is None
 
 
 def test_invalid_lattice_length_qcschema() -> None:

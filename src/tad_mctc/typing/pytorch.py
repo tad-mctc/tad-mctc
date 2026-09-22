@@ -26,7 +26,15 @@ tensor-like behavior (`.to` and `.type` methods) to classes.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, NoReturn, Protocol, TypedDict, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    NoReturn,
+    Protocol,
+    TypedDict,
+    cast,
+)
 
 import torch
 from torch import Tensor
@@ -34,9 +42,14 @@ from torch import Tensor
 from ..exceptions import DtypeError
 from .compat import CountingFunction, Self, TypeVar
 
+if TYPE_CHECKING:
+    # Only for the `CNFunc` annotation below -- importing `Structure` at
+    # runtime would cycle back here, since `io.checks.structure` already
+    # imports from this package (`..typing`).
+    from ..io.structure import Structure
+
 __all__ = [
     "CNFunc",
-    "CNFunction",
     "CNGradFunction",
     "DD",
     "MockTensor",
@@ -574,38 +587,12 @@ class ModuleLike(torch.nn.Module):
 
 class CNFunc(Protocol):
     """
-    Type annotation for a specific coordination number function.
+    Type annotation for a coordination-number function: the call signature
+    every :class:`~tad_mctc.ncoord.common.CNModel` preset (``cn_d3``,
+    ``cn_d4``, ...) satisfies.
     """
 
-    def __call__(
-        self,
-        numbers: Tensor,
-        positions: Tensor,
-        counting_function: CountingFunction | None = None,
-    ) -> Tensor:
-        """
-        Calculate the coordination number of each atom in the system.
-        """
-        ...
-
-
-class CNFunction(Protocol):
-    """
-    Type annotation for general coordination number function.
-    """
-
-    def __call__(
-        self,
-        numbers: Tensor,
-        positions: Tensor,
-        *,
-        counting_function: CountingFunction | None = None,
-        rcov: Tensor | None = None,
-        en: Tensor | None = None,
-        cutoff: Tensor | None = None,
-        kcn: float = 7.5,
-        **kwargs: Any,
-    ) -> Tensor:
+    def __call__(self, structure: Structure) -> Tensor:
         """
         Calculate the coordination number of each atom in the system.
         """

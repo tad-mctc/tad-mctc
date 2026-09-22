@@ -22,7 +22,7 @@ Functions for creating masks that discern between padding and actual values.
 """
 
 from .atoms import real_atoms
-from .pairs import real_pairs
+from .pairs import real_pairs, zero_masked_pairs
 from .triples import real_triples
 
-__all__ = ["real_atoms", "real_pairs", "real_triples"]
+__all__ = ["real_atoms", "real_pairs", "real_triples", "zero_masked_pairs"]

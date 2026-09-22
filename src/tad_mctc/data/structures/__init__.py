@@ -18,99 +18,146 @@
 Data: Structures
 ================
 
-Test-fixture structures for tad-mctc, merging two sources into one public
-`structures` dict:
+Named test structures, reached through one call::
 
-- :mod:`tad_mctc.data.structures.other` -- bespoke structures with no
-  verified upstream origin.
-- :mod:`tad_mctc.data.structures.solids` -- real periodic bulk solids with
-  a verified crystallographic origin that is not mstore (mstore has no
-  covalent-network or ionic bulk solid to mirror).
-- :mod:`tad_mctc.data.structures.mstore` -- structures with a verified,
-  coordinate-confirmed origin in https://github.com/grimme-lab/mstore,
-  organized per dataset there.
+    get_structure("x23", "acetic")      # an mstore record
+    get_structure("other", "diamond")   # a bespoke tad-mctc record
+    get_structure("glu_ala", "0064")    # one step of the glu_ala size ladder
 
-`structures` holds only `other`'s and `solids`' entries -- both are
-verified-or-not-but-not-mstore, sourced by this repository itself rather
-than mirrored from an upstream testsuite. An mstore record is reached
-exclusively through :func:`tad_mctc.data.structures.mstore.get_structure`
-(e.g. ``get_structure("mb16_43", "SiH4")``) -- `structures` used to re-key
-11 of them under historical compound names (`"MB16_43_01"`, `"SiH4"`, ...),
-but those aliases were removed so that mstore's own records stay the one
-canonical way to reach mstore data, with no second name pointing at the
-same object.
+A structure is always named by ``(collection, record)``, mirroring mstore's
+``get_structure(mol, collection, record)``. The collections come from three
+data sources, which only supply records and have no lookup logic of their
+own:
 
-A third, sibling source, :mod:`tad_mctc.data.structures.glu_ala`, is
-likewise never merged into `structures`: a 28-structure, 28-to-212,994-atom
-size ladder for scaling benchmarks (see `examples/scaling/glu_ala.py`),
-reached through its own `get_structure`/`list_records`.
+- :mod:`tad_mctc.data.structures.mstore` -- one collection per mstore
+  dataset (https://github.com/grimme-lab/mstore), with mstore's own record
+  ids.
+- :mod:`tad_mctc.data.structures.other` -- the ``"other"`` collection:
+  bespoke structures with no mstore counterpart, including periodic cells.
+- :mod:`tad_mctc.data.structures.glu_ala` -- the ``"glu_ala"`` collection:
+  a peptide size ladder for scaling benchmarks, loaded lazily.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Mapping, TypeVar
 
 import torch
 from torch import Tensor
 
 from ...io.structure import Structure
-from .mstore import get_structure
+from .glu_ala import glu_ala
+from .mstore import datasets
 from .other import other
-from .solids import solids
 
-__all__ = ["merge_nested_dicts", "resolve_structure", "structures"]
+__all__ = [
+    "collections",
+    "get_structure",
+    "list_collections",
+    "list_records",
+]
 
 
-structures: dict[str, Structure] = {
-    name: Structure(**record) for name, record in {**other, **solids}.items()
+collections: dict[str, Mapping[str, dict[str, Tensor]]] = {
+    **datasets,
+    "other": other,
+    "glu_ala": glu_ala,
 }
+"""Every collection, keyed by collection name, each mapping record ids to
+the fields of one :class:`~tad_mctc.io.structure.Structure`."""
 
 
-def resolve_structure(
+V = TypeVar("V")
+
+
+def _lookup_or_raise(
+    mapping: Mapping[str, V], key: str, what: str, context: str = ""
+) -> V:
+    """
+    Return ``mapping[key]``, or raise a ``KeyError`` that lists every valid
+    key, so a typo in a collection or record name is easy to fix.
+    """
+    try:
+        return mapping[key]
+    except KeyError:
+        where = f" in {context}" if context else ""
+        raise KeyError(
+            f"Unknown {what} '{key}'{where}. Available: {sorted(mapping)}"
+        ) from None
+
+
+def get_structure(
     collection: str,
     record: str,
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
 ) -> Structure:
     """
-    Resolve one ``(collection, record)`` lookup to a ``Structure``, moved to
-    ``device``/``dtype`` in the same call -- the same two-argument shape as
-    :func:`tad_mctc.data.structures.mstore.get_structure` (and mstore's own
-    Fortran ``get_structure``). ``"other"`` and ``"solids"`` are not mstore
-    collections, so they resolve through :data:`structures` (keyed by
-    record name) instead of :func:`get_structure`.
-
-    This is the one place downstream "tad-*" packages should reach for a
-    named structure -- :mod:`tad_mctc.data.structures._reference_manifest`'s
-    own, narrower ``resolve_reference_structure`` delegates here too, rather
-    than keeping a second copy of this branch for its ``SAMPLE_LIST`` use
-    case.
-    """
-    if collection in ("other", "solids"):
-        return structures[record].to(device=device, dtype=dtype)
-    return get_structure(collection, record, device=device, dtype=dtype)
-
-
-def merge_nested_dicts(
-    a: dict[str, dict[str, Tensor]], b: dict[str, Any]
-) -> dict[str, Any]:
-    """
-    Merge nested dictionaries. dictionary `a` remains unaltered, while
-    the corresponding keys of it are added to `b`.
+    Look up one structure by collection and record id.
 
     Parameters
     ----------
-    a : dict
-        First dictionary (not changed).
-    b : dict
-        Second dictionary (changed).
+    collection : str
+        Collection name, one of :func:`list_collections` (e.g. ``"x23"``,
+        ``"other"``).
+    record : str
+        Record id within that collection (e.g. ``"acetic"``).
+    device : torch.device | None, optional
+        Device to move the structure to. ``None`` keeps the default device.
+        Passing a ``DD`` via ``**dd`` works, since its keys match these
+        parameter names.
+    dtype : torch.dtype | None, optional
+        Floating dtype for the structure's floating-point fields. ``None``
+        keeps the default dtype.
 
     Returns
     -------
-    dict
-        Merged dictionary `b`.
+    Structure
+        The requested structure.
+
+    Raises
+    ------
+    KeyError
+        If ``collection`` or ``record`` is not found, listing the valid
+        options for whichever lookup failed.
     """
-    for key in b:
-        if key in a:
-            b[key].update(a[key])
-    return b
+    records = _lookup_or_raise(collections, collection, "collection")
+    fields = _lookup_or_raise(
+        records, record, "record", context=f"collection '{collection}'"
+    )
+    return Structure(**fields).to(device=device, dtype=dtype)
+
+
+def list_collections() -> list[str]:
+    """
+    List every collection name, mirroring mstore's ``list_collections``.
+
+    Returns
+    -------
+    list[str]
+        The keys of :data:`collections`.
+    """
+    return list(collections)
+
+
+def list_records(collection: str) -> list[str]:
+    """
+    List every record id in one collection, mirroring mstore's
+    ``list_records``.
+
+    Parameters
+    ----------
+    collection : str
+        Collection name, one of :func:`list_collections`.
+
+    Returns
+    -------
+    list[str]
+        The record ids in that collection.
+
+    Raises
+    ------
+    KeyError
+        If ``collection`` is not found, listing the valid collections.
+    """
+    return list(_lookup_or_raise(collections, collection, "collection"))

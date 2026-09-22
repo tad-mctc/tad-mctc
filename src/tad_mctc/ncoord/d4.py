@@ -24,57 +24,59 @@ dependent term.
 
 from __future__ import annotations
 
+from functools import partial
+
 import torch
 
-from ..data import en as eneg
-from ..data import radii
-from ..typing import DD, CountingFunction, Tensor
+from ..typing import Tensor
 from . import defaults
-from .common import coordination_number
+from .common import CNModel
 from .count import erf_count
 
-__all__ = ["cn_d4"]
+__all__ = ["cn_d4", "d4_en_weight"]
 
 
-def cn_d4(
-    numbers: Tensor,
-    positions: Tensor,
-    counting_function: CountingFunction = erf_count,
+def d4_en_weight(
+    en_i: Tensor,
+    en_j: Tensor,
+    k4: Tensor | float | int = defaults.D4_K4,
+    k5: Tensor | float | int = defaults.D4_K5,
+    k6: Tensor | float | int = defaults.D4_K6,
 ) -> Tensor:
     """
-    Compute the D4 fractional coordination number.
+    Electronegativity pair weight used by the DFT-D4 coordination number.
 
     Parameters
     ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
-    positions : Tensor
-        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
-    counting_function : CountingFunction, optional
-        Counting function used for the DFT-D4 coordination number.
-        Defaults to the error function counting function
-        :func:`tad_mctc.ncoord.count.erf_count`.
+    en_i, en_j : Tensor
+        Pauling electronegativities of the two atoms in a pair.
+    k4, k5, k6 : Tensor | float | int, optional
+        Parameters of the electronegativity scaling. Default to
+        :data:`tad_mctc.ncoord.defaults.D4_K4`,
+        :data:`tad_mctc.ncoord.defaults.D4_K5` and
+        :data:`tad_mctc.ncoord.defaults.D4_K6`.
 
     Returns
     -------
     Tensor
-        Coordination numbers for all atoms (shape: ``(..., nat)``).
+        Elementwise pair weight, broadcastable over pairs.
     """
-    dd: DD = {"device": positions.device, "dtype": positions.dtype}
-    cutoff = torch.tensor(defaults.CUTOFF_D4, **dd)
-    rcov = radii.COV_D3(**dd)[numbers]
-    en = eneg.PAULING(**dd)[numbers]
+    en_diff = torch.abs(en_i - en_j)
+    return k4 * torch.exp(-((en_diff + k5) ** 2) / k6)
 
-    endiff = torch.abs(en.unsqueeze(-2) - en.unsqueeze(-1))
-    weight = defaults.D4_K4 * torch.exp(
-        -((endiff + defaults.D4_K5) ** 2.0) / defaults.D4_K6
-    )
 
-    return coordination_number(
-        numbers,
-        positions,
-        counting_function=counting_function,
-        rcov=rcov,
-        cutoff=cutoff,
-        pair_weight=weight,
-    )
+cn_d4 = CNModel(
+    count=partial(erf_count, kcn=defaults.KCN_D4),
+    cutoff=defaults.CUTOFF_D4,
+    pair_weight=d4_en_weight,
+)
+"""
+The D4 fractional coordination number: the error-function counting
+function, DFT-D4's steepness and cutoff, and the electronegativity pair
+weight :func:`d4_en_weight` (:mod:`tad_mctc.ncoord.defaults`). Callable as
+``cn_d4(structure)``: the molecular, all-pairs path when
+``structure.lattice is None``, the periodic path (auto-building a shift
+table every call) otherwise. ``cn_d4.with_precomputed_shifts(structure,
+shifts=...)`` is the ``vmap``/``jacrev``-over-``lattice``-safe periodic
+alternative, reusing a precomputed shift table instead of rebuilding one.
+"""

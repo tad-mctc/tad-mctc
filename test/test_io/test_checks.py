@@ -49,6 +49,15 @@ def test_coldfusion() -> None:
         checks.coldfusion_check(numbers, positions_close, threshold=0.5)
 
 
+def test_coldfusion_default_threshold() -> None:
+    # atoms 0.1 Bohr apart must be caught with no explicit `threshold`
+    numbers = torch.tensor([1, 2])
+    positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
+
+    with pytest.raises(StructureError):
+        checks.coldfusion_check(numbers, positions_close)
+
+
 def test_coldfusion_threshold_already_a_tensor() -> None:
     # `threshold` given as a Tensor must be used as-is, not re-wrapped
     numbers = torch.tensor([1, 2])
@@ -73,8 +82,7 @@ def test_coldfusion_check_disabled() -> None:
 
 
 def test_coldfusion_cutoff_smaller_than_threshold() -> None:
-    # a clash just past the default cutoff must still be caught: `cutoff`
-    # is raised internally to `threshold` whenever `threshold` is larger
+    # `cutoff` must not limit the check: a clash beyond it is still caught
     numbers = torch.tensor([1, 2])
     positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
 
@@ -85,8 +93,8 @@ def test_coldfusion_cutoff_smaller_than_threshold() -> None:
 
 
 def test_coldfusion_sparse_matches_dense_on_padded_batch() -> None:
-    # the O(nat) path (ndim == 2) and the dense fallback (ndim == 3, as used
-    # for a padded batch) must agree on a passing case with real padding
+    # a padded batch and its individual systems must agree on a passing
+    # case with real padding
     numbers = torch.tensor([[1, 8, 0], [1, 1, 1]])
     positions = torch.tensor(
         [

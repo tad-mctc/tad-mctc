@@ -28,13 +28,12 @@ from typing import IO, Any
 
 import torch
 
-from ...typing import PathLike, Tensor
+from ...typing import PathLike
 from ..structure import Structure
 from .aims import read_aims_fileobj
 from .cjson import read_cjson_fileobj
 from .ctfile import read_molfile_fileobj, read_sdf_fileobj
 from .dotfiles import read_chrg, read_uhf
-from .frompath import JSONResult
 from .gaussian import read_gaussian_fileobj
 from .genformat import read_genformat_fileobj
 from .json import read_json_fileobj
@@ -56,12 +55,7 @@ def read_from_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> (
-    tuple[Tensor, Tensor]
-    | tuple[Tensor, Tensor, Tensor]
-    | tuple[Tensor, Tensor, Tensor, Tensor]
-    | JSONResult
-):
+) -> Structure:
     """
     Helper to read the structure from the given file.
 
@@ -80,13 +74,11 @@ def read_from_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor) | (Tensor, Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
-        (Possibly batched) tensors of atomic numbers and positions. Positions
-        is a tensor of shape (batch_size, nat, 3) in atomic units. A VASP
-        POSCAR/CONTCAR file additionally carries lattice vectors as a third
-        tensor of shape (3, 3), also in atomic units. A periodic Turbomole
-        coord file (``$periodic`` > 0) additionally carries a periodicity
-        mask as a fourth tensor of shape (3,).
+    Structure
+        The (possibly batched) structure, in atomic units, with a lattice
+        and periodicity mask for a periodic file and bonds for a file that
+        declares them. Charge and unpaired electrons are not read here;
+        see :func:`read_structure`.
 
     Raises
     ------
@@ -107,8 +99,7 @@ def read_from_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
         )
     # mctc-lib's `get_filetype` maps both the *extension* ".coord" and the
-    # bare *filename* "coord" (no extension) to its `tmol` filetype -- the
-    # extension case was missing here.
+    # bare *filename* "coord" (no extension) to its `tmol` filetype.
     if ftype in ("tmol", "tm", "turbomole", "coord") or fname == "coord":
         return read_turbomole_fileobj(
             fileobj, device=device, dtype=dtype, dtype_int=dtype_int, **kwargs
@@ -180,12 +171,7 @@ def read(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> (
-    tuple[Tensor, Tensor]
-    | tuple[Tensor, Tensor, Tensor]
-    | tuple[Tensor, Tensor, Tensor, Tensor]
-    | JSONResult
-):
+) -> Structure:
     """
     Helper to read the structure from the given file path.
 
@@ -206,13 +192,11 @@ def read(
 
     Returns
     -------
-    (Tensor, Tensor) | (Tensor, Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor)
-        (Possibly batched) tensors of atomic numbers and positions. Positions
-        is a tensor of shape (batch_size, nat, 3) in atomic units. A VASP
-        POSCAR/CONTCAR file additionally carries lattice vectors as a third
-        tensor of shape (3, 3), also in atomic units. A periodic Turbomole
-        coord file (``$periodic`` > 0) additionally carries a periodicity
-        mask as a fourth tensor of shape (3,).
+    Structure
+        The (possibly batched) structure, in atomic units, with a lattice
+        and periodicity mask for a periodic file and bonds for a file that
+        declares them. Charge and unpaired electrons are not read here;
+        see :func:`read_structure`.
 
     Raises
     ------
@@ -251,7 +235,7 @@ def read_structure(
     """
     Read a structure from a file, picking up its ``.CHRG``/``.UHF``
     sidecar files from the same directory if present. Mirrors mctc-lib's
-    ``read_structure``; replaces the removed ``Mol.from_path``.
+    ``read_structure``.
 
     Parameters
     ----------
@@ -267,26 +251,23 @@ def read_structure(
         Integer data type of the tensors. Defaults to ``torch.long``.
     check_coldfusion : bool, optional
         Run the interatomic-distance sanity check while reading. Defaults
-        to ``False``: this check builds its own neighbour list (see
-        :func:`tad_mctc.io.checks.coldfusion_check`) on the CPU, before
-        ``device`` is applied, so it can dominate read time for a large
-        structure; pass ``True`` to opt in for an untrusted geometry.
+        to ``False``: the check compares all atom pairs (see
+        :func:`tad_mctc.io.checks.coldfusion_check`), so it can dominate
+        read time for a large structure; pass ``True`` to opt in for an
+        untrusted geometry.
 
     Returns
     -------
     Structure
-        The structure's atomic numbers, positions, charge, number of
-        unpaired electrons and, for a periodic file (VASP POSCAR/CONTCAR,
-        always; a Turbomole/aims/genformat/pymatgen file with periodicity
-        declared), its lattice and periodicity mask. A cjson file
-        additionally carries bond connectivity/order if present.
+        The structure from :func:`read`, with the charge and number of
+        unpaired electrons from the sidecar files (zero if absent).
 
     Raises
     ------
     FileNotFoundError
         Given file does not exist.
     """
-    result = read(
+    structure = read(
         filepath,
         ftype=ftype,
         device=device,
@@ -294,32 +275,11 @@ def read_structure(
         dtype_int=dtype_int,
         check_coldfusion=check_coldfusion,
     )
-    periodic = None
-    bonds = None
-    bond_orders = None
-    if len(result) == 6:
-        numbers, positions, lattice, periodic, bonds, bond_orders = result
-    elif len(result) == 4:
-        numbers, positions, lattice, periodic = result
-    elif len(result) == 3:
-        numbers, positions, lattice = result
-    else:
-        numbers, positions = result
-        lattice = None
 
     charge = read_chrg(filepath, device=device, dtype=dtype)
     uhf = read_uhf(filepath, device=device, dtype=dtype_int)
     # `uhf` counts unpaired electrons, so it stays an integer tensor
     # (matching the mstore mirror's `torch.tensor(1)`-style records),
-    # unlike `charge`, which keeps `Mol.charge`'s float representation.
+    # while `charge` is a float tensor.
 
-    return Structure(
-        numbers=numbers,
-        positions=positions,
-        charge=charge,
-        uhf=uhf,
-        lattice=lattice,
-        periodic=periodic,
-        bonds=bonds,
-        bond_orders=bond_orders,
-    )
+    return structure.replace(charge=charge, uhf=uhf)

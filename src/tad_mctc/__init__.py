@@ -90,7 +90,8 @@ Example
 ... ))
 >>>
 >>> # calculate coordination number
->>> cn = mctc.ncoord.cn_d4(numbers, positions)
+>>> structure = mctc.io.structure.Structure(numbers=numbers, positions=positions)
+>>> cn = mctc.ncoord.cn_d4(structure)
 >>>
 >>> torch.set_printoptions(precision=10)
 >>> print(cn)
@@ -113,6 +114,7 @@ from . import (
     io,
     math,
     ncoord,
+    neighbor,
     storch,
     typing,
     units,
@@ -130,6 +132,7 @@ __all__ = [
     "io",
     "math",
     "ncoord",
+    "neighbor",
     "storch",
     "typing",
     "units",

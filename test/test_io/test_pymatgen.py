@@ -190,8 +190,8 @@ def test_read_molecule() -> None:
     with tmpdir:
         result = read.read_pymatgen(filepath, **dd)
 
-    assert len(result) == 2
-    numbers, positions = result
+    assert result.lattice is None
+    numbers, positions = result.numbers, result.positions
 
     assert numbers.shape == (9,)
     assert len(torch.unique(numbers)) == 2
@@ -209,9 +209,10 @@ def test_read_structure() -> None:
 
     tmpdir, filepath = _write(_VALID_SOL1)
     with tmpdir:
-        numbers, positions, lattice, periodic = read.read_pymatgen(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read_pymatgen(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice, periodic = structure.lattice, structure.periodic
+        assert lattice is not None
 
     assert numbers.shape == (6,)
     assert len(torch.unique(numbers)) == 2

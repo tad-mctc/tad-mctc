@@ -15,6 +15,7 @@ The following modules are contained with `tad_mctc`.
    io/index
    math/index
    ncoord/index
+   neighbor/index
    properties/index
    storch/index
    tools/index

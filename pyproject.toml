@@ -31,6 +31,7 @@ markers = [
 
 [tool.mypy]
 mypy_path = "src"
+explicit_package_bases = true
 check_untyped_defs = true
 disallow_any_generics = true
 disallow_incomplete_defs = true
@@ -44,7 +45,6 @@ exclude = '''(?x)
   | ^src/tad_mctc/typing/
   | ^src/tad_mctc/units/
   | ^test/conftest.py$
-  | ^examples/
   | ^build/
   | ^dist/
   | ^setup.py$
@@ -89,6 +89,12 @@ omit = [
   "./src/tad_mctc/data/structures/*",
   "./src/tad_mctc/typing/*",
   "./src/tad_mctc/units/*",
+]
+
+[tool.coverage.paths]
+source = [
+  "src/tad_mctc",
+  "*/site-packages/tad_mctc",
 ]
 
 [tool.coverage.report]

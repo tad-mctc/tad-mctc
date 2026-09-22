@@ -27,7 +27,7 @@ Example
 -------
 >>> from tad_mctc.io import read
 >>> path = "mol.xyz"
->>> numbers, positions = read.read(path)
+>>> structure = read.read(path)
 """
 
 from .aims import *

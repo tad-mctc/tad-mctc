@@ -23,49 +23,20 @@ Calculation of the double-exponential coordination number used in GFN2-xTB.
 
 from __future__ import annotations
 
-import torch
-
-from ..data import radii
-from ..typing import DD, CountingFunction, Tensor
 from . import defaults
-from .common import coordination_number
+from .common import CNModel
 from .count import gfn2_count
 
 __all__ = ["cn_gfn2"]
 
 
-def cn_gfn2(
-    numbers: Tensor,
-    positions: Tensor,
-    counting_function: CountingFunction = gfn2_count,
-) -> Tensor:
-    """
-    Compute the double-exponential (GFN2-xTB) coordination number.
-
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
-    positions : Tensor
-        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
-    counting_function : CountingFunction, optional
-        Counting function used for the GFN2-xTB coordination number.
-        Defaults to the GFN2-xTB counting function
-        :func:`tad_mctc.ncoord.count.gfn2_count`.
-
-    Returns
-    -------
-    Tensor
-        Coordination numbers for all atoms (shape: ``(..., nat)``).
-    """
-    dd: DD = {"device": positions.device, "dtype": positions.dtype}
-    cutoff = torch.tensor(defaults.CUTOFF_GFN2, **dd)
-    rcov = radii.COV_D3(**dd)[numbers]
-
-    return coordination_number(
-        numbers,
-        positions,
-        counting_function=counting_function,
-        rcov=rcov,
-        cutoff=cutoff,
-    )
+cn_gfn2 = CNModel(count=gfn2_count, cutoff=defaults.CUTOFF_GFN2)
+"""
+The double-exponential (GFN2-xTB) coordination number
+(:mod:`tad_mctc.ncoord.defaults`). Callable as ``cn_gfn2(structure)``:
+the molecular, all-pairs path when ``structure.lattice is None``, the
+periodic path (auto-building a shift table every call) otherwise.
+``cn_gfn2.with_precomputed_shifts(structure, shifts=...)`` is the
+``vmap``/``jacrev``-over-``lattice``-safe periodic alternative, reusing a
+precomputed shift table instead of rebuilding one.
+"""

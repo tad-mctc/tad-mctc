@@ -49,9 +49,10 @@ from typing import IO, Any
 
 import torch
 
-from ...typing import DD, get_default_dtype
+from ..structure import Structure
+from ._finalize import resolve_dd
 from .cjson import read_cjson_from_dict
-from .frompath import JSONResult, create_path_reader_json
+from .frompath import create_path_reader
 from .pymatgen import read_pymatgen_from_dict
 from .qcschema import read_qcschema_from_dict
 
@@ -64,7 +65,7 @@ def read_json_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> JSONResult:
+) -> Structure:
     """
     Reads a generic JSON file, sniffs which of the qcschema/pymatgen/
     cjson schemas it matches, and delegates to that reader. See the
@@ -83,8 +84,8 @@ def read_json_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor) | (Tensor, Tensor, Tensor, Tensor) | CJSONResult
-        Whichever shape the matched delegate returns -- see
+    Structure
+        The structure from the matched delegate -- see
         :func:`tad_mctc.io.read.qcschema.read_qcschema_fileobj`,
         :func:`tad_mctc.io.read.pymatgen.read_pymatgen_fileobj`, or
         :func:`tad_mctc.io.read.cjson.read_cjson_fileobj`.
@@ -95,11 +96,7 @@ def read_json_fileobj(
         The file is not valid JSON (``json.JSONDecodeError``, a
         ``ValueError`` subclass).
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     data = json.load(fileobj)
 
@@ -125,4 +122,4 @@ def read_json_fileobj(
     return read_qcschema_from_dict(data, fileobj, dd, ddi, **kwargs)
 
 
-read_json = create_path_reader_json(read_json_fileobj)
+read_json = create_path_reader(read_json_fileobj)

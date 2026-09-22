@@ -46,9 +46,9 @@ import torch
 
 from ...convert import symbol_to_number
 from ...exceptions import FormatErrorQChem
-from ...typing import DD, Tensor, get_default_dtype
 from ...units import length
-from ..checks import content_checks, deflatable_check, shape_checks
+from ..structure import Structure
+from ._finalize import finalize_geometry, resolve_dd
 from .frompath import create_path_reader
 
 __all__ = ["read_qchem"]
@@ -153,7 +153,7 @@ def read_qchem_fileobj(
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
     **kwargs: Any,
-) -> tuple[Tensor, Tensor]:
+) -> Structure:
     """
     Reads a Q-Chem ``$molecule`` block and returns atomic numbers and
     positions as tensors, from either Cartesian or Z-matrix input.
@@ -171,20 +171,15 @@ def read_qchem_fileobj(
 
     Returns
     -------
-    (Tensor, Tensor)
-        Tensors of atomic numbers and positions. Positions is a tensor of
-        shape (nat, 3) in atomic units.
+    Structure
+        Atomic numbers and positions (shape ``(nat, 3)``, bohr).
 
     Raises
     ------
     FormatErrorQChem
         The file does not conform with the expected format.
     """
-    dd: DD = {
-        "device": device,
-        "dtype": dtype if dtype is not None else get_default_dtype(),
-    }
-    ddi: DD = {"device": device, "dtype": dtype_int}
+    dd, ddi = resolve_dd(device, dtype, dtype_int)
 
     for line in fileobj:
         tokens = line.split()
@@ -270,17 +265,9 @@ def read_qchem_fileobj(
     numbers = torch.tensor(numbers_list, **ddi)
     positions = torch.tensor(positions_list, **dd)
 
-    assert shape_checks(numbers, positions, allow_batched=False)
-    assert content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-    )
-    assert deflatable_check(positions, fileobj, **kwargs)
+    positions = finalize_geometry(numbers, positions, fileobj, **kwargs)
 
-    return numbers, positions
+    return Structure(numbers=numbers, positions=positions)
 
 
 read_qchem = create_path_reader(read_qchem_fileobj)

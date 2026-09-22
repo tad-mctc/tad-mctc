@@ -57,8 +57,10 @@ Example
 ...     ]),
 ... ))
 >>>
+>>> structure = mctc.io.structure.Structure(numbers=numbers, positions=positions)
+>>>
 >>> torch.set_printoptions(precision=7)
->>> print(mctc.cn_d4(numbers, positions))
+>>> print(mctc.cn_d4(structure))
 tensor([[2.6886456, 2.6886456, 2.6314170, 2.6314168, 0.8594539, 0.9231414,
          0.8605307, 0.8605307, 0.8594539, 0.9231414, 0.8568342, 0.8568342],
         [2.6886456, 0.8568335, 2.6314168, 0.8605307, 0.8594532, 0.9231415,

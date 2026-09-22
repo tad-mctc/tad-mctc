@@ -251,7 +251,8 @@ def test_read_valid1() -> None:
     """mctc-lib's ``valid1``: 76 atoms across 4 species (N, C, O, H)."""
     tmpdir, filepath = _write(_VALID1)
     with tmpdir:
-        numbers, positions = read.read_pdb(filepath)
+        structure = read.read_pdb(filepath)
+        numbers, positions = structure.numbers, structure.positions
 
     assert numbers.shape == (76,)
     assert positions.shape == (76, 3)
@@ -263,7 +264,8 @@ def test_read_valid3_unusual_atom_names() -> None:
     element letter) and a non-standard trailer after the usual columns."""
     tmpdir, filepath = _write(_VALID3)
     with tmpdir:
-        numbers, positions = read.read_pdb(filepath)
+        structure = read.read_pdb(filepath)
+        numbers, positions = structure.numbers, structure.positions
 
     assert numbers.shape == (14,)
     assert positions.shape == (14, 3)
@@ -276,7 +278,8 @@ def test_read_valid2_heme_two_letter_element() -> None:
     (``Fe``) and 4-character atom names filling the whole name field."""
     tmpdir, filepath = _write(_VALID2)
     with tmpdir:
-        numbers, positions = read.read_pdb(filepath)
+        structure = read.read_pdb(filepath)
+        numbers, positions = structure.numbers, structure.positions
 
     assert numbers.shape == (74,)
     assert positions.shape == (74, 3)
@@ -296,7 +299,8 @@ def test_read_valid4_anisou_skipped() -> None:
     charge, so only atom count and species count are checked here."""
     tmpdir, filepath = _write(_VALID4)
     with tmpdir:
-        numbers, positions = read.read_pdb(filepath)
+        structure = read.read_pdb(filepath)
+        numbers, positions = structure.numbers, structure.positions
 
     assert numbers.shape == (10,)
     assert positions.shape == (10, 3)

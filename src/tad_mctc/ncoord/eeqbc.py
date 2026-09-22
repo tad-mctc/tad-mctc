@@ -32,103 +32,48 @@ cn_eeq`, the EEQBC coordination number is not capped.
 
 from __future__ import annotations
 
-import torch
+from functools import partial
 
-from ..data import en as eneg
 from ..data import radii
-from ..typing import DD, CountingFunction, Tensor
 from . import defaults
-from .common import coordination_number
+from .common import CNModel
 from .count import erf_count
+from .eeq import en_difference
 
 __all__ = ["cn_eeqbc", "cn_eeqbc_en"]
 
 
-def cn_eeqbc(
-    numbers: Tensor,
-    positions: Tensor,
-    counting_function: CountingFunction = erf_count,
-) -> Tensor:
-    """
-    Compute the coordination number used by the EEQBC charge model.
+cn_eeqbc = CNModel(
+    count=partial(
+        erf_count, kcn=defaults.KCN_EEQBC, norm_exp=defaults.NORM_EXP_EEQBC
+    ),
+    cutoff=defaults.CUTOFF_EEQBC,
+    rcov=radii.EEQBC_COV_RADII,
+)
+"""
+The coordination number used by the EEQBC charge model: the error-function
+counting function generalized by EEQBC's ``norm_exp``
+(:data:`defaults.NORM_EXP_EEQBC`), EEQBC's own covalent radii
+(:func:`tad_mctc.data.radii.EEQBC_COV_RADII`) and steepness
+(:data:`defaults.KCN_EEQBC`), and no CN cap. Callable as
+``cn_eeqbc(structure)``: the molecular, all-pairs path when
+``structure.lattice is None``, the periodic path (auto-building a shift
+table every call) otherwise. ``cn_eeqbc.with_precomputed_shifts(structure,
+shifts=...)`` is the ``vmap``/``jacrev``-over-``lattice``-safe periodic
+alternative, reusing a precomputed shift table instead of rebuilding one.
+"""
 
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
-    positions : Tensor
-        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
-    counting_function : CountingFunction, optional
-        Counting function used for the EEQBC coordination number. Defaults
-        to the error function counting function
-        :func:`tad_mctc.ncoord.count.erf_count`.
-
-    Returns
-    -------
-    Tensor
-        Coordination numbers for all atoms (shape: ``(..., nat)``).
-    """
-    dd: DD = {"device": positions.device, "dtype": positions.dtype}
-    cutoff = torch.tensor(defaults.CUTOFF_EEQBC, **dd)
-    rcov = radii.EEQBC_COV_RADII(**dd)[numbers]
-    kcn = torch.tensor(defaults.KCN_EEQBC, **dd)
-    norm_exp = torch.tensor(defaults.NORM_EXP_EEQBC, **dd)
-
-    return coordination_number(
-        numbers,
-        positions,
-        counting_function=counting_function,
-        rcov=rcov,
-        cutoff=cutoff,
-        kcn=kcn,
-        norm_exp=norm_exp,
-    )
-
-
-def cn_eeqbc_en(
-    numbers: Tensor,
-    positions: Tensor,
-    counting_function: CountingFunction = erf_count,
-) -> Tensor:
-    """
-    Compute the electronegativity-weighted coordination number used by the
-    EEQBC charge model to build its local charge contribution.
-
-    Parameters
-    ----------
-    numbers : Tensor
-        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
-    positions : Tensor
-        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
-    counting_function : CountingFunction, optional
-        Counting function used for the EEQBC coordination number. Defaults
-        to the error function counting function
-        :func:`tad_mctc.ncoord.count.erf_count`.
-
-    Returns
-    -------
-    Tensor
-        Electronegativity-weighted coordination numbers for all atoms
-        (shape: ``(..., nat)``).
-    """
-    dd: DD = {"device": positions.device, "dtype": positions.dtype}
-
-    cutoff = torch.tensor(defaults.CUTOFF_EEQBC, **dd)
-    rcov = radii.EEQBC_COV_RADII(**dd)[numbers]
-    en = eneg.PAULING(**dd)[numbers]
-    kcn = torch.tensor(defaults.KCN_EEQBC, **dd)
-    norm_exp = torch.tensor(defaults.NORM_EXP_EEQBC, **dd)
-
-    weight = en.unsqueeze(-2) - en.unsqueeze(-1)
-
-    return coordination_number(
-        numbers,
-        positions,
-        counting_function=counting_function,
-        rcov=rcov,
-        cutoff=cutoff,
-        cn_max=None,
-        pair_weight=weight,
-        kcn=kcn,
-        norm_exp=norm_exp,
-    )
+cn_eeqbc_en = CNModel(
+    count=partial(
+        erf_count, kcn=defaults.KCN_EEQBC, norm_exp=defaults.NORM_EXP_EEQBC
+    ),
+    cutoff=defaults.CUTOFF_EEQBC,
+    rcov=radii.EEQBC_COV_RADII,
+    pair_weight=en_difference,
+)
+"""
+The electronegativity-weighted coordination number used by the EEQBC charge
+model to build its local charge contribution: same counting function as
+:data:`cn_eeqbc`, weighted by the antisymmetric electronegativity pair
+weight :func:`tad_mctc.ncoord.eeq.en_difference`.
+"""

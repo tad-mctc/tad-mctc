@@ -26,7 +26,11 @@ from pathlib import Path
 import pytest
 import torch
 
-from tad_mctc.exceptions import EmptyFileError, FormatErrorVASP
+from tad_mctc.exceptions import (
+    EmptyFileError,
+    FormatErrorVASP,
+    StructureWarning,
+)
 from tad_mctc.io import read
 from tad_mctc.typing import DD
 from tad_mctc.units import length
@@ -61,7 +65,10 @@ def test_read_cartesian_vasp5(dtype: torch.dtype) -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice = read.read_poscar(filepath, **dd)
+        structure = read.read_poscar(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice = structure.lattice
+        assert lattice is not None
 
     ref_numbers = torch.tensor([22, 8], device=DEVICE)
     ref_lattice = (
@@ -109,7 +116,10 @@ def test_read_direct_vasp5() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, lattice = read.read_poscar(filepath, **dd)
+        structure = read.read_poscar(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
+        lattice = structure.lattice
+        assert lattice is not None
 
     ref_numbers = torch.tensor([6, 6], device=DEVICE)
     ref_lattice = (
@@ -149,7 +159,8 @@ def test_read_pre_vasp5_format() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, _, _ = read.read_poscar(filepath, **dd)
+        structure = read.read_poscar(filepath, **dd)
+        numbers = structure.numbers
 
     ref_numbers = torch.tensor([22, 8], device=DEVICE)
     assert (ref_numbers == numbers).all()
@@ -174,7 +185,8 @@ def test_read_selective_dynamics() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, _ = read.read_poscar(filepath, **dd)
+        structure = read.read_poscar(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
 
     ref_numbers = torch.tensor([22, 8], device=DEVICE)
     ref_positions = (
@@ -209,7 +221,9 @@ def test_read_scaling_factor() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        _, positions, lattice = read.read_poscar(filepath, **dd)
+        structure = read.read_poscar(filepath, **dd)
+        positions, lattice = structure.positions, structure.lattice
+        assert lattice is not None
 
     ref_lattice = torch.eye(3, **dd) * 2.0 * length.AA2AU
     ref_positions = torch.tensor([[0.5, 0.5, 0.5]], **dd) * 2.0 * length.AA2AU
@@ -235,7 +249,11 @@ def test_read_single_char_symbol() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, _ = read.read_poscar(filepath, **dd)
+        # The single atom sits at the origin, which collides with the
+        # deflate padding check's default padding value.
+        with pytest.warns(StructureWarning):
+            structure = read.read_poscar(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
 
     assert numbers.shape == (1,)
     assert (numbers == torch.tensor([16], device=DEVICE)).all()
@@ -263,7 +281,8 @@ def test_read_symbol_with_trailing_digit() -> None:
     )
     tmpdir, filepath = _write(content)
     with tmpdir:
-        numbers, positions, _ = read.read_poscar(filepath, **dd)
+        structure = read.read_poscar(filepath, **dd)
+        numbers, positions = structure.numbers, structure.positions
 
     assert numbers.shape == (4,)
     assert (numbers == torch.tensor([6, 6, 9, 9], device=DEVICE)).all()
@@ -427,3 +446,13 @@ def test_read_fail_format(content: str) -> None:
     with tmpdir:
         with pytest.raises(FormatErrorVASP):
             read.read_poscar(filepath)
+
+
+def test_read_is_periodic_along_all_axes() -> None:
+    """A POSCAR always describes a bulk cell, so, as in mctc-lib's
+    ``new_structure``, every lattice axis is periodic."""
+    p = Path(__file__).parent.resolve() / "files" / "POSCAR"
+    structure = read.read_poscar(p)
+
+    assert structure.periodic is not None
+    assert structure.periodic.tolist() == [True, True, True]

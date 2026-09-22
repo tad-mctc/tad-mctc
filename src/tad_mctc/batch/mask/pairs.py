@@ -28,7 +28,7 @@ import torch
 from ...typing import Tensor
 from .atoms import real_atoms
 
-__all__ = ["real_pairs"]
+__all__ = ["real_pairs", "zero_masked_pairs"]
 
 
 # scripting or tracing does not improve performance
@@ -93,3 +93,24 @@ def real_pairs_no_maskdiag(numbers: Tensor) -> Tensor:
     """
     real = real_atoms(numbers)
     return real.unsqueeze(-2) * real.unsqueeze(-1)
+
+
+def zero_masked_pairs(numbers: Tensor, tensor: Tensor) -> Tensor:
+    """
+    Zero a ``(..., nat, nat, 3)``-shaped pair tensor's self-pairs and any
+    pair touching a padded atom, per ``real_pairs(numbers, mask_diagonal=True)``.
+
+    Parameters
+    ----------
+    numbers : Tensor
+        Atomic numbers, used only to build the padding/self-pair mask.
+    tensor : Tensor
+        Pair-shaped tensor to mask.
+
+    Returns
+    -------
+    Tensor
+        ``tensor`` with self-pairs and padded-atom pairs zeroed.
+    """
+    mask = real_pairs(numbers, mask_diagonal=True).unsqueeze(-1)
+    return torch.where(mask, tensor, tensor.new_tensor(0.0))

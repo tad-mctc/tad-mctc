@@ -78,9 +78,8 @@ def test_write_and_read(
         filepath = Path(tmpdirname) / fname
 
         write.write(filepath, numbers, positions)
-        read_numbers, read_positions = read.read(  # type: ignore[misc]
-            filepath, **dd
-        )
+        structure = read.read(filepath, **dd)
+        read_numbers, read_positions = structure.numbers, structure.positions
 
     # Check if the read data matches the written data
     assert read_numbers.dtype == numbers.dtype
