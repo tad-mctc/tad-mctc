@@ -131,10 +131,16 @@ traces and runs AOTAutograd, just without generating C++ code."""
 
 def compile_fullgraph(fn: Callable[..., Any]) -> Callable[..., Any]:
     """``torch.compile(fn)`` as one graph, with static shapes, on
-    :data:`COMPILE_BACKEND`."""
-    return torch.compile(
-        fn, fullgraph=True, dynamic=False, backend=COMPILE_BACKEND
-    )
+    :data:`COMPILE_BACKEND`. Skips the test if ``torch.compile`` itself
+    refuses to construct, which ``DYNAMO_SUPPORTED`` cannot always predict
+    (PyTorch 2.0.1 has no ``is_dynamo_supported`` to ask, and raises
+    "Python 3.11+ not yet supported" here)."""
+    try:
+        return torch.compile(
+            fn, fullgraph=True, dynamic=False, backend=COMPILE_BACKEND
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        pytest.skip(f"torch.compile unsupported here: {exc}")
 
 
 def run_compiled_or_skip(
