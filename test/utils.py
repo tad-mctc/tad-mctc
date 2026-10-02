@@ -122,11 +122,28 @@ def _has_cxx_compiler() -> bool:
     return any(shutil.which(name) is not None for name in names)
 
 
-COMPILE_BACKEND = "inductor" if _has_cxx_compiler() else "aot_eager"
+def _can_import_cpp_extension() -> bool:
+    """Whether ``torch.utils.cpp_extension``, which TorchInductor imports
+    to build its kernels, loads. PyTorch 2.1 imports ``pkg_resources`` there,
+    which a recent ``setuptools`` no longer ships (``ModuleNotFoundError: No
+    module named 'pkg_resources'`` at the first compiled call)."""
+    try:
+        import torch.utils.cpp_extension  # noqa: F401  # pylint: disable=unused-import
+    except ImportError:
+        return False
+    return True
+
+
+COMPILE_BACKEND = (
+    "inductor"
+    if _has_cxx_compiler() and _can_import_cpp_extension()
+    else "aot_eager"
+)
 """The ``torch.compile`` backend for tests. The compile tests check that a
 function traces as one graph (``fullgraph=True``), which Dynamo decides
-before any backend runs. Without a C++ compiler, ``"aot_eager"`` still
-traces and runs AOTAutograd, just without generating C++ code."""
+before any backend runs. Without a C++ compiler, or if Inductor cannot
+build its kernels, ``"aot_eager"`` still traces and runs AOTAutograd, just
+without generating C++ code."""
 
 
 def compile_fullgraph(fn: Callable[..., Any]) -> Callable[..., Any]:
