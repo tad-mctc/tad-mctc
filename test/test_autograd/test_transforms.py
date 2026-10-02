@@ -136,7 +136,9 @@ def _assert_vmap(f: Callable[..., Tensor], *batched: Tensor) -> None:
     assert torch.allclose(vmapped, looped, atol=1e-10, rtol=1e-10)
 
 
-def _assert_jac(f: Callable[..., Tensor], *args: Tensor, argnums: int = 0) -> None:
+def _assert_jac(
+    f: Callable[..., Tensor], *args: Tensor, argnums: int = 0
+) -> None:
     """``jacfwd`` equals ``jacrev``, in eager mode and under ``vmap``."""
     fwd = jacfwd(f, argnums=argnums)(*args)
     rev = jacrev(f, argnums=argnums)(*args)
@@ -635,8 +637,12 @@ def test_get_vdw_pairwise_vmap() -> None:
     numbers = NUMBERS.repeat(BATCH, 1)
     numbers[1, 0] = 7
 
-    vmapped = vmap(lambda n: getters.get_vdw_pairwise(n, device=DEVICE))(numbers)
-    looped = torch.stack([getters.get_vdw_pairwise(n, device=DEVICE) for n in numbers])
+    vmapped = vmap(lambda n: getters.get_vdw_pairwise(n, device=DEVICE))(
+        numbers
+    )
+    looped = torch.stack(
+        [getters.get_vdw_pairwise(n, device=DEVICE) for n in numbers]
+    )
     assert torch.equal(vmapped, looped)
 
 
@@ -893,7 +899,9 @@ def test_cn_d3_periodic_precomputed_transforms() -> None:
     shifts = build_shared_periodic_shifts(lat, PERIODIC, 40.0)
 
     def f(x: Tensor, l: Tensor) -> Tensor:
-        s = Structure(numbers=NUMBERS, positions=x, lattice=l, periodic=PERIODIC)
+        s = Structure(
+            numbers=NUMBERS, positions=x, lattice=l, periodic=PERIODIC
+        )
         return cn_d3.with_precomputed_shifts(s, shifts=shifts)
 
     _assert_vmap(f, p, lat)
@@ -907,7 +915,9 @@ def test_cn_d3_periodic_precomputed_compile() -> None:
     shifts = build_shared_periodic_shifts(lat, PERIODIC, 40.0)
 
     def f(x: Tensor, l: Tensor) -> Tensor:
-        s = Structure(numbers=NUMBERS, positions=x, lattice=l, periodic=PERIODIC)
+        s = Structure(
+            numbers=NUMBERS, positions=x, lattice=l, periodic=PERIODIC
+        )
         return cn_d3.with_precomputed_shifts(s, shifts=shifts)
 
     _assert_compile(f, p[0], lat[0])
