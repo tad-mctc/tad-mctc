@@ -326,7 +326,7 @@ def dimension_check(
     >>> dimension_check(x, min_ndim=2, max_ndim=2)
     Traceback (most recent call last):
     ...
-    RuntimeError: The tensor should not fall below '2' dimensions.
+    RuntimeError: The tensor should not fall below 2 dimensions.
     """
     if not isinstance(x, Tensor):
         raise TypeError(f"Variable is not a tensor but '{type(x)}'.")

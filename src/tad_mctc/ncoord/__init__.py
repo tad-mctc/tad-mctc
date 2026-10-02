@@ -27,8 +27,8 @@ Example
 >>>
 >>> # S22 system 4: formamide dimer
 >>> numbers = mctc.batch.pack((
-...     mctc.utils.to_number("C C N N H H H H H H O O".split()),
-...     mctc.utils.to_number("C O N H H H".split()),
+...     mctc.convert.symbol_to_number("C C N N H H H H H H O O".split()),
+...     mctc.convert.symbol_to_number("C O N H H H".split()),
 ... ))
 >>>
 >>> # coordinates in Bohr
@@ -59,12 +59,13 @@ Example
 >>>
 >>> structure = mctc.io.structure.Structure(numbers=numbers, positions=positions)
 >>>
->>> torch.set_printoptions(precision=7)
->>> print(mctc.cn_d4(structure))
-tensor([[2.6886456, 2.6886456, 2.6314170, 2.6314168, 0.8594539, 0.9231414,
-         0.8605307, 0.8605307, 0.8594539, 0.9231414, 0.8568342, 0.8568342],
-        [2.6886456, 0.8568335, 2.6314168, 0.8605307, 0.8594532, 0.9231415,
-         0.0000000, 0.0000000, 0.0000000, 0.0000000, 0.0000000, 0.0000000]])
+>>> torch.set_printoptions(precision=4)
+>>> print(mctc.ncoord.cn_d4(structure))
+tensor([[2.6886, 2.6886, 2.6314, 2.6314, 0.8595, 0.9231, 0.8605, 0.8605, 0.8595,
+         0.9231, 0.8568, 0.8568],
+        [2.6886, 0.8568, 2.6314, 0.8605, 0.8595, 0.9231, 0.0000, 0.0000, 0.0000,
+         0.0000, 0.0000, 0.0000]])
+>>> torch.set_printoptions(profile="default")
 """
 
 from .common import *
