@@ -68,9 +68,6 @@ else:
     from typing_extensions import NotRequired, Self, Unpack
 
 # Python 3.10
-# starting with Python 3.9, type hinting generics have been moved
-# from the "typing" to the "collections" module
-# (see PEP 585: https://peps.python.org/pep-0585/)
 from collections.abc import Callable, Generator, Sequence
 from typing import TypeAlias, TypeGuard
 
@@ -110,18 +107,6 @@ Size = list[int] | tuple[int, ...] | torch.Size
 TensorOrTensors = list[Tensor] | tuple[Tensor, ...] | Tensor
 DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
 
-CacheKey = tuple[int, str, tuple[Any, ...], frozenset[tuple[str, Any]]]
-# in Python 3.9, "from __future__ import annotations" works with type
-# aliases but requires using `Union` from typing
-from typing import Union
-
-PathLike = Union[str, Path]
-Sliceable = Union[list[Tensor], tuple[Tensor, ...]]
-Size = Union[list[int], tuple[int], torch.Size]
-TensorOrTensors = Union[list[Tensor], tuple[Tensor, ...], Tensor]
-
-# no Union here, same as 3.10
-DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
 CacheKey = tuple[int, str, tuple[Any, ...], frozenset[tuple[str, Any]]]
 
 
