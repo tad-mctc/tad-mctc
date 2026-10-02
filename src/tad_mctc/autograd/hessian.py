@@ -122,8 +122,8 @@ def hess_fn_rev(
         specified argument(s).
     """
     return torch.func.jacrev(  # pyright: ignore[reportPrivateImportUsage, reportReturnType]
-        torch.func.jacrev(
+        torch.func.jacrev(  # pyright: ignore[reportPrivateImportUsage]
             f, argnums=argnums
-        ),  # pyright: ignore[reportPrivateImportUsage]
+        ),
         argnums=argnums,
     )

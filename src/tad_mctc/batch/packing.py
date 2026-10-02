@@ -94,8 +94,8 @@ def pack(
     --------
     Multiple tensors can be packed into a single tensor like so:
 
-    >>> from tbmalt.common.batch import pack
     >>> import torch
+    >>> from tad_mctc.batch import pack
     >>> a, b, c = torch.rand(2,2), torch.rand(3,3), torch.rand(4,4)
     >>> abc_packed_a = pack([a, b, c])
     >>> print(abc_packed_a.shape)

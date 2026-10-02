@@ -31,10 +31,10 @@ from ..tools import is_compiling
 from ..typing import Tensor
 from .utils import get_eps
 
-__all__ = ["divide", "pow", "reciprocal", "sqrt"]
+__all__ = ["safe_divide", "safe_pow", "safe_reciprocal", "safe_sqrt"]
 
 
-def divide(
+def safe_divide(
     x: Tensor,
     y: Tensor,
     *,
@@ -81,7 +81,7 @@ def divide(
     return torch.divide(x, y_safe, **kwargs)
 
 
-def reciprocal(
+def safe_reciprocal(
     x: Tensor, *, eps: Tensor | float | int | None = None, **kwargs: Any
 ) -> Tensor:
     """
@@ -121,7 +121,7 @@ def reciprocal(
     return torch.divide(one, x + eps, **kwargs)
 
 
-def pow(
+def safe_pow(
     x: Tensor,
     exponent: Tensor | float | int,
     *,
@@ -162,6 +162,13 @@ def pow(
     if eps is None:
         eps = get_eps(x)
     elif isinstance(eps, (float, int)):
+        # A Python number is a constant to Dynamo, so this check also runs
+        # under `torch.compile`.
+        if eps == 0:
+            raise ValueError(
+                "Value for clamping must be larger than 0.0, but "
+                f"{eps} was given."
+            )
         eps = torch.tensor(eps, device=x.device, dtype=x.dtype)
     elif isinstance(eps, Tensor):
         eps = eps.to(device=x.device, dtype=x.dtype)
@@ -171,7 +178,11 @@ def pow(
             f"but {type(eps)} was given."
         )
 
-    if (eps == 0).any():
+    # `(eps == 0).any()` reads a tensor's value, which is data-dependent
+    # control flow that `torch.compile(fullgraph=True)` (Dynamo) rejects.
+    # Skip the domain check of a `Tensor` eps while compiling, same as
+    # `safe_sqrt`; eager mode still validates.
+    if not is_compiling() and (eps == 0).any():
         raise ValueError(
             f"Value for clamping must be larger than 0.0, but {eps} was given."
         )
@@ -205,13 +216,28 @@ def pow(
         return _float(x, exponent)
 
     if isinstance(exponent, Tensor):
-        # integer positive exponents are safe
-        if (exponent > 0).all() & (x >= 0).all():
-            return torch.pow(x, exponent)
-
-        # float negative exponents fail for x <= 0
-        x = torch.where(x <= 0, eps, x)
-        return torch.pow(x, exponent)
+        # Branching on this predicate with an `if` would read a tensor's
+        # value at trace time (data-dependent control flow, rejected by
+        # `torch.compile(fullgraph=True)`). Unlike the `eps == 0`
+        # check above, this is not a validation guard that can simply be
+        # skipped while compiling: the two sides disagree at `x == 0` (fast
+        # path leaves `0 ** positive_exponent == 0` untouched, slow path
+        # would substitute `eps` for that `0` first). So the predicate is
+        # kept -- as a tensor, not a Python `bool` -- and used to select the
+        # *base* fed into a single `torch.pow` call instead of choosing
+        # between two separate `torch.pow` calls. `torch.where` returns `x`
+        # unchanged when the fast path applies (bit-identical to
+        # `torch.pow(x, exponent)`) and the eps-clamped values otherwise
+        # (bit-identical to `torch.pow` on the clamped base), so eager and
+        # compiled results agree exactly. Selecting between the
+        # two `torch.pow` *results* instead of the base would evaluate both,
+        # and the discarded one is NaN for `x < 0` with a fractional
+        # exponent, which would poison gradients through `torch.where`'s
+        # backward (`0 * NaN = NaN`).
+        fast_path_applies = (exponent > 0).all() & (x >= 0).all()
+        x_clamped = torch.where(x <= 0, eps, x)
+        x_safe = torch.where(fast_path_applies, x, x_clamped)
+        return torch.pow(x_safe, exponent)
 
     raise ValueError(
         "Value for exponent must be integer, float, or Tensor, but "
@@ -219,7 +245,7 @@ def pow(
     )
 
 
-def sqrt(x: Tensor, *, eps: Tensor | float | int | None = None) -> Tensor:
+def safe_sqrt(x: Tensor, *, eps: Tensor | float | int | None = None) -> Tensor:
     """
     Safe square root operation.
 
@@ -244,6 +270,13 @@ def sqrt(x: Tensor, *, eps: Tensor | float | int | None = None) -> Tensor:
     if eps is None:
         eps = get_eps(x)
     elif isinstance(eps, (float, int)):
+        # A Python number is a constant to Dynamo, so this check also runs
+        # under `torch.compile`.
+        if eps < 0.0:
+            raise ValueError(
+                "Value for clamping must be larger than 0.0, but "
+                f"{eps} was given."
+            )
         eps = torch.tensor(eps, device=x.device, dtype=x.dtype)
     elif isinstance(eps, Tensor):
         eps = eps.to(device=x.device, dtype=x.dtype)
@@ -255,7 +288,8 @@ def sqrt(x: Tensor, *, eps: Tensor | float | int | None = None) -> Tensor:
 
     # `eps < 0.0` reads a tensor's value, which is data-dependent control
     # flow that `torch.compile(fullgraph=True)` (Dynamo) rejects. Skip the
-    # domain check while compiling; eager mode still validates.
+    # domain check of a `Tensor` eps while compiling; eager mode still
+    # validates.
     if not is_compiling() and eps < 0.0:
         raise ValueError(
             f"Value for clamping must be larger than 0.0, but {eps} was given."

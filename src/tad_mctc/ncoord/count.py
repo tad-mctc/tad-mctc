@@ -69,7 +69,7 @@ def exp_count(
     Tensor
         Count of coordination number contribution.
     """
-    return 1.0 / (1.0 + torch.exp(-kcn * (storch.divide(r0, r) - 1.0)))
+    return 1.0 / (1.0 + torch.exp(-kcn * (storch.safe_divide(r0, r) - 1.0)))
 
 
 def erf_count(
@@ -101,7 +101,7 @@ def erf_count(
         Count of coordination number contribution.
     """
     rc = r0**norm_exp
-    return 0.5 * (1.0 + torch.erf(-kcn * storch.divide(r - r0, rc)))
+    return 0.5 * (1.0 + torch.erf(-kcn * storch.safe_divide(r - r0, rc)))
 
 
 def gfn2_count(
@@ -163,7 +163,7 @@ def dexp_count(
     Tensor
         Derivative of count of coordination number contribution.
     """
-    expterm = torch.exp(-kcn * (storch.divide(r0, r) - 1.0))
+    expterm = torch.exp(-kcn * (storch.safe_divide(r0, r) - 1.0))
     return (-kcn * r0 * expterm) / (r**2 * ((expterm + 1.0) ** 2))
 
 
@@ -196,7 +196,7 @@ def derf_count(
         Derivative of count of coordination number contribution.
     """
     rc = r0**norm_exp
-    div = storch.divide(-(kcn**2) * (r - r0) ** 2, rc**2)
+    div = storch.safe_divide(-(kcn**2) * (r - r0) ** 2, rc**2)
     return -kcn / sqrt(pi) / rc * torch.exp(div)
 
 

@@ -27,15 +27,9 @@ import torch
 
 from ..math import einsum
 from ..typing import Tensor
-from .elemental import sqrt as ssqrt
+from .elemental import safe_sqrt
 
 __all__ = ["cdist"]
-
-
-import torch
-
-from ..math import einsum  # as in your original file
-from .elemental import sqrt as ssqrt
 
 
 def euclidean_dist_quadratic_expansion(x: Tensor, y: Tensor) -> Tensor:
@@ -77,16 +71,13 @@ def euclidean_dist_quadratic_expansion(x: Tensor, y: Tensor) -> Tensor:
     xnorm = einsum("...ij,...ij->...i", x, x)
     ynorm = einsum("...ij,...ij->...i", y, y)
 
-    # xnorm = (x ** 2).sum(-1)
-    # ynorm = (y ** 2).sum(-1)
-
     n = xnorm.unsqueeze(-1) + ynorm.unsqueeze(-2)
 
     # "...ik,...jk->...ij"
     prod = x @ y.mT
 
     # important: remove negative values that give NaN in backward
-    return ssqrt(n - 2.0 * prod, eps=eps)
+    return safe_sqrt(n - 2.0 * prod, eps=eps)
 
 
 def cdist_direct_expansion(x: Tensor, y: Tensor, p: int = 2) -> Tensor:
