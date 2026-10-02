@@ -69,10 +69,12 @@ def deflate(
     --------
     Remove unnecessary padding from a batch:
 
+    >>> import torch
+    >>> from tad_mctc.batch import deflate
     >>> over_packed = torch.tensor([
-    >>>     [0, 1, 2, 0, 0, 0],
-    >>>     [3, 4, 5, 6, 0, 0],
-    >>> ])
+    ...     [0, 1, 2, 0, 0, 0],
+    ...     [3, 4, 5, 6, 0, 0],
+    ... ])
     >>> deflate(over_packed, value=0, axis=0)
     tensor([[0, 1, 2, 0],
             [3, 4, 5, 6]])
@@ -80,10 +82,10 @@ def deflate(
     Remove padding from a system once part of a batch:
 
     >>> packed = torch.tensor([
-    >>>     [0, 1, 0, 0],
-    >>>     [3, 4, 0, 0],
-    >>>     [0, 0, 0, 0],
-    >>>     [0, 0, 0, 0]])
+    ...     [0, 1, 0, 0],
+    ...     [3, 4, 0, 0],
+    ...     [0, 0, 0, 0],
+    ...     [0, 0, 0, 0]])
     >>> deflate(packed, value=0)
     tensor([[0, 1],
             [3, 4]])
@@ -168,17 +170,19 @@ def unpack(
     --------
     Suppose you have a tensor that has been packed along the first axis (axis=0):
 
+    >>> import torch
+    >>> from tad_mctc.batch import unpack
     >>> packed_tensor = torch.tensor([
-    >>>     [1, 2, 3, 0, 0],
-    >>>     [4, 5, 0, 0, 0],
-    >>>     [6, 7, 8, 9, 0]
-    >>> ])
+    ...     [1, 2, 3, 0, 0],
+    ...     [4, 5, 0, 0, 0],
+    ...     [6, 7, 8, 9, 0]
+    ... ])
 
     Unpacking this tensor would yield:
 
     >>> unpacked_tensors = unpack(packed_tensor, value=0, axis=0)
     >>> for tensor in unpacked_tensors:
-    >>>     print(tensor)
+    ...     print(tensor)
     tensor([1, 2, 3])
     tensor([4, 5])
     tensor([6, 7, 8, 9])

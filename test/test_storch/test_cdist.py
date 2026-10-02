@@ -29,6 +29,11 @@ from tad_mctc.convert import numpy_to_tensor
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    compile_fullgraph,
+)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
@@ -117,3 +122,40 @@ def test_ps(dtype: torch.dtype, p: int) -> None:
     d2 = torch.cdist(x, y, p=p)
 
     assert pytest.approx(d1.cpu(), abs=tol) == d2.cpu()
+
+
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+def test_cdist_torch_compile_fullgraph() -> None:
+    """
+    ``storch.cdist(p=2)`` calls ``euclidean_dist_quadratic_expansion``, which
+    calls ``storch.safe_sqrt``. A domain check there that branched on a
+    tensor value would be rejected by ``torch.compile(fullgraph=True)``
+    (Dynamo) as data-dependent control flow, blocking every dense path
+    built on ``storch.cdist`` (e.g. dense coordination-number paths,
+    ``molecule.property.enn``).
+    """
+    torch._dynamo.reset()
+
+    dd: DD = {"device": DEVICE, "dtype": torch.float64}
+    x = numpy_to_tensor(np.random.randn(2, 4, 3), **dd)
+
+    def f(x: torch.Tensor) -> torch.Tensor:
+        return storch.cdist(x)
+
+    compiled = compile_fullgraph(f)
+
+    eager_value = f(x)
+    compiled_value = compiled(x)
+
+    # The quadratic expansion leaves rounding noise of order ``eps`` under
+    # the square root of the diagonal, so it comes out as ``sqrt(eps)`` or
+    # a small multiple of it, and a fused (compiled) kernel rounds
+    # differently than the eager one. Only the off-diagonal has to agree
+    # tightly.
+    diagonal = torch.eye(x.shape[-2], dtype=torch.bool, device=x.device)
+    off = ~diagonal.expand_as(eager_value)
+    assert pytest.approx(eager_value[off].cpu(), abs=1e-12) == (
+        compiled_value[off].cpu()
+    )
+    assert (eager_value[~off] < 1e-6).all()
+    assert (compiled_value[~off] < 1e-6).all()

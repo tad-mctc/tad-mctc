@@ -76,7 +76,7 @@ def enn(
 
     within_cutoff = mask * (distances <= cutoff)
     contributions = torch.where(
-        within_cutoff, storch.divide(charge_products, distances), zero
+        within_cutoff, storch.safe_divide(charge_products, distances), zero
     )
 
     return 0.5 * torch.sum(contributions)
@@ -123,7 +123,7 @@ def center_of_mass(masses: Tensor, positions: Tensor) -> Tensor:
     Tensor
         Cartesian coordinates of center of mass of shape ``(..., 3)``.
     """
-    s = storch.reciprocal(torch.sum(masses, dim=-1))
+    s = storch.safe_reciprocal(torch.sum(masses, dim=-1))
     return einsum("...z,...zx,...->...x", masses, positions, s)
 
 
@@ -187,10 +187,7 @@ def inertia_moment(
     return im
 
 
-# TODO: Check against reference values
-# https://github.com/psi4/psi4/blob/3c2be0144a850eaad3b428ceabc58ff38a163fde/psi4/src/psi4/libmints/molecule.cc#L1353
-# https://github.com/pyscf/pyscf/blob/master/pyscf/hessian/thermo.py#L111
-def rot_consts(masses: Tensor, positions: Tensor) -> Tensor:  # pragma: no cover
+def rot_consts(masses: Tensor, positions: Tensor) -> Tensor:
     r"""
     Calculate the rotational constants from the inertia tensor.
 
@@ -208,7 +205,10 @@ def rot_consts(masses: Tensor, positions: Tensor) -> Tensor:  # pragma: no cover
     Returns
     -------
     Tensor
-        Rotational constants of shape ``(..., 3)``.
+        Rotational constants of shape ``(..., 3)``, in inverse bohr
+        (atomic units of inverse length). Multiply by
+        ``units.METER2AU * 1e-2`` to convert to the spectroscopic cm\
+        :sup:`-1` unit.
     """
     im = inertia_moment(masses, positions, center_pa=True)
 
@@ -218,6 +218,6 @@ def rot_consts(masses: Tensor, positions: Tensor) -> Tensor:  # pragma: no cover
 
     # rotational constant in atomic units
     c_au = units.CODATA.c * (units.METER2AU / units.SECOND2AU)
-    b = storch.reciprocal(4 * torch.pi * c_au * w)  # hbar = 1
+    b = storch.safe_reciprocal(4 * torch.pi * c_au * w)  # hbar = 1
 
     return torch.where(w > 1e-6, b, torch.zeros_like(b))

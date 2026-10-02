@@ -27,7 +27,7 @@ Example
 -------
 >>> from tad_mctc.io import read
 >>> path = "mol.xyz"
->>> structure = read.read(path)
+>>> structure = read.read(path)  # doctest: +SKIP
 """
 
 from .aims import *

@@ -299,10 +299,8 @@ def VDW_PAIRWISE(
     device: torch.device | None = None, dtype: torch.dtype | None = torch.double
 ) -> Tensor:
     """
-    Pair-wise Van-der-Waals radii.
-
-    These radii were previously stored explicitly in one list and then
-    reshaped to the required `(MAX_ELEMENT, MAX_ELEMENT)` tensor. For the
-    old version, see older commits (e.g. https://github.com/dftd3/tad-dftd3/blob/ecc50f19adb8aa8baa38a188d04228c4f26975d6/src/tad_dftd3/data/radii.py)
+    Pair-wise Van-der-Waals radii, as a `(MAX_ELEMENT, MAX_ELEMENT)`
+    tensor loaded from the packaged data file (see
+    :func:`_load_vdw_rad_pairwise`).
     """
     return _load_vdw_rad_pairwise(dtype=dtype, device=device)

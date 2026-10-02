@@ -74,7 +74,7 @@ def bond_angles(numbers: Tensor, positions: Tensor) -> Tensor:
     norm2 = torch.norm(vector2, dim=-1)
 
     # Compute cos(theta) and handle potential numerical issues
-    cos_theta = storch.divide(dot_product, norm1 * norm2)
+    cos_theta = storch.safe_divide(dot_product, norm1 * norm2)
     cos_theta = torch.where(mask, cos_theta, zero)
     cos_theta = torch.clamp(cos_theta, -1.0, 1.0)
 

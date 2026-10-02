@@ -20,6 +20,8 @@ Utility functions for testing.
 
 from __future__ import annotations
 
+import shutil
+import sys
 from typing import Any, Callable, Sequence
 
 import numpy as np
@@ -36,6 +38,8 @@ from tad_mctc.typing import DD, Tensor
 __all__ = [
     "_rng",
     "_symrng",
+    "COMPILE_BACKEND",
+    "compile_fullgraph",
     "DYNAMO_SUPPORTED",
     "DYNAMO_UNSUPPORTED_REASON",
     "load_batch",
@@ -99,12 +103,61 @@ DYNAMO_SUPPORTED = is_compile_supported()
 on any test that calls ``torch.compile``. The capability probe itself
 (``is_compile_supported``) lives in ``tad_mctc.tools.compile`` -- it is
 plain-torch, has no `pytest` dependency, and other "tad-*" packages can
-call it directly instead of duplicating the probe in their own test suite,
-the way this module used to."""
+call it directly instead of duplicating the probe in their own test
+suite."""
 
 DYNAMO_UNSUPPORTED_REASON = (
     "torch.compile/Dynamo is not supported on this Python/PyTorch combination"
 )
+
+
+def _has_cxx_compiler() -> bool:
+    """Whether the C++ compiler that TorchInductor calls is on ``PATH``. On
+    Windows that is MSVC's ``cl``, which a plain CI runner does not expose
+    (``InvalidCxxCompiler: Compiler: cl is not found``)."""
+    if sys.platform == "win32":
+        names = ["cl"]
+    else:
+        names = ["c++", "g++", "clang++"]
+    return any(shutil.which(name) is not None for name in names)
+
+
+def _can_import_cpp_extension() -> bool:
+    """Whether ``torch.utils.cpp_extension``, which TorchInductor imports
+    to build its kernels, loads. PyTorch 2.1 imports ``pkg_resources`` there,
+    which a recent ``setuptools`` no longer ships (``ModuleNotFoundError: No
+    module named 'pkg_resources'`` at the first compiled call)."""
+    try:
+        import torch.utils.cpp_extension  # noqa: F401  # pylint: disable=unused-import
+    except ImportError:
+        return False
+    return True
+
+
+COMPILE_BACKEND = (
+    "inductor"
+    if _has_cxx_compiler() and _can_import_cpp_extension()
+    else "aot_eager"
+)
+"""The ``torch.compile`` backend for tests. The compile tests check that a
+function traces as one graph (``fullgraph=True``), which Dynamo decides
+before any backend runs. Without a C++ compiler, or if Inductor cannot
+build its kernels, ``"aot_eager"`` still traces and runs AOTAutograd, just
+without generating C++ code."""
+
+
+def compile_fullgraph(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """``torch.compile(fn)`` as one graph, with static shapes, on
+    :data:`COMPILE_BACKEND`. Skips the test if ``torch.compile`` itself
+    refuses to construct, which ``DYNAMO_SUPPORTED`` cannot always predict
+    (PyTorch 2.0.1 has no ``is_dynamo_supported`` to ask, and raises
+    "Python 3.11+ not yet supported" here)."""
+    try:
+        return torch.compile(
+            fn, fullgraph=True, dynamic=False, backend=COMPILE_BACKEND
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        pytest.skip(f"torch.compile unsupported here: {exc}")
 
 
 def run_compiled_or_skip(
@@ -122,20 +175,21 @@ def run_compiled_or_skip(
     query API, ``DYNAMO_SUPPORTED`` included: across the versions this
     package supports, it has failed at construction (a hard Python-version
     gate raised from inside ``torch.compile`` itself, "Python 3.11+ not
-    yet supported"), at trace time (Dynamo refusing to trace a construct
-    that another PyTorch version traces fine, e.g. ``functools.partial``),
-    and at backend compile time (no C/C++ toolchain, observed on Windows
-    CI: ``InvalidCxxCompiler: Compiler: cl is not found``). All three are
-    environment/version gaps, not a correctness bug in the code under
-    test -- unlike a wrong *value*, which still surfaces normally, since
-    this only wraps the compile-and-call step and never the assertion
-    that follows it.
+    yet supported") and at trace time (Dynamo refusing to trace a construct
+    that another PyTorch version traces fine, e.g. ``functools.partial``).
+    Both are environment/version gaps, not a correctness bug in the code
+    under test -- unlike a wrong *value*, which still surfaces normally,
+    since this only wraps the compile-and-call step and never the
+    assertion that follows it. A missing C++ compiler is not skipped but
+    handled by :data:`COMPILE_BACKEND`.
     """
     if not DYNAMO_SUPPORTED:
         pytest.skip(DYNAMO_UNSUPPORTED_REASON)
 
     try:
-        compiled = torch.compile(fn, fullgraph=fullgraph, dynamic=dynamic)
+        compiled = torch.compile(
+            fn, fullgraph=fullgraph, dynamic=dynamic, backend=COMPILE_BACKEND
+        )
         return compiled(*args)
     except Exception as exc:  # pylint: disable=broad-except
         pytest.skip(f"torch.compile unsupported here: {exc}")

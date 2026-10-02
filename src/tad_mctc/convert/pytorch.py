@@ -130,6 +130,8 @@ def any_to_tensor(
 
     Examples
     --------
+    >>> import torch
+    >>> from tad_mctc.convert import any_to_tensor
     >>> any_to_tensor(3.14)
     tensor(3.1400)
 
@@ -143,10 +145,14 @@ def any_to_tensor(
     tensor(2.7180)
 
     >>> any_to_tensor('not_a_number')
+    Traceback (most recent call last):
+        ...
     ValueError: Cannot convert string 'not_a_number' to float
 
     >>> any_to_tensor(["1", "2"])
-    TypeError: Tensor-incompatible type '<class 'list'>' of variable ["1", "2"].
+    Traceback (most recent call last):
+        ...
+    ValueError: List must contain only float, int, or bool types.
     """
     if isinstance(x, Tensor):
         return x.to(device=device, dtype=dtype)
