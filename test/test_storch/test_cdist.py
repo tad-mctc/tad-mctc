@@ -147,4 +147,15 @@ def test_cdist_torch_compile_fullgraph() -> None:
     eager_value = f(x)
     compiled_value = compiled(x)
 
-    assert pytest.approx(eager_value.cpu(), abs=1e-12) == compiled_value.cpu()
+    # The quadratic expansion leaves rounding noise of order ``eps`` under
+    # the square root of the diagonal, so it comes out as ``sqrt(eps)`` or
+    # a small multiple of it, and a fused (compiled) kernel rounds
+    # differently than the eager one. Only the off-diagonal has to agree
+    # tightly.
+    diagonal = torch.eye(x.shape[-2], dtype=torch.bool, device=x.device)
+    off = ~diagonal.expand_as(eager_value)
+    assert pytest.approx(eager_value[off].cpu(), abs=1e-12) == (
+        compiled_value[off].cpu()
+    )
+    assert (eager_value[~off] < 1e-6).all()
+    assert (compiled_value[~off] < 1e-6).all()
