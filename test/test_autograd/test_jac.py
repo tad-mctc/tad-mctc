@@ -20,8 +20,8 @@ Test hessian.
 
 import pytest
 import torch
+from torch.func import jacrev
 
-from tad_mctc.autograd import jacrev
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE

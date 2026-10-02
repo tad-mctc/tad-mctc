@@ -24,8 +24,9 @@ from __future__ import annotations
 
 import pytest
 import torch
+from torch.func import jacrev, vmap
 
-from tad_mctc.autograd import bjacrev, jacrev, numgrad
+from tad_mctc.autograd import numgrad
 from tad_mctc.convert import tensor_to_numpy
 from tad_mctc.io.structure import Structure
 from tad_mctc.typing import DD, Tensor
@@ -79,7 +80,7 @@ def test_batch(
     def wrapper(pos: Tensor) -> Tensor:
         return variant.call(structure.replace(positions=pos))
 
-    # Plain `jacrev` over the whole batch rather than `bjacrev`: vmapping
+    # Plain `jacrev` over the whole batch rather than `vmap(jacrev)`: vmapping
     # a periodic batch through `__call__` would hit its data-dependent
     # shift-table build. Structures in a batch do not interact, so only
     # the diagonal blocks of the (batch, nat, batch, nat, 3) Jacobian are
@@ -107,7 +108,7 @@ def test_batch_vmap(
     dtype: torch.dtype,
     pair: tuple[tuple[str, str], tuple[str, str]],
 ) -> None:
-    """`bjacrev`, i.e. `jacrev` vmapped over the batch, for molecules only:
+    """`jacrev` vmapped over the batch, for molecules only:
     for a periodic batch, `__call__` builds its shift table inside the
     vmap, which is data-dependent. The vmap route for periodic structures
     is `with_precomputed_shifts` (see `test_precomputed_shifts.py`)."""
@@ -124,7 +125,7 @@ def test_batch_vmap(
         return variant.call(Structure(numbers=numbers, positions=pos))
 
     pos = structure.positions.detach().clone().requires_grad_(True)
-    jac: Tensor = bjacrev(wrapper, argnums=1)(structure.numbers, pos)
+    jac: Tensor = vmap(jacrev(wrapper, argnums=1))(structure.numbers, pos)
     assert pytest.approx(numdr.cpu(), abs=tol) == tensor_to_numpy(jac)
 
 

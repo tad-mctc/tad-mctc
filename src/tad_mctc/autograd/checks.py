@@ -20,17 +20,23 @@ Autograd Utility: Checks
 
 Utility functions for checking properties of tensors in the context of
 automatic differentiation, such as whether a tensor is a grad tracking tensor,
-batched tensor, or a both (i.e., a "functorch" tensor).
+is ``vmap``-batched, or either of both (i.e., a "functorch" tensor).
+
+All checks return ``True`` while ``torch.compile`` is tracing: the underlying
+``torch._C._functorch`` bindings cannot be traced, and the values of a traced
+tensor are not concrete either, so callers that skip data-dependent checks
+(``if not is_functorch_tensor(x): ...``) or pick a ``vmap``-safe code path
+(``if is_vmapped(x): ...``) get the safe answer without a graph break.
 """
 
 from __future__ import annotations
 
 import torch
 
-from .._version import __tversion__
+from ..tools.compile import is_compiling
 from ..typing import Tensor
 
-__all__ = ["is_gradtracking", "is_batched", "is_functorch_tensor"]
+__all__ = ["is_gradtracking", "is_vmapped", "is_functorch_tensor"]
 
 
 def is_gradtracking(x: Tensor) -> bool:
@@ -39,7 +45,7 @@ def is_gradtracking(x: Tensor) -> bool:
 
     Note
     ----
-    Defaults to ``False`` for versions of PyTorch before 2.0.0.
+    Always ``True`` while ``torch.compile`` is tracing (see module docstring).
 
     Parameters
     ----------
@@ -51,22 +57,30 @@ def is_gradtracking(x: Tensor) -> bool:
     bool
         ``True`` if the tensor is a grad tracking tensor, ``False`` otherwise.
     """
-    if __tversion__ >= (2, 0, 0):
-        return torch._C._functorch.is_gradtrackingtensor(x)
-    return False
+    if is_compiling():
+        return True
+    return torch._C._functorch.is_gradtrackingtensor(x)
 
 
-def is_batched(x: Tensor) -> bool:
+def is_vmapped(x: Tensor) -> bool:
     """
-    Check if the input tensor is a batched tensor.
+    Check if the input tensor is wrapped by a ``torch.func.vmap`` at any layer
+    of the functorch wrapper stack.
 
-    Only checks the first wrapper layer, i.e., grad-tracking tensors can
-    obscure the batched nature of a tensor. Unwrap the tensor first to check
-    the underlying tensor.
+    This is about ``vmap`` only, not about a leading batch dimension (e.g.
+    from :func:`tad_mctc.batch.pack`), which is an ordinary dimension of the
+    tensor. Only a ``vmap`` layer makes data-dependent output shapes (e.g.
+    ``torch.unique``) illegal; ``torch.func.jacrev``/``grad`` wrap *all*
+    arguments in a grad-tracking layer, which :func:`is_functorch_tensor`
+    also reports, but this check does not.
+
+    The ``vmap`` layer is found even below such grad-tracking layers, e.g.
+    under ``vmap(jacrev(jacrev(f)))`` for batched Hessians, where the
+    outermost wrapper is a grad-tracking one.
 
     Note
     ----
-    Defaults to ``False`` for versions of PyTorch before 2.0.0.
+    Always ``True`` while ``torch.compile`` is tracing (see module docstring).
 
     Parameters
     ----------
@@ -76,10 +90,16 @@ def is_batched(x: Tensor) -> bool:
     Returns
     -------
     bool
-        ``True`` if the tensor is a batched tensor, ``False`` otherwise.
+        ``True`` if a ``vmap`` is active on the tensor, ``False`` otherwise.
     """
-    if __tversion__ >= (2, 0, 0):
-        return torch._C._functorch.is_batchedtensor(x)
+    if is_compiling():
+        return True
+
+    ft = torch._C._functorch  # pyright: ignore[reportAttributeAccessIssue]
+    while ft.is_functorch_wrapped_tensor(x):
+        if ft.is_batchedtensor(x):
+            return True
+        x = ft.get_unwrapped(x)
     return False
 
 
@@ -89,7 +109,7 @@ def is_functorch_tensor(x: Tensor) -> bool:
 
     Note
     ----
-    Defaults to ``False`` for versions of PyTorch before 2.0.0.
+    Always ``True`` while ``torch.compile`` is tracing (see module docstring).
 
     Parameters
     ----------
@@ -101,6 +121,6 @@ def is_functorch_tensor(x: Tensor) -> bool:
     bool
         ``True`` if the tensor is a functorch tensor, ``False`` otherwise.
     """
-    if __tversion__ >= (2, 0, 0):
-        return is_gradtracking(x) or is_batched(x)
-    return False
+    if is_compiling():
+        return True
+    return is_gradtracking(x) or is_vmapped(x)

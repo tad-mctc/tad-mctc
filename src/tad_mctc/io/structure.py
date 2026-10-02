@@ -70,8 +70,9 @@ True
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 import torch
 from torch import Tensor

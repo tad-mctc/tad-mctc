@@ -49,7 +49,8 @@ Torch Autodiff Utility
 This library is a collection of utility functions that are used in PyTorch (re-)implementations of projects from the `Grimme group <https://github.com/grimme-lab>`__.
 In particular, the *tad-mctc* library provides:
 
-- autograd functions (Jacobian, Hessian)
+- autograd utilities (gradient checks, row-by-row Jacobians, checks for
+  ``torch.func``-transformed tensors)
 
 - atomic data (radii, EN, example molecules, ...)
 
@@ -108,7 +109,7 @@ The following example shows how to calculate the coordination number used in the
     )
 
     # calculate EEQ coordination number
-    structure = mctc.io.structure.Structure(numbers=numbers, positions=positions)
+    structure = mctc.Structure(numbers=numbers, positions=positions)
     cn = mctc.ncoord.cn_eeq(structure)
     torch.set_printoptions(precision=10)
     print(cn)
@@ -156,7 +157,7 @@ The next example shows the calculation of the coordination number used in DFT-D4
     ))
 
     # calculate coordination number
-    structure = mctc.io.structure.Structure(numbers=numbers, positions=positions)
+    structure = mctc.Structure(numbers=numbers, positions=positions)
     cn = mctc.ncoord.cn_d4(structure)
     torch.set_printoptions(precision=10)
     print(cn)

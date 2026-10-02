@@ -41,7 +41,7 @@ class ClassInstances:
         return x + y + sum(range(1000))
 
 
-MemoizeClass = Union[Type[Class], Type[ClassInstances]]
+MemoizeClass = Union[type[Class], type[ClassInstances]]
 
 
 @pytest.mark.parametrize("memoize_class", [Class, ClassInstances])

@@ -15,39 +15,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test hessian.
+Test the checks for function-transformed tensors.
 """
 
-import importlib
-from unittest.mock import patch
+from collections.abc import Callable
 
 import pytest
 import torch
 
-from tad_mctc._version import __tversion__
 from tad_mctc.autograd import checks
 
-
-def test_dummy() -> None:
-    import tad_mctc._version
-
-    torch_version = tad_mctc._version.__tversion__
-
-    with patch("tad_mctc._version.__tversion__", new=(1, 9, 0)):
-        # reload cached module to ensure that patched version is used
-        importlib.reload(checks)
-
-        tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
-        assert checks.is_batched(tensor) is False
-        assert checks.is_gradtracking(tensor) is False
-        assert checks.is_functorch_tensor(tensor) is False
-
-    # reload for actual version
-    importlib.reload(checks)
-    assert torch_version == tad_mctc._version.__tversion__
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    compile_fullgraph,
+)
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_is_gradtracking_true(monkeypatch: pytest.MonkeyPatch) -> None:
     """Should return True when torch._C._functorch.is_gradtrackingtensor is True."""
     dummy = object()
@@ -59,7 +43,6 @@ def test_is_gradtracking_true(monkeypatch: pytest.MonkeyPatch) -> None:
     assert checks.is_gradtracking(dummy) is True  # type: ignore[arg-type]
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_is_gradtracking_false(monkeypatch: pytest.MonkeyPatch) -> None:
     """Should return False when torch._C._functorch.is_gradtrackingtensor is False."""
     dummy = object()
@@ -71,83 +54,22 @@ def test_is_gradtracking_false(monkeypatch: pytest.MonkeyPatch) -> None:
     assert checks.is_gradtracking(dummy) is False  # type: ignore[arg-type]
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_is_batched_true(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Should return True when torch._C._functorch.is_batchedtensor is True."""
-    dummy = object()
-    monkeypatch.setattr(
-        torch._C._functorch,
-        "is_batchedtensor",
-        lambda x: True,
-    )
-    assert checks.is_batched(dummy) is True  # type: ignore[arg-type]
-
-
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-def test_is_batched_false(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Should return False when torch._C._functorch.is_batchedtensor is False."""
-    dummy = object()
-    monkeypatch.setattr(
-        torch._C._functorch,
-        "is_batchedtensor",
-        lambda x: False,
-    )
-    assert checks.is_batched(dummy) is False  # type: ignore[arg-type]
-
-
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
-@pytest.mark.parametrize(
-    "grad_val, batched_val, expected",
-    [
-        (True, False, True),  # only grad-tracking
-        (False, True, True),  # only batched
-        (True, True, True),  # both
-        (False, False, False),  # neither
-    ],
-)
-def test_is_functorch_tensor(
-    monkeypatch: pytest.MonkeyPatch,
-    grad_val: bool,
-    batched_val: bool,
-    expected: bool,
-) -> None:
-    """
-    is_functorch_tensor should return True if either grad-tracking
-    or batched (or both) is True, otherwise False.
-    """
-    monkeypatch.setattr(
-        torch._C._functorch,
-        "is_gradtrackingtensor",
-        lambda x: grad_val,
-    )
-    monkeypatch.setattr(
-        torch._C._functorch,
-        "is_batchedtensor",
-        lambda x: batched_val,
-    )
-    dummy = object()
-    actual = checks.is_functorch_tensor(dummy)  # type: ignore[arg-type]
-    assert actual is expected
-
-
 ###############################################################################
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_plain_tensor_behavior() -> None:
     # A plain torch.Tensor should not be seen as grad-tracking or batched
     t = torch.tensor([1.0, 2.0, 3.0])
     assert checks.is_gradtracking(t) is False
-    assert checks.is_batched(t) is False
+    assert checks.is_vmapped(t) is False
     assert checks.is_functorch_tensor(t) is False
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_gradtracking_tensor_via_grad() -> None:
     # grad(f) returns a grad-tracking tensor when applied
     def f(x: torch.Tensor) -> torch.Tensor:
         assert checks.is_gradtracking(x) is True
-        assert checks.is_batched(x) is False
+        assert checks.is_vmapped(x) is False
         assert checks.is_functorch_tensor(x) is True
 
         return x * x
@@ -156,12 +78,11 @@ def test_gradtracking_tensor_via_grad() -> None:
     _ = torch.func.jacrev(f)(t)  # pyright: ignore[reportPrivateImportUsage]
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_batched_tensor_via_vmap() -> None:
     # vmap wraps a tensor into a batched tensor
     def f(x: torch.Tensor) -> torch.Tensor:
         assert checks.is_gradtracking(x) is False
-        assert checks.is_batched(x) is True
+        assert checks.is_vmapped(x) is True
         assert checks.is_functorch_tensor(x) is True
 
         return x * x
@@ -170,12 +91,12 @@ def test_batched_tensor_via_vmap() -> None:
     _ = torch.func.vmap(f)(t)  # pyright: ignore[reportPrivateImportUsage]
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_grad_and_batched_tensor() -> None:
     # Combine grad + vmap to get a tensor that is both
     def f(x: torch.Tensor) -> torch.Tensor:
         assert checks.is_gradtracking(x) is True
-        assert checks.is_batched(torch._C._functorch.get_unwrapped(x)) is True
+        # found below the grad-tracking layer
+        assert checks.is_vmapped(x) is True
         assert checks.is_functorch_tensor(x) is True
 
         return x**3
@@ -183,3 +104,75 @@ def test_grad_and_batched_tensor() -> None:
     t = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
     grad_fn = torch.func.grad(f)  # pyright: ignore[reportPrivateImportUsage]
     _ = torch.func.vmap(grad_fn)(t)  # pyright: ignore[reportPrivateImportUsage]
+
+
+@pytest.mark.parametrize(
+    "transform, functorch, vmapped",
+    [
+        ("eager", False, False),
+        ("jacrev", True, False),
+        ("jacrev(jacrev)", True, False),
+        ("vmap", True, True),
+        ("vmap(jacrev)", True, True),
+        ("vmap(jacrev(jacrev))", True, True),
+    ],
+)
+def test_vmapped_vs_functorch_under_transforms(
+    transform: str, functorch: bool, vmapped: bool
+) -> None:
+    """
+    `is_functorch_tensor` is true under any transform, `is_vmapped` only if a
+    `vmap` is active, even below grad-tracking layers. `jacrev` also wraps
+    the arguments it does not differentiate (here: `n`).
+    """
+    seen: list[tuple[bool, bool]] = []
+
+    def f(n: torch.Tensor, p: torch.Tensor) -> torch.Tensor:
+        seen.append((checks.is_functorch_tensor(n), checks.is_vmapped(n)))
+        return p.sum()
+
+    numbers = torch.tensor([[1, 1], [6, 1]])
+    positions = torch.rand(2, 2, 3, dtype=torch.double)
+    jac = torch.func.jacrev  # pyright: ignore[reportPrivateImportUsage]
+    vmap = torch.func.vmap  # pyright: ignore[reportPrivateImportUsage]
+
+    if transform == "eager":
+        f(numbers[0], positions[0])
+    elif transform == "jacrev":
+        jac(f, argnums=1)(numbers[0], positions[0])
+    elif transform == "jacrev(jacrev)":
+        jac(jac(f, argnums=1), argnums=1)(numbers[0], positions[0])
+    elif transform == "vmap":
+        vmap(f)(numbers, positions)
+    elif transform == "vmap(jacrev)":
+        vmap(jac(f, argnums=1))(numbers, positions)
+    else:
+        vmap(jac(jac(f, argnums=1), argnums=1))(numbers, positions)
+
+    assert seen == [(functorch, vmapped)]
+
+
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@pytest.mark.parametrize(
+    "check",
+    [checks.is_gradtracking, checks.is_vmapped, checks.is_functorch_tensor],
+)
+def test_true_under_compile(check: Callable[[torch.Tensor], bool]) -> None:
+    """
+    The checks trace under `torch.compile(fullgraph=True)` (the functorch
+    bindings they call cannot) and report the safe answer, `True`.
+
+    Calls the compiled function directly instead of `run_compiled_or_skip`,
+    so that a graph break fails the test instead of skipping it. Both
+    branches compute something: a frame whose graph would be empty (e.g.
+    just returning `x`) is run eagerly by older PyTorch even under
+    `fullgraph=True`, which would hide the traced result.
+    """
+    torch._dynamo.reset()  # pylint: disable=protected-access
+
+    def f(x: torch.Tensor) -> torch.Tensor:
+        return x + (1.0 if check(x) else 0.0)
+
+    x = torch.zeros(3)
+    assert torch.equal(compile_fullgraph(f)(x), torch.ones(3))
+    assert torch.equal(f(x), torch.zeros(3))

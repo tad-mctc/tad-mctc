@@ -34,11 +34,14 @@ from typing import Any, Literal
 import numpy as np
 import torch
 
-from .._version import __tversion__
 from ..convert import symmetrize
 from ..typing import Callable, Tensor
 
 __all__ = ["eighb"]
+
+# Note that 'none' is included only for testing purposes. A module-level
+# constant: Dynamo cannot read an attribute off an autograd `Function` class.
+_KNOWN_METHODS = ("cond", "lorn", "none", None)
 
 
 def estimate_minmax(amat: Tensor) -> tuple[Tensor, Tensor]:
@@ -87,6 +90,37 @@ def estimate_minmax(amat: Tensor) -> tuple[Tensor, Tensor]:
         torch.min(center - radius, dim=-1)[0],
         torch.max(center + radius, dim=-1)[0],
     )
+
+
+def _broadened_gaps(w: Tensor, bf: Tensor, bm: str | None) -> Tensor:
+    """
+    The ``F`` matrix of the eigen-decomposition derivatives,
+    ``F_ij = h(w_j - w_i)`` for ``i != j`` and ``0`` on the diagonal, where
+    ``h`` is the odd, broadened inverse selected by ``bm``.
+
+    Built from whole-tensor operations only (no in-place writes into a
+    freshly allocated tensor), so it is safe under ``torch.func.vmap``, and
+    shared by the reverse- (``backward``) and forward-mode (``jvp``)
+    derivatives so that both use the identical broadening.
+    """
+    deltas = w.unsqueeze(-2) - w.unsqueeze(-1)
+    diag = torch.eye(w.shape[-1], dtype=torch.bool, device=w.device)
+
+    if bm == "cond":  # <- Conditional broadening
+        # odd extension of `1 / max(d, bf)` (zero for exactly degenerate pairs)
+        abs_deltas = torch.abs(deltas)
+        h = torch.sign(deltas) / torch.where(abs_deltas > bf, abs_deltas, bf)
+    elif bm == "lorn":  # <- Lorentzian broadening
+        h = deltas / (deltas**2 + bf)
+    elif bm == "none":  # <- Debugging only
+        # no `1/0` on the diagonal, which would poison gradients through
+        # the `where` below
+        h = 1 / torch.where(diag, torch.ones_like(deltas), deltas)
+    else:  # pragma: no cover
+        # Should be impossible to get here
+        raise ValueError(f"Unknown broadening method {bm}")
+
+    return torch.where(diag, torch.zeros_like(h), h)
 
 
 class SymEigBroadBase(torch.autograd.Function):
@@ -153,8 +187,7 @@ class SymEigBroadBase(torch.autograd.Function):
 
     """
 
-    # Note that 'none' is included only for testing purposes
-    KNOWN_METHODS = ["cond", "lorn", "none", None]
+    KNOWN_METHODS = list(_KNOWN_METHODS)
 
     @staticmethod
     def backward(  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -216,37 +249,9 @@ class SymEigBroadBase(torch.autograd.Function):
         # Form the eigenvalue gradients into diagonal matrix
         lambda_bar = w_bar.diag_embed()
 
-        # Identify the indices of the upper triangle of the F matrix
-        rows, cols = v.shape[-2:]
-        tri_u = torch.triu_indices(*(rows, cols), offset=1)
-
-        # Construct the deltas
-        deltas = w[..., tri_u[1]] - w[..., tri_u[0]]
-
-        # Apply broadening
-        if bm == "cond":  # <- Conditional broadening
-            deltas = (
-                1
-                / torch.where(torch.abs(deltas) > bf, deltas, bf)
-                * torch.sign(deltas)
-            )
-        elif bm == "lorn":  # <- Lorentzian broadening
-            deltas = deltas / (deltas**2 + bf)
-        elif bm == "none":  # <- Debugging only
-            deltas = 1 / deltas
-        else:  # pragma: no cover
-            # Should be impossible to get here
-            raise ValueError(f"Unknown broadening method {bm}")
-
-        # Construct F matrix where F_ij = v_bar_j - v_bar_i; construction is
-        # done in this manner to avoid 1/0 which can cause intermittent and
-        # hard-to-diagnose issues.
-        F = torch.zeros(
-            *w.shape, w.shape[-1], dtype=ctx.dtype, device=w_bar.device
-        )
-        # Upper then lower triangle
-        F[..., tri_u[0], tri_u[1]] = deltas
-        F[..., tri_u[1], tri_u[0]] -= F[..., tri_u[0], tri_u[1]]
+        # F_ij = h(w_j - w_i), zero on the diagonal; `h` is odd, so F is
+        # antisymmetric.
+        F = _broadened_gaps(w, bf, bm)
 
         # Construct the gradient following the equation in the doc-string.
         temp = symmetrize(F * (v.transpose(-2, -1) @ v_bar), force=True)
@@ -257,85 +262,6 @@ class SymEigBroadBase(torch.autograd.Function):
         return a_bar, None, None
 
 
-class _SymEigBroad_V1(SymEigBroadBase):  # pragma: no cover
-    """
-    Calculate the eigenvalues and eigenvectors of a symmetric matrix with a
-    custom autograd function that defines a `forward()` that combines the
-    forward compute logic with `setup_context()` function. This was the only
-    way before PyTorch 2.0.0, but is still supported.
-
-    More details can be found in the docstring of the Base class that also
-    implements the common backward logic.
-    """
-
-    @staticmethod
-    def forward(
-        ctx: Any,
-        a: Tensor,
-        method: str = "cond",
-        factor: Tensor | float = 1e-12,
-    ) -> tuple[Tensor, Tensor]:
-        """
-        Calculate the eigenvalues and eigenvectors of a symmetric matrix.
-
-        This function finds the eigenvalues and eigenvectors of a real symmetric
-        matrix using the torch.symeig function. It optionally applies broadening
-        to the eigenvalues during the computation.
-
-        Parameters
-        ----------
-        a : Tensor
-            A real symmetric matrix whose eigenvalues and eigenvectors will be computed.
-        method : {'cond', 'lorn'}, optional
-            Broadening method to be used. The available options are:
-            - 'cond' for conditional broadening.
-            - 'lorn' for Lorentzian broadening.
-            The default is 'cond'. See class doc-string for more information on
-            these methods.
-        factor : float, optional
-            Degree of broadening (broadening factor). Default is 1E-12.
-
-        Returns
-        -------
-        w : Tensor
-            The eigenvalues of the matrix, in ascending order.
-        v : Tensor
-            The eigenvectors of the matrix.
-
-        Notes
-        -----
-        The `ctx` argument is auto-parsed by PyTorch and is used to pass data
-        from the  `.forward()` method to the `.backward()` method. This is
-        typically not described in the docstring, but is included here for
-        clarity.
-
-        Warnings
-        --------
-        The `factor` should not be a torch.tensor entity. The `method` and
-        `factor` parameters must be passed as positional arguments and not
-        keyword arguments.
-        """
-
-        # Check that the method is of a known type
-        if method not in SymEigBroadBase.KNOWN_METHODS:
-            raise ValueError(f"Unknown broadening method '{method}' selected.")
-
-        # Compute eigen-values & vectors
-        w, v = torch.linalg.eigh(a)
-
-        # Save tensors that will be needed in the backward pass
-        ctx.save_for_backward(w, v)
-
-        # Save the broadening factor and the selected broadening method.
-        ctx.bf, ctx.bm = factor, method
-
-        # Store dtype/device to prevent dtype/device mixing
-        ctx.dtype, ctx.device = a.dtype, a.device
-
-        # Return the eigenvalues and eigenvectors
-        return w, v
-
-
 class _SymEigBroad_V2(SymEigBroadBase):
     """
     Calculate the eigenvalues and eigenvectors of a symmetric matrix with a
@@ -344,7 +270,16 @@ class _SymEigBroad_V2(SymEigBroadBase):
 
     More details can be found in the docstring of the Base class that also
     implements the common backward logic.
+
+    ``generate_vmap_rule`` makes the function usable under
+    ``torch.func.vmap`` (``forward`` and ``backward`` only use batchable
+    tensor operations), and :meth:`jvp` provides forward-mode derivatives
+    for ``torch.func.jvp``/``jacfwd``. Both are built from differentiable
+    operations on the saved eigenpairs, so higher-order derivatives
+    (``hessian``, ``jacrev(jacrev)``) go through them as well.
     """
+
+    generate_vmap_rule = True
 
     @staticmethod
     def forward(
@@ -391,10 +326,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
         `factor` parameters must be passed as positional arguments, not keyword
         arguments.
         """
-        # Check that the method is of a known type
-        if method not in SymEigBroadBase.KNOWN_METHODS:
-            raise ValueError(f"Unknown broadening method '{method}' selected.")
-
+        # The method is validated in `eighb`, before `apply`.
         # Compute eigen-values & vectors
         w, v = torch.linalg.eigh(a)
 
@@ -438,14 +370,59 @@ class _SymEigBroad_V2(SymEigBroadBase):
 
         w, v = output
 
-        # Save tensors that will be needed in the backward pass
+        # Save tensors that will be needed in the backward and jvp passes
         ctx.save_for_backward(w, v)
+        ctx.save_for_forward(w, v)
 
         # Save the broadening factor and the selected broadening method.
         ctx.bf, ctx.bm = factor, method
 
         # Store dtype/device to prevent dtype/device mixing
         ctx.dtype, ctx.device = a.dtype, a.device
+
+    @staticmethod
+    def jvp(  # pyright: ignore[reportIncompatibleMethodOverride]
+        ctx: Any,
+        a_dot: Tensor,
+        method_dot: None,
+        factor_dot: None,
+    ) -> tuple[Tensor, Tensor]:
+        """
+        Forward-mode derivative of the eigen-decomposition.
+
+        With ``P = U^T sym(dA) U``, the tangents are ``dw = diag(P)`` and
+        ``dU = U (F o P)``, using the same broadened ``F`` as
+        :meth:`backward` so that forward- and reverse-mode agree. As in the
+        backward pass, the input tangent is symmetrized first.
+
+        Parameters
+        ----------
+        ctx : Any
+            Context object holding the eigenpairs saved in
+            :meth:`setup_context`.
+        a_dot : Tensor
+            Tangent of the input matrix.
+        method_dot, factor_dot : None
+            Tangents of the non-differentiable arguments.
+
+        Returns
+        -------
+        tuple[Tensor, Tensor]
+            Tangents of the eigenvalues and of the eigenvectors.
+        """
+        w: Tensor = ctx.saved_tensors[0]
+        v: Tensor = ctx.saved_tensors[1]
+
+        if not isinstance(ctx.bf, Tensor):
+            bf = torch.tensor(ctx.bf, dtype=ctx.dtype, device=ctx.device)
+        else:
+            bf = ctx.bf
+
+        a_dot = 0.5 * (a_dot + a_dot.transpose(-2, -1))
+        p = v.transpose(-2, -1) @ a_dot @ v
+
+        F = _broadened_gaps(w, bf, ctx.bm)
+        return torch.diagonal(p, dim1=-2, dim2=-1), v @ (F * p)
 
 
 def _eig_sort_out(
@@ -680,14 +657,15 @@ def eighb(
     v: Tensor
     w: Tensor
 
-    if __tversion__ < (2, 0, 0):  # pragma: no cover
-        _SymEigB = _SymEigBroad_V1
-    else:
-        _SymEigB = _SymEigBroad_V2  # type: ignore[assignment]
+    # Validated here, not inside the autograd `Function`.
+    if broadening_method not in _KNOWN_METHODS:
+        raise ValueError(
+            f"Unknown broadening method '{broadening_method}' selected."
+        )
 
     # Initial setup to make function calls easier to deal with
-    # If smearing use _SymEigB otherwise use torch.linalg.eigh
-    func: Callable = _SymEigB.apply if broadening_method is not None else torch.linalg.eigh  # type: ignore[type-arg]
+    # If smearing use `_SymEigBroad_V2` otherwise use torch.linalg.eigh
+    func: Callable = _SymEigBroad_V2.apply if broadening_method is not None else torch.linalg.eigh  # type: ignore[type-arg]
 
     # Set up for the arguments
     args = (broadening_method, factor) if broadening_method is not None else ()

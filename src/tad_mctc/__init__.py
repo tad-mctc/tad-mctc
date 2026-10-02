@@ -90,7 +90,7 @@ Example
 ... ))
 >>>
 >>> # calculate coordination number
->>> structure = mctc.io.structure.Structure(numbers=numbers, positions=positions)
+>>> structure = mctc.Structure(numbers=numbers, positions=positions)
 >>> cn = mctc.ncoord.cn_d4(structure)
 >>>
 >>> torch.set_printoptions(precision=4)
@@ -120,6 +120,7 @@ from . import (
 )
 from ._version import __version__
 from .io.read import read, read_chrg, read_uhf
+from .io.structure import Structure
 from .io.write import write
 
 __all__ = [
@@ -136,6 +137,7 @@ __all__ = [
     "typing",
     "units",
     "__version__",
+    "Structure",
     "read",
     "read_chrg",
     "read_uhf",

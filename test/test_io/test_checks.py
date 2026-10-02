@@ -21,7 +21,6 @@ Test the checks for the numbers and positions given to the reader and writer.
 import pytest
 import torch
 
-from tad_mctc._version import __tversion__
 from tad_mctc.exceptions import (
     DeviceError,
     DtypeError,
@@ -363,7 +362,6 @@ def test_structure_check_lattice_periodic_valid() -> None:
 ###############################################################################
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_coldfusion_functorch_via_jacrev() -> None:
     """
     Inside torch.func.jacrev, positions is a grad-tracking functorch tensor.
@@ -382,7 +380,6 @@ def test_coldfusion_functorch_via_jacrev() -> None:
     )
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_coldfusion_functorch_via_vmap() -> None:
     """
     Inside torch.func.vmap, numbers is a batched functorch tensor.
@@ -406,7 +403,6 @@ def test_coldfusion_functorch_via_vmap() -> None:
     )
 
 
-@pytest.mark.skipif(__tversion__ < (2, 0, 0), reason="Requires torch>=2.0.0")
 def test_content_functorch_via_vmap() -> None:
     """
     Inside torch.func.vmap, numbers is a batched functorch tensor.

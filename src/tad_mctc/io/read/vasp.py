@@ -29,7 +29,8 @@ periodic along all three axes, as in mctc-lib's ``new_structure``.
 from __future__ import annotations
 
 import itertools
-from typing import IO, Any, Iterator
+from collections.abc import Iterator
+from typing import IO, Any
 
 import torch
 

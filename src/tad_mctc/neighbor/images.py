@@ -47,8 +47,9 @@ along the unit normal of the plane spanned by the other two -- which is
 what stays correct for a triclinic cell where the three lattice vectors
 are not orthogonal.
 
-Both functions here are data-dependent (a lattice determines how many
-images exist at all) and are meant to run under ``torch.no_grad()`` as
+The ring counts and shift tables here are data-dependent (a lattice
+determines how many images exist at all) and are meant to run under
+``torch.no_grad()`` as
 part of neighbour-list *construction*, exactly like :mod:`.tiles`. The
 ghost positions they produce are used only to decide *which* pairs exist;
 the differentiable translation term is re-formed from ``positions`` and
@@ -185,7 +186,6 @@ class PeriodicShifts:
         return dataclasses.replace(self, **changes)
 
 
-@torch.no_grad()
 def wrap_to_central_cell(
     positions: Tensor, lattice: Tensor, periodic: Tensor
 ) -> tuple[Tensor, Tensor]:
@@ -248,15 +248,25 @@ def wrap_to_central_cell(
     >>> cell_shift
     tensor([[-2,  1,  0]])
     """
-    fractional = positions @ torch.linalg.inv(lattice)
+    # The integer shift is piecewise constant, so none of this needs a
+    # graph.
+    with torch.no_grad():
+        fractional = positions @ torch.linalg.inv(lattice)
 
-    # `-floor(frac + eps)` reproduces the Fortran `shift_back_abc`
-    # branch-for-branch, including its epsilon guard: a coordinate a hair
-    # under an integer folds with that integer rather than a cell below
-    # it.
-    cell_shift = -torch.floor(fractional + _WRAP_EPS).long()
-    cell_shift = torch.where(periodic, cell_shift, torch.zeros_like(cell_shift))
+        # `-floor(frac + eps)` reproduces the Fortran `shift_back_abc`
+        # branch-for-branch, including its epsilon guard: a coordinate a
+        # hair under an integer folds with that integer rather than a cell
+        # below it.
+        cell_shift = -torch.floor(fractional + _WRAP_EPS).long()
+        cell_shift = torch.where(
+            periodic, cell_shift, torch.zeros_like(cell_shift)
+        )
 
+    # Outside `no_grad`, so `wrapped` is differentiable like the plain
+    # `positions + shift @ lattice` it is: the identity with respect to
+    # `positions`, `cell_shift` with respect to `lattice`. Reverse mode
+    # (`jacrev`) then agrees with forward mode (`jacfwd`), which ignores
+    # `no_grad` altogether.
     wrapped = positions + cell_shift.to(positions.dtype) @ lattice
     return wrapped, cell_shift
 

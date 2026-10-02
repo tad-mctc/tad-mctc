@@ -27,22 +27,15 @@ from __future__ import annotations
 
 import pytest
 import torch
+from torch.func import jacrev, vmap
 
-from tad_mctc.autograd import (
-    jacrev,
-    jacrev_matches_finite_diff,
-    vmap,
-    vmap_matches_loop,
-)
+from tad_mctc._version import __tversion__
+from tad_mctc.autograd import jacrev_matches_finite_diff, vmap_matches_loop
 from tad_mctc.data import radii
 from tad_mctc.data.structures import get_structure
 from tad_mctc.io.structure import Structure
 from tad_mctc.ncoord import defaults
-from tad_mctc.ncoord.common import (
-    CNModel,
-    _resolve_table,
-    cut_coordination_number,
-)
+from tad_mctc.ncoord.common import CNModel, cut_coordination_number
 from tad_mctc.ncoord.count import erf_count
 from tad_mctc.ncoord.d3 import cn_d3
 from tad_mctc.ncoord.d4 import cn_d4, d4_en_weight
@@ -55,6 +48,7 @@ from ..conftest import DEVICE
 from ..utils import (
     DYNAMO_SUPPORTED,
     DYNAMO_UNSUPPORTED_REASON,
+    compile_fullgraph,
     run_compiled_or_skip,
 )
 
@@ -460,61 +454,6 @@ def test_vmap_over_lattices_dense_periodic_with_one_shared_shifts() -> None:
     assert vmap_matches_loop(f, batch)
 
 
-# ---------------------------------------------------------------------------
-# Issue 05: `_resolve_table` caches a `TableFunction`'s resolved tensor at
-# function level, keyed by table identity + device/dtype, instead of
-# rebuilding it on every call.
-
-
-def test_resolve_table_reuses_cached_tensor_for_same_table_device_dtype() -> (
-    None
-):
-    """Two calls with the same `TableFunction` and the same `like` device/
-    dtype must not re-invoke the table and must return the very same
-    tensor object."""
-    calls: list[tuple[torch.device | None, torch.dtype]] = []
-
-    def spy_table(
-        *,
-        device: torch.device | None = None,
-        dtype: torch.dtype = torch.float32,
-    ) -> torch.Tensor:
-        calls.append((device, dtype))
-        return torch.arange(10, device=device, dtype=dtype)
-
-    like = torch.zeros(3, dtype=torch.double)
-
-    first = _resolve_table(spy_table, like)
-    second = _resolve_table(spy_table, like)
-
-    assert len(calls) == 1
-    assert first is second
-
-
-def test_resolve_table_rebuilds_for_different_dtype() -> None:
-    """A cache keyed only by table identity (ignoring device/dtype) would
-    wrongly hand back a float32 table when a float64 one is asked for."""
-    calls: list[tuple[torch.device | None, torch.dtype]] = []
-
-    def spy_table(
-        *,
-        device: torch.device | None = None,
-        dtype: torch.dtype = torch.float32,
-    ) -> torch.Tensor:
-        calls.append((device, dtype))
-        return torch.arange(10, device=device, dtype=dtype)
-
-    like_f32 = torch.zeros(3, dtype=torch.float32)
-    like_f64 = torch.zeros(3, dtype=torch.float64)
-
-    first = _resolve_table(spy_table, like_f32)
-    second = _resolve_table(spy_table, like_f64)
-
-    assert len(calls) == 2
-    assert first.dtype == torch.float32
-    assert second.dtype == torch.float64
-
-
 def test_dispatch_without_pair_weight_skips_en() -> None:
     """`en` is only read when `pair_weight` is set (see `CNModel`'s own
     docstring), so evaluating a model with `pair_weight=None` must not
@@ -610,14 +549,22 @@ def test_table_cache_is_shared_across_replace() -> None:
     assert torch.allclose(first, second)
 
 
+def _cached_tables() -> list[torch.Tensor]:
+    """All tensors in the table cache, across tables, devices and dtypes."""
+    from tad_mctc.data.table import _TABLE_CACHE
+
+    return [
+        t for per_table in _TABLE_CACHE.values() for t in per_table.values()
+    ]
+
+
 def test_table_cache_survives_cold_fill_under_vmap() -> None:
     """The first resolution of a `TableFunction` (a cold cache) happening
-    *while* `tad_mctc.autograd.vmap` (``torch.func.vmap`` on PyTorch>=2.0)
-    is tracing must cache a plain `Tensor`, not a functorch batched-tensor
-    wrapper -- `radii.COV_D3()` builds a table with no data dependency on
-    the vmapped argument, so it is never wrapped, but this pins that
-    behaviour down as a regression test."""
-    from tad_mctc.ncoord.common import _TABLE_CACHE
+    *while* ``torch.func.vmap`` is tracing must cache a plain `Tensor`, not a
+    functorch batched-tensor wrapper -- `radii.COV_D3()` builds a table with
+    no data dependency on the vmapped argument, so it is never wrapped, but
+    this pins that behaviour down as a regression test."""
+    from tad_mctc.data.table import _TABLE_CACHE
 
     sample = get_structure("mb16_43", "01")
     numbers = sample.numbers
@@ -635,7 +582,7 @@ def test_table_cache_survives_cold_fill_under_vmap() -> None:
     assert torch.allclose(batched, looped)
 
     assert len(_TABLE_CACHE) > 0
-    for cached in _TABLE_CACHE.values():
+    for cached in _cached_tables():
         assert type(cached) is torch.Tensor
 
     # The cached tensor must remain usable in a plain eager call afterward.
@@ -643,11 +590,42 @@ def test_table_cache_survives_cold_fill_under_vmap() -> None:
     assert torch.allclose(eager, f(torch.tensor(1.0, dtype=torch.double)))
 
 
+def test_table_cache_survives_cold_fill_under_jacrev() -> None:
+    """A cold cache filled while ``torch.func.jacrev`` is active must cache
+    the plain table, not the grad-tracking wrapper created at that level
+    (`type()` does not tell them apart). Otherwise, a later Hessian, i.e. a
+    different transform stack, fails with "INTERNAL ASSERT FAILED ...
+    escaped?"."""
+    from tad_mctc.data.table import _TABLE_CACHE
+
+    sample = get_structure("mb16_43", "01")
+    numbers = sample.numbers
+    positions = sample.positions.double()
+
+    def energy(p: torch.Tensor) -> torch.Tensor:
+        return cn_d3(Structure(numbers=numbers, positions=p)).sum()
+
+    hess = jacrev(jacrev(energy))
+
+    _TABLE_CACHE.clear()
+    first = hess(positions)
+
+    assert len(_TABLE_CACHE) > 0
+    for cached in _cached_tables():
+        assert not torch._C._functorch.is_functorch_wrapped_tensor(cached)
+
+    # A second Hessian and a plain call reuse the cached table.
+    assert torch.allclose(hess(positions), first)
+    assert torch.allclose(jacrev(energy)(positions), jacrev(energy)(positions))
+    energy(positions)
+
+
 @pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
-def test_table_cache_survives_cold_fill_under_compile() -> None:
-    """Same guarantee as the vmap test above, for a cold cache filled
-    while `torch.compile(fullgraph=True)` is tracing."""
-    from tad_mctc.ncoord.common import _TABLE_CACHE
+def test_table_cache_not_filled_under_compile() -> None:
+    """A cold cache is left cold while `torch.compile(fullgraph=True)` is
+    tracing (see `test_table_cache_cold_under_compiled_jacrev` for why), and
+    the next eager call fills it with a plain `Tensor`."""
+    from tad_mctc.data.table import _TABLE_CACHE
 
     sample = get_structure("mb16_43", "01")
     numbers = sample.numbers
@@ -660,13 +638,48 @@ def test_table_cache_survives_cold_fill_under_compile() -> None:
         return cn_d3(Structure(numbers=numbers, positions=p))
 
     compiled_value = run_compiled_or_skip(f, positions)
-
-    assert len(_TABLE_CACHE) > 0
-    for cached in _TABLE_CACHE.values():
-        assert type(cached) is torch.Tensor
+    assert len(_TABLE_CACHE) == 0
 
     eager_value = f(positions)
     assert torch.allclose(compiled_value, eager_value)
+
+    assert len(_TABLE_CACHE) > 0
+    for cached in _cached_tables():
+        assert type(cached) is torch.Tensor
+
+
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@pytest.mark.skipif(
+    __tversion__ < (2, 5, 0),
+    reason="`torch.compile` of `torch.func` transforms needs PyTorch 2.5.0.",
+)
+@pytest.mark.parametrize("warm", [False, True])
+def test_table_cache_cold_under_compiled_jacrev(warm: bool) -> None:
+    """`torch.compile(jacrev(...))` with a `TableFunction`. Filling a cold
+    cache while tracing would make the table a graph output, which inside
+    the transform is a functorch wrapper and fails to compile ("Cannot
+    access storage of TensorWrapper"). Called directly rather than through
+    `run_compiled_or_skip`, which would turn that failure into a skip."""
+    from tad_mctc.data.table import _TABLE_CACHE
+
+    sample = get_structure("mb16_43", "01")
+    numbers = sample.numbers
+    positions = sample.positions.double()
+
+    def energy(p: torch.Tensor) -> torch.Tensor:
+        return cn_d3(Structure(numbers=numbers, positions=p)).sum()
+
+    grad = jacrev(energy)
+    batch = torch.stack([positions, positions * 1.01])
+
+    for fn, arg in ((grad, positions), (vmap(grad), batch)):
+        _TABLE_CACHE.clear()
+        torch._dynamo.reset()  # pylint: disable=protected-access
+        if warm:
+            energy(positions)
+
+        compiled = compile_fullgraph(fn)(arg)
+        assert torch.allclose(compiled, fn(arg))
 
 
 # ---------------------------------------------------------------------------

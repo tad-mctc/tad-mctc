@@ -25,6 +25,8 @@ This module contains various arrays with atomic data:
  - effective nuclear charges
  - periodic table
 
+as well as :func:`resolve_table` for building such tables.
+
 Note that the first element of all tensors is a dummy to allow indexing by the
 atomic numbers.
 """
@@ -35,4 +37,5 @@ from .hardness import *
 from .mass import *
 from .pse import *
 from .radii import *
+from .table import *
 from .zeff import *

@@ -18,8 +18,7 @@
 Tools: Memory
 -------------
 
-Functions for getting information on memory requirements for tensors and
-devices (CPU/GPU).
+Functions for estimating the memory requirements of tensors.
 
 Example
 -------
@@ -37,7 +36,7 @@ import torch
 
 from ..typing import Size
 
-__all__ = ["memory_tensor", "memory_device"]
+__all__ = ["memory_tensor"]
 
 
 def memory_tensor(size: Size, dtype: torch.dtype) -> float:
@@ -85,36 +84,3 @@ def memory_tensor(size: Size, dtype: torch.dtype) -> float:
         raise ValueError(f"Unsupported tensor dtype: {dtype}")
 
     return num_elements * element_size / (1024**2)
-
-
-def memory_device(device: torch.device) -> tuple[float, float]:
-    """
-    Get the available and total memory of the device.
-
-    Parameters
-    ----------
-    device : :class:`torch.device`
-        Device to check memory for.
-
-    Returns
-    -------
-    tuple[float, float]
-        Available and total memory in MB.
-    """
-    if not isinstance(device, torch.device):
-        raise TypeError(
-            f"Device should be a `torch.device` object, but is a {type(device)}."
-        )
-
-    if device.type == "cpu":
-        # pylint: disable=import-outside-toplevel
-        from psutil import virtual_memory
-
-        mem = virtual_memory()
-        free, total = mem.available, mem.total
-    elif device.type == "cuda":
-        free, total = torch.cuda.mem_get_info()
-    else:
-        raise ValueError(f"Unsupported device: {device}")
-
-    return free / (1024**2), total / (1024**2)

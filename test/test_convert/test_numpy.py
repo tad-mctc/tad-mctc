@@ -20,7 +20,6 @@ Test numpy and PyTorch interconversion.
 
 from __future__ import annotations
 
-import importlib
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -123,12 +122,9 @@ def test_torch_to_np_with_device(device_str: str) -> None:
     assert isinstance(arr, np.ndarray)
 
 
-@pytest.mark.skipif(
-    __tversion__ < (2, 0, 0) or __tversion__ > (2, 7, 1),
-    reason="Requires 2.0.0<=torch<=2.7.1",
-)
+@pytest.mark.skipif(__tversion__ > (2, 7, 1), reason="Requires torch<=2.7.1")
 def test_torch_to_np_with_transforms_fail() -> None:
-    from tad_mctc.autograd import jacrev
+    from torch.func import jacrev
 
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -148,7 +144,7 @@ def test_torch_to_np_with_transforms_fail() -> None:
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double, torch.int64])
 def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
-    from tad_mctc.autograd import jacrev
+    from torch.func import jacrev
 
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -174,50 +170,18 @@ def test_torch_to_np_with_transforms(dtype: torch.dtype) -> None:
     jacobian_func(x.detach().clone().requires_grad_(), y)
 
 
-def test_torch_to_np_below_1_13_0() -> None:
-    import tad_mctc._version
-
-    torch_version = tad_mctc._version.__tversion__
-
-    with patch("tad_mctc._version.__tversion__", new=(1, 9, 0)):
-        # reload cached module to ensure that patched version is used
-        importlib.reload(convert.numpy)
-
+def test_torch_to_np_checks_gradtracking() -> None:
+    with patch(
+        "torch._C._functorch.is_gradtrackingtensor", return_value=False
+    ) as mock_is_gradtrackingtensor:
         tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
         result = convert.tensor_to_numpy(tensor)
 
         assert isinstance(result, np.ndarray), "Result is not an ndarray"
 
-    # reload for actual version
-    importlib.reload(convert.numpy)
-    assert torch_version == tad_mctc._version.__tversion__
+        # Check that `mock_is_gradtrackingtensor` was called once
+        assert mock_is_gradtrackingtensor.call_count == 1
 
-
-@pytest.mark.skipif(__tversion__ < (1, 13, 0), reason="Requires torch>=1.13.0")
-def test_torch_to_np_above_1_13_0() -> None:
-    import tad_mctc._version
-
-    torch_version = tad_mctc._version.__tversion__
-
-    with patch("tad_mctc._version.__tversion__", new=(2, 0, 0)):
-        # reload cached module to ensure that patched version is used
-        importlib.reload(convert.numpy)
-
-        with patch(
-            "torch._C._functorch.is_gradtrackingtensor", return_value=False
-        ) as mock_is_gradtrackingtensor:
-            tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
-            result = convert.tensor_to_numpy(tensor)
-
-            assert isinstance(result, np.ndarray), "Result is not an ndarray"
-
-            # Check that `mock_is_gradtrackingtensor` was called once
-            assert mock_is_gradtrackingtensor.call_count == 1
-
-            # Check that 1st call had correct args
-            called_tensor = mock_is_gradtrackingtensor.call_args[0][0]
-            assert torch.equal(called_tensor.cpu(), tensor.cpu())
-
-    # reload for actual version
-    importlib.reload(convert.numpy)
-    assert torch_version == tad_mctc._version.__tversion__
+        # Check that 1st call had correct args
+        called_tensor = mock_is_gradtrackingtensor.call_args[0][0]
+        assert torch.equal(called_tensor.cpu(), tensor.cpu())

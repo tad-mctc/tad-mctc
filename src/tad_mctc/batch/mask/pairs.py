@@ -113,4 +113,5 @@ def zero_masked_pairs(numbers: Tensor, tensor: Tensor) -> Tensor:
         ``tensor`` with self-pairs and padded-atom pairs zeroed.
     """
     mask = real_pairs(numbers, mask_diagonal=True).unsqueeze(-1)
-    return torch.where(mask, tensor, tensor.new_tensor(0.0))
+    zero = torch.zeros((), dtype=tensor.dtype, device=tensor.device)
+    return torch.where(mask, tensor, zero)

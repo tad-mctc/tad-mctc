@@ -68,18 +68,11 @@ else:
     from typing_extensions import NotRequired, Self, Unpack
 
 # Python 3.10
-if sys.version_info >= (3, 10):
-    from typing import TypeAlias, TypeGuard
-else:
-    from typing_extensions import TypeAlias, TypeGuard
-
 # starting with Python 3.9, type hinting generics have been moved
 # from the "typing" to the "collections" module
 # (see PEP 585: https://peps.python.org/pep-0585/)
-if sys.version_info >= (3, 9):
-    from collections.abc import Callable, Generator, Sequence
-else:
-    from typing import Callable, Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
+from typing import TypeAlias, TypeGuard
 
 CountingFunction = Callable[..., Tensor]
 """
@@ -108,18 +101,17 @@ class TableFunction(Protocol):
     ) -> Tensor: ...
 
 
-if sys.version_info >= (3, 10):
-    # "from __future__ import annotations" only affects type annotations
-    # not type aliases, hence "|" is not allowed before Python 3.10
+# "from __future__ import annotations" only affects type annotations
+# not type aliases, hence "|" is not allowed before Python 3.10
 
-    PathLike = str | Path
-    Sliceable = list[Tensor] | tuple[Tensor, ...]
-    Size = list[int] | tuple[int, ...] | torch.Size
-    TensorOrTensors = list[Tensor] | tuple[Tensor, ...] | Tensor
-    DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
+PathLike = str | Path
+Sliceable = list[Tensor] | tuple[Tensor, ...]
+Size = list[int] | tuple[int, ...] | torch.Size
+TensorOrTensors = list[Tensor] | tuple[Tensor, ...] | Tensor
+DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
 
-    CacheKey = tuple[int, str, tuple[Any, ...], frozenset[tuple[str, Any]]]
-elif sys.version_info >= (3, 9):
+CacheKey = tuple[int, str, tuple[Any, ...], frozenset[tuple[str, Any]]]
+if sys.version_info >= (3, 9):
     # in Python 3.9, "from __future__ import annotations" works with type
     # aliases but requires using `Union` from typing
     from typing import Union
@@ -132,24 +124,18 @@ elif sys.version_info >= (3, 9):
     # no Union here, same as 3.10
     DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
     CacheKey = tuple[int, str, tuple[Any, ...], frozenset[tuple[str, Any]]]
-elif sys.version_info >= (3, 8):
+else:
     # in Python 3.8, "from __future__ import annotations" only affects
     # type annotations not type aliases
     from typing import Dict, FrozenSet, List, Tuple, Union
 
     PathLike = Union[str, Path]
-    Sliceable = Union[List[Tensor], Tuple[Tensor, ...]]
-    Size = Union[List[int], Tuple[int], torch.Size]
-    TensorOrTensors = Union[List[Tensor], Tuple[Tensor, ...], Tensor]
-    DampingFunction = Callable[[int, Tensor, Tensor, Dict[str, Tensor]], Tensor]
+    Sliceable = Union[list[Tensor], tuple[Tensor, ...]]
+    Size = Union[list[int], tuple[int], torch.Size]
+    TensorOrTensors = Union[list[Tensor], tuple[Tensor, ...], Tensor]
+    DampingFunction = Callable[[int, Tensor, Tensor, dict[str, Tensor]], Tensor]
 
-    CacheKey = Tuple[int, str, Tuple[Any, ...], FrozenSet[Tuple[str, Any]]]
-else:
-    vinfo = sys.version_info
-    raise RuntimeError(
-        f"'tad_mctc' requires at least Python 3.8 (Python {vinfo.major}."
-        f"{vinfo.minor}.{vinfo.micro} found)."
-    )
+    CacheKey = tuple[int, str, tuple[Any, ...], frozenset[tuple[str, Any]]]
 
 
 T = TypeVar("T")

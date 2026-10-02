@@ -32,10 +32,9 @@ import dataclasses
 
 import pytest
 import torch
+from torch.func import jacrev, vmap
 from torch.utils._pytree import tree_flatten
 
-from tad_mctc._version import __tversion__
-from tad_mctc.autograd import jacrev, vmap
 from tad_mctc.exceptions import DtypeError
 from tad_mctc.io.structure import Structure, pack_structures
 from tad_mctc.typing import Tensor
@@ -44,12 +43,6 @@ from ..utils import (
     DYNAMO_SUPPORTED,
     DYNAMO_UNSUPPORTED_REASON,
     run_compiled_or_skip,
-)
-
-_VMAP_PYTREE_UNSUPPORTED_REASON = (
-    "vmap over a Structure needs torch.func (>= 2.0); the compat fallback "
-    "(tad_mctc.autograd.vmap on older PyTorch) only accepts a raw Tensor "
-    "as its first argument, not an arbitrary pytree"
 )
 
 
@@ -394,9 +387,6 @@ def test_to_moves_every_set_field_to_cuda() -> None:
     assert moved.periodic is not None and moved.periodic.device.type == "cuda"
 
 
-@pytest.mark.skipif(
-    __tversion__ < (2, 0, 0), reason=_VMAP_PYTREE_UNSUPPORTED_REASON
-)
 def test_vmap_over_batch_with_optional_field_absent() -> None:
     """`vmap(f, in_dims=0)` must work over a batch of instances that all
     uniformly omit an optional field -- the pytree treespec then has no
@@ -416,9 +406,6 @@ def test_vmap_over_batch_with_optional_field_absent() -> None:
     assert torch.allclose(result, expected)
 
 
-@pytest.mark.skipif(
-    __tversion__ < (2, 0, 0), reason=_VMAP_PYTREE_UNSUPPORTED_REASON
-)
 def test_vmap_over_batch_with_optional_field_present() -> None:
     """The same batched `vmap`, but with an optional field (`uhf`)
     uniformly present across the batch instead of uniformly absent."""

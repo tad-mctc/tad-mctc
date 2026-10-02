@@ -26,8 +26,8 @@ from __future__ import annotations
 
 import pytest
 import torch
+from torch.func import jacrev, vmap
 
-from tad_mctc.autograd import jacrev, vmap
 from tad_mctc.io.structure import Structure
 from tad_mctc.ncoord import cn_d3
 from tad_mctc.neighbor.images import build_periodic_shifts

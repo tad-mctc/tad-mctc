@@ -20,12 +20,10 @@ Test memory functions.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 import torch
 
-from tad_mctc.tools import memory_device, memory_tensor
+from tad_mctc.tools import memory_tensor
 
 dtype_cases = [
     (torch.float64, 8),
@@ -56,41 +54,3 @@ def test_unsupported_dtype() -> None:
         memory_tensor(size, unsupported_dtype)
 
     assert f"{unsupported_dtype}" in str(e_info.value)
-
-
-################################################################################
-
-
-def test_memory_device_cpu() -> None:
-    device = torch.device("cpu")
-    available_memory, total_memory = memory_device(device)
-
-    assert available_memory > 0
-    assert total_memory > 0
-
-
-@patch("torch.cuda.mem_get_info")
-def test_memory_device_cuda(mock_mem_info: MagicMock) -> None:
-    # Mock values for free and total memory in bytes
-    mock_free, mock_total = 8 * 1024**3, 16 * 1024**3
-    mock_mem_info.return_value = (mock_free, mock_total)
-
-    # Testing memory retrieval on a CUDA device
-    device = torch.device("cuda")
-    available_memory, total_memory = memory_device(device)
-
-    # Convert bytes to MB for the test checks
-    expected_free = mock_free / (1024**2)
-    expected_total = mock_total / (1024**2)
-
-    # Asserting that the mocked values are correctly handled and converted
-    assert available_memory == pytest.approx(expected_free)
-    assert total_memory == pytest.approx(expected_total)
-
-
-def test_memory_device_invalid_device() -> None:
-    with pytest.raises(TypeError):
-        memory_device("invalid_device")  # type: ignore
-
-    with pytest.raises(ValueError):
-        memory_device(torch.device("opengl"))

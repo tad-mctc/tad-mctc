@@ -51,10 +51,6 @@ exclude = '''(?x)
 '''
 
 [[tool.mypy.overrides]]
-module = "psutil"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
 module = "scipy.*"
 ignore_missing_imports = true
 

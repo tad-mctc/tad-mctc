@@ -24,11 +24,9 @@ Covalent radii.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import torch
 
-from .._version import __tversion__
 from ..typing import Tensor
 from ..units import length
 
@@ -241,11 +239,9 @@ def VDW_D3(
 ##############################################################################
 
 
-def _load_vdw_rad_pairwise(
-    device: torch.device | None = None, dtype: torch.dtype | None = torch.double
-) -> Tensor:
+def _read_vdw_rad_pairwise() -> Tensor:
     """
-    Load reference VDW radii from file.
+    Read the reference VDW radii file, on the CPU in double precision.
 
     Regenerated with the following script whenever the Angstrom source or
     `length.AA2AU` changes:
@@ -270,6 +266,28 @@ def _load_vdw_rad_pairwise(
                 table[num1, num2] = angstrom[index] * AA2AU
         torch.save(table, "vdw-pairwise.pt")
 
+    Returns
+    -------
+    Tensor
+        Pair-wise VDW radii, shape ``(104, 104)``.
+    """
+    path = Path(__file__).parent / "vdw-pairwise.pt"
+    return torch.load(path, map_location="cpu", weights_only=True)
+
+
+# Read once at import, not on first use: file I/O is not traceable, so a
+# lazily filled cache would make a cold first call fail under
+# `torch.compile(fullgraph=True)` (and `torch.load` has no vmap/functorch
+# story). The table is 104x104.
+_VDW_PAIRWISE_TABLE = _read_vdw_rad_pairwise()
+
+
+def _load_vdw_rad_pairwise(
+    device: torch.device | None = None, dtype: torch.dtype | None = torch.double
+) -> Tensor:
+    """
+    VDW radii on ``device`` as ``dtype``.
+
     Parameters
     ----------
     dtype : torch.dtype, optional
@@ -280,19 +298,12 @@ def _load_vdw_rad_pairwise(
     Returns
     -------
     Tensor
-        VDW radii.
+        VDW radii, a fresh copy the caller may modify.
     """
     if dtype is None:
         dtype = torch.double
 
-    kwargs: dict[str, Any] = {"map_location": device}
-    if __tversion__ > (1, 12, 1):  # pragma: no cover
-        kwargs["weights_only"] = True
-
-    path = Path(__file__).parent / "vdw-pairwise.pt"
-
-    tensor = torch.load(path, **kwargs)
-    return tensor.to(dtype) if tensor.dtype is not dtype else tensor
+    return _VDW_PAIRWISE_TABLE.to(device=device, dtype=dtype, copy=True)
 
 
 def VDW_PAIRWISE(

@@ -40,7 +40,8 @@ rather than ported as-is, and reported upstream.
 
 from __future__ import annotations
 
-from typing import IO, Any, Iterator
+from collections.abc import Iterator
+from typing import IO, Any
 
 import torch
 
