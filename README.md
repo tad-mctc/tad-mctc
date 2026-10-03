@@ -132,6 +132,17 @@ Install this project with `pip` in the environment
 pip install .
 ```
 
+An optional, OpenMP-parallel C++ extension accelerates the CPU neighbour
+list for very large systems. By default it compiles lazily, on first use
+(no compiler needed just to install); set `TAD_MCTC_BUILD_NATIVE=1` before
+`pip install .` to build it ahead of time instead, so the first real run
+never pays that one-off compile cost. The extension is built against the
+installed torch, so turn off pip's isolated build environment:
+
+```sh
+TAD_MCTC_BUILD_NATIVE=1 pip install --no-build-isolation .
+```
+
 The following dependencies are required
 
 - [numpy](https://numpy.org/)

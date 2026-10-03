@@ -15,14 +15,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test the shared ``is_compiling`` tracing-state helper (issue 21).
-
-Neither of the two former private copies (``math/einsum.py``,
-``storch/elemental.py``) had a dedicated test -- each was only exercised
-indirectly through ``einsum``'s / ``sqrt``'s / ``pow``'s own compile tests.
-Moving the code to a shared, public location is a reasonable point to add
-direct coverage.
+Test the shared ``is_compiling`` tracing-state helper and the
+``is_compile_supported`` capability probe directly. Their callers
+(``math/einsum.py``, ``storch/elemental.py``) exercise them only
+indirectly, through their own compile tests.
 """
+
+# pylint: disable=protected-access
 
 from __future__ import annotations
 
@@ -32,7 +31,7 @@ import pytest
 import torch
 
 from tad_mctc.tools import compile as compile_module
-from tad_mctc.tools import is_compiling
+from tad_mctc.tools import is_compile_supported, is_compiling
 
 from ..utils import (
     DYNAMO_SUPPORTED,
@@ -43,6 +42,13 @@ from ..utils import (
 
 def test_is_compiling_outside_compile() -> None:
     assert is_compiling() is False
+
+
+def test_is_compile_supported_matches_test_suite_flag() -> None:
+    # `test/utils.py`'s `DYNAMO_SUPPORTED` is just this function, called
+    # once at import time; keep the two in sync so a future change to one
+    # cannot silently drift from the other.
+    assert is_compile_supported() is DYNAMO_SUPPORTED
 
 
 def test_resolve_prefers_torch_compiler_is_compiling(
@@ -68,19 +74,17 @@ def test_resolve_falls_back_to_dynamo_is_compiling(
     )
 
     if not hasattr(torch, "_dynamo") or not hasattr(
-        torch._dynamo, "is_compiling"  # pylint: disable=protected-access
+        torch._dynamo, "is_compiling"
     ):
         pytest.skip("torch._dynamo.is_compiling is not available here")
 
     resolved = compile_module._resolve_is_compiling()
-    assert (
-        resolved is torch._dynamo.is_compiling
-    )  # pylint: disable=protected-access
+    assert resolved is torch._dynamo.is_compiling
 
 
 @pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_is_compiling_inside_torch_compile_fullgraph() -> None:
-    torch._dynamo.reset()  # pylint: disable=protected-access
+    torch._dynamo.reset()
 
     def f(x: torch.Tensor) -> torch.Tensor:
         # `is_compiling()` itself is the thing under test, so its result is

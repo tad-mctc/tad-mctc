@@ -15,13 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test the periodic ghost pool: `count_image_rings_cp2k`,
-`count_image_rings_mctclib`, and `build_ghost_pool`.
+Test the periodic images: `count_image_rings_cp2k`,
+`count_image_rings_mctclib`, `build_periodic_shifts` and
+`wrap_to_central_cell`.
 
 The unit tests check each ring-count formula against an independent,
 literal port of its own source (CP2K's while-loop, mctc-lib's Fortran
-subroutine), plus a brute-force comparison between the two, and the ghost
-pool's bookkeeping (shape, owner, shift) directly.
+subroutine), plus a brute-force comparison between the two, and the shift
+table built from them directly.
 """
 
 from __future__ import annotations
@@ -33,9 +34,7 @@ import torch
 
 from tad_mctc.neighbor.images import (
     PeriodicShifts,
-    build_ghost_pool,
     build_periodic_shifts,
-    build_shared_periodic_shifts,
     count_image_rings_cp2k,
     count_image_rings_mctclib,
     wrap_to_central_cell,
@@ -290,94 +289,44 @@ def test_count_image_rings_left_handed_cell() -> None:
 
 
 ##############################################################################
-# build_ghost_pool
+# build_periodic_shifts
 ##############################################################################
 
 
-def test_build_ghost_pool_consistency() -> None:
-    """Every ghost position equals its owner's position translated by its
-    own integer shift through the lattice, exactly."""
-    torch.manual_seed(0)
-    positions = torch.rand(6, 3, **DD) * 6.0
-    lattice = _SMALL_CUBIC.to(DEVICE)
-    periodic = torch.tensor([True, True, True], device=DEVICE)
-
-    ghosts, owner, shift = build_ghost_pool(
-        positions, lattice, periodic, cutoff=10.0
-    )
-    expected = positions[owner] + shift.to(positions.dtype) @ lattice
-    assert torch.allclose(ghosts, expected, atol=1e-12)
-
-
-def test_build_ghost_pool_zero_shift_is_primary_copy() -> None:
-    """Exactly one ghost per atom carries the zero shift, and it
-    reproduces that atom's own position."""
-    torch.manual_seed(1)
-    nat = 5
-    positions = torch.rand(nat, 3, **DD) * 6.0
-    lattice = _SMALL_CUBIC.to(DEVICE)
-    periodic = torch.tensor([True, True, True], device=DEVICE)
-
-    ghosts, owner, shift = build_ghost_pool(
-        positions, lattice, periodic, cutoff=10.0
-    )
-    is_primary = (shift == 0).all(-1)
-
-    assert int(is_primary.sum()) == nat
-    order = owner[is_primary].argsort()
-    assert torch.equal(
-        owner[is_primary][order], torch.arange(nat, device=DEVICE)
-    )
-    assert torch.allclose(ghosts[is_primary][order], positions, atol=1e-12)
-
-
-def test_build_ghost_pool_forces_minimum_one_ring() -> None:
+def test_build_periodic_shifts_forces_minimum_one_ring() -> None:
     """Even when the projection formula alone would call for zero rings,
     a periodic axis still gets one: an atom right at a cell boundary can
     have a real neighbour arbitrarily close on the other side of it,
     however small ``cutoff`` is.
 
-    mctc-lib's ``ceil``-based formula (used by :func:`build_ghost_pool` via
-    :func:`build_periodic_shifts`) already returns at least one ring for
-    any ``cutoff > 0`` on its own -- unlike CP2K's ``floor``-based one, see
-    :func:`count_image_rings_cp2k`'s docstring -- so the only case where
-    the formula itself calls for zero rings is ``cutoff == 0.0`` exactly.
+    mctc-lib's ``ceil``-based formula already returns at least one ring
+    for any ``cutoff > 0`` on its own -- unlike CP2K's ``floor``-based one,
+    see :func:`count_image_rings_cp2k`'s docstring -- so the only case
+    where the formula itself calls for zero rings is ``cutoff == 0.0``
+    exactly.
     """
-    positions = torch.tensor([[3.0, 3.0, 3.0]], **DD)
     lattice = _CUBIC.to(DEVICE)
     periodic = torch.tensor([True, True, True], device=DEVICE)
 
     rings = count_image_rings_mctclib(lattice, periodic, cutoff=0.0)
     assert rings.tolist() == [0, 0, 0]
 
-    _, owner, shift = build_ghost_pool(positions, lattice, periodic, cutoff=0.0)
-    assert shift.shape[0] == 27  # 3 ** 3: one forced ring on every axis
-    assert bool((owner == 0).all())
+    bundle = build_periodic_shifts(lattice, periodic, cutoff=0.0)
+    assert bundle.shifts.shape[0] == 27  # 3 ** 3: one forced ring per axis
 
 
-##############################################################################
-# build_periodic_shifts
-##############################################################################
+def test_build_periodic_shifts_single_cell_equals_batch_of_one() -> None:
+    """A cell and a batch holding only that cell give the same table."""
+    lattice = _TRICLINIC.to(DEVICE)
+    periodic = torch.tensor([True, False, True], device=DEVICE)
 
-
-def test_build_periodic_shifts_matches_ghost_pool_shift() -> None:
-    """`build_periodic_shifts` is the same shift table `build_ghost_pool`
-    derives internally -- the dense periodic coordination-number path
-    (`tad_mctc.ncoord.common`) needs that table on its own, without a
-    ghost pool of Cartesian positions attached to it."""
-    positions = torch.rand(6, 3, **DD)
-    lattice = _SMALL_CUBIC.to(DEVICE)
-    periodic = torch.tensor([True, True, True], device=DEVICE)
-
-    _, _, pool_shift = build_ghost_pool(
-        positions, lattice, periodic, cutoff=10.0
+    single = build_periodic_shifts(lattice, periodic, cutoff=9.0)
+    batch = build_periodic_shifts(
+        lattice.unsqueeze(0), periodic.unsqueeze(0), cutoff=9.0
     )
-    expected = torch.unique(pool_shift, dim=0)
 
-    bundle = build_periodic_shifts(lattice, periodic, cutoff=10.0)
-
-    assert bundle.shifts.dtype == torch.long
-    assert torch.equal(torch.unique(bundle.shifts, dim=0), expected)
+    assert torch.equal(single.shifts, batch.shifts)
+    assert torch.equal(single.periodic_axes, batch.periodic_axes)
 
 
 def test_build_periodic_shifts_includes_zero_shift() -> None:
@@ -392,12 +341,7 @@ def test_build_periodic_shifts_includes_zero_shift() -> None:
     assert bool((bundle.shifts == zero).all(-1).any())
 
 
-##############################################################################
-# build_shared_periodic_shifts
-##############################################################################
-
-
-def test_build_shared_periodic_shifts_matches_elementwise_max() -> None:
+def test_build_periodic_shifts_batch_matches_elementwise_max() -> None:
     """For a batch of lattices with genuinely different sizes (not just
     uniform scaling), the shared table's ring count in each axis equals
     the max of calling `count_image_rings_mctclib` on each lattice
@@ -411,7 +355,7 @@ def test_build_shared_periodic_shifts_matches_elementwise_max() -> None:
     batch = torch.stack(lattices)
     cutoff = 9.0
 
-    bundle = build_shared_periodic_shifts(batch, periodic, cutoff)
+    bundle = build_periodic_shifts(batch, periodic, cutoff)
 
     per_lattice_rings = torch.stack(
         [count_image_rings_mctclib(lat, periodic, cutoff) for lat in lattices]
@@ -423,7 +367,7 @@ def test_build_shared_periodic_shifts_matches_elementwise_max() -> None:
     assert torch.equal(actual_max_rings, expected_max_rings)
 
 
-def test_build_shared_periodic_shifts_covers_the_more_demanding_lattice() -> (
+def test_build_periodic_shifts_batch_covers_the_more_demanding_lattice() -> (
     None
 ):
     """A batch where one lattice needs strictly more rings than another:
@@ -435,7 +379,7 @@ def test_build_shared_periodic_shifts_covers_the_more_demanding_lattice() -> (
     batch = torch.stack([small, large])
     cutoff = 9.0
 
-    shared = build_shared_periodic_shifts(batch, periodic, cutoff)
+    shared = build_periodic_shifts(batch, periodic, cutoff)
     demanding = build_periodic_shifts(small, periodic, cutoff)
 
     shared_set = {tuple(row.tolist()) for row in shared.shifts}
@@ -460,7 +404,7 @@ def test_periodic_shifts_rejects_malformed_shifts_shape() -> None:
     with pytest.raises(RuntimeError):
         PeriodicShifts(
             shifts=torch.zeros(3, dtype=torch.long, device=DEVICE),
-            periodic=periodic,
+            periodic_axes=periodic,
             cutoff=10.0,
         )
 
@@ -470,7 +414,7 @@ def test_periodic_shifts_rejects_non_long_shifts_dtype() -> None:
     with pytest.raises(RuntimeError):
         PeriodicShifts(
             shifts=torch.zeros(1, 3, dtype=torch.double, device=DEVICE),
-            periodic=periodic,
+            periodic_axes=periodic,
             cutoff=10.0,
         )
 
@@ -479,7 +423,7 @@ def test_periodic_shifts_rejects_malformed_periodic_shape() -> None:
     with pytest.raises(RuntimeError):
         PeriodicShifts(
             shifts=torch.zeros(1, 3, dtype=torch.long, device=DEVICE),
-            periodic=torch.tensor([True, True], device=DEVICE),
+            periodic_axes=torch.tensor([True, True], device=DEVICE),
             cutoff=10.0,
         )
 
@@ -488,7 +432,7 @@ def test_periodic_shifts_rejects_non_bool_periodic_dtype() -> None:
     with pytest.raises(RuntimeError):
         PeriodicShifts(
             shifts=torch.zeros(1, 3, dtype=torch.long, device=DEVICE),
-            periodic=torch.tensor([1, 1, 1], device=DEVICE),
+            periodic_axes=torch.tensor([1, 1, 1], device=DEVICE),
             cutoff=10.0,
         )
 
@@ -499,25 +443,25 @@ def test_periodic_shifts_replace_swaps_fields_and_revalidates() -> None:
     result, same as the constructor."""
     bundle = PeriodicShifts(
         shifts=torch.zeros(1, 3, dtype=torch.long, device=DEVICE),
-        periodic=torch.tensor([True, True, True], device=DEVICE),
+        periodic_axes=torch.tensor([True, True, True], device=DEVICE),
         cutoff=10.0,
     )
 
     new_periodic = torch.tensor([True, False, True], device=DEVICE)
-    replaced = bundle.replace(periodic=new_periodic)
+    replaced = bundle.replace(periodic_axes=new_periodic)
 
     assert replaced is not bundle
-    assert torch.equal(replaced.periodic, new_periodic)
+    assert torch.equal(replaced.periodic_axes, new_periodic)
     assert torch.equal(replaced.shifts, bundle.shifts)
     assert replaced.cutoff == bundle.cutoff
 
     with pytest.raises(RuntimeError):
-        bundle.replace(periodic=torch.tensor([True, True], device=DEVICE))
+        bundle.replace(periodic_axes=torch.tensor([True, True], device=DEVICE))
 
 
 def test_build_periodic_shifts_returns_matching_bundle() -> None:
-    """`build_periodic_shifts`'s returned `.shifts`/`.periodic`/`.cutoff`
-    match today's inputs/outputs exactly, just wrapped in a bundle."""
+    """`build_periodic_shifts`'s returned `.shifts`/`.periodic_axes`/`.cutoff`
+    match its inputs and the shifts it computes."""
     lattice = _SMALL_CUBIC.to(DEVICE)
     periodic = torch.tensor([True, True, True], device=DEVICE)
     cutoff = 10.0
@@ -525,15 +469,11 @@ def test_build_periodic_shifts_returns_matching_bundle() -> None:
     bundle = build_periodic_shifts(lattice, periodic, cutoff)
 
     assert isinstance(bundle, PeriodicShifts)
-    assert torch.equal(bundle.periodic, periodic)
+    assert torch.equal(bundle.periodic_axes, periodic)
     assert bundle.cutoff == cutoff
-
-    _, _, pool_shift = build_ghost_pool(
-        torch.rand(6, 3, **DD), lattice, periodic, cutoff
-    )
-    assert torch.equal(
-        torch.unique(bundle.shifts, dim=0), torch.unique(pool_shift, dim=0)
-    )
+    assert bundle.shifts.dtype == torch.long
+    # Every shift once.
+    assert torch.unique(bundle.shifts, dim=0).shape == bundle.shifts.shape
 
 
 ##############################################################################
@@ -609,23 +549,14 @@ def test_wrap_to_central_cell_guards_the_cell_boundary() -> None:
 
 
 @pytest.mark.cuda
-def test_build_ghost_pool_stays_on_input_device() -> None:
-    """`build_ghost_pool` must place every tensor it builds on
-    ``positions``'/``lattice``'s own device, never relying on the ambient
-    default device. A per-axis shift range built without ``device=``
-    would make `shift.to(dtype=positions.dtype) @ lattice` mix a CPU
-    ``shift`` with a CUDA ``lattice`` whenever the ambient default device
-    stays CPU, which this test never touches."""
-    positions = torch.tensor(
-        [[1.0, 1.0, 1.0]], dtype=torch.double, device="cuda"
-    )
+def test_build_periodic_shifts_stays_on_input_device() -> None:
+    """`build_periodic_shifts` must place every tensor it builds on
+    ``lattice``'s own device, never relying on the ambient default device,
+    which this test never touches."""
     lattice = 5.0 * torch.eye(3, dtype=torch.double, device="cuda")
     periodic = torch.tensor([True, True, True], device="cuda")
 
-    ghost_positions, owner, shift = build_ghost_pool(
-        positions, lattice, periodic, cutoff=8.0
-    )
+    bundle = build_periodic_shifts(lattice, periodic, cutoff=8.0)
 
-    assert ghost_positions.device.type == "cuda"
-    assert owner.device.type == "cuda"
-    assert shift.device.type == "cuda"
+    assert bundle.shifts.device.type == "cuda"
+    assert bundle.periodic_axes.device.type == "cuda"

@@ -316,8 +316,8 @@ contains
 
    !> Write a (3, nat, nat) gradient block as nested JSON of shape
    !> (nat, nat, 3): entry [k][m] holds d(cn of atom k)/d(position of atom
-   !> m), matching the index convention of tad-mctc's own gradient
-   !> functions (e.g. ``cn_d3_gradient``).
+   !> m), matching the layout of ``jacrev`` of a tad-mctc coordination
+   !> number with respect to the positions.
    !>
    !> mctc-lib's own ``dcndr(:, A, B)`` (as filled in by
    !> ``mctc_ncoord_type%ncoord_d``) uses the opposite convention --

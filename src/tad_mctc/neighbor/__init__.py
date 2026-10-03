@@ -18,11 +18,16 @@
 Neighbour search
 ================
 
-Periodic-image geometry (:mod:`.images`): integer lattice-translation
-shifts and ghost-pool replication for a real-space cutoff sphere, and
-folding positions back into the primary cell. Consumed directly by the
-dense (all-pairs) periodic coordination-number path in
-:mod:`tad_mctc.ncoord.common`.
+Linear-scaling neighbour search, molecular or periodic: atoms are grouped
+into spatially bounded tiles, tile pairs within a cutoff are found by an
+exact bounding-box screen, and the result is compacted into a
+fixed-capacity, padded neighbour list (:mod:`.list`) that is cheap to
+consume under autograd, ``vmap`` and ``torch.compile``. Periodic boundary
+conditions (:mod:`.images`) replicate atoms into a ghost pool ahead of
+that same search, rather than changing it.
 """
 
+from ._distance_kernels import pair_distance_squared, split_lattice
 from .images import *
+from .list import *
+from .triples import *

@@ -39,84 +39,96 @@ from ..utils import (
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_all(dtype: torch.dtype) -> None:
     """
-    The single precision test sometimes fails on my GPU with the following
-    thresholds:
+    The three Euclidean implementations agree on the distance between two
+    different vectors.
 
-    ```
-    tol = 1e-6 if dtype == torch.float else 1e-14
-    ```
-
-    Only one matrix element seems to be affected. It also appears that the
-    failure only happens if `torch.rand` was run before. To be precise,
-
-    ```
-    pytest -vv test/test_ncoord/test_grad.py test/test_storch/ --cuda --slow
-    ```
-
-    fails, while
-
-    ```
-    pytest -vv test/test_storch/ --cuda --slow
-    ```
-
-    works. It also works if I remove the random tensors in the gradient test
-    (test/test_ncoord/test_grad.py).
-
-    It can be fixed with
-
-    ```
-    torch.use_deterministic_algorithms(True)
-    ```
-
-    and following the PyTorch instructions to set a specific
-    environment variable.
-
-    ```
-    CUBLAS_WORKSPACE_CONFIG=:4096:8 pytest -vv test/test_ncoord/test_grad.py test/test_utils/ --cuda --slow
-    ```
-
-    For simplicity, one can just reduce the tolerances for single precision.
-    ```
-    # only one element actually fails
-    if "cuda" in str(DEVICE) and dtype == torch.float:
-        tol = 1e-3
-    ```
-
-    BETTER SOLUTION:
-    Use numpy for generating random tensors and convert the array to a tensor.
+    `storch.cdist` is the direct expansion, so those two agree exactly. The
+    quadratic expansion differs from them by at most 11 `eps` over 3000
+    random inputs of this size, on CPU and CUDA, in either dtype. The
+    distance of a vector to itself is left out here, see
+    `test_distance_to_itself`.
     """
     dd: DD = {"device": DEVICE, "dtype": dtype}
+    tol = 100 * torch.finfo(dtype).eps
 
-    if "cuda" in str(DEVICE) and dtype == torch.float:
-        tol = 1e-6
-    elif "cuda" in str(DEVICE) and dtype == torch.double:
-        tol = 1e-7
-    elif DEVICE is None and dtype == torch.float:
-        tol = 1e-6
-    elif DEVICE is None and dtype == torch.double:
-        tol = 1e-14
-    else:
-        raise RuntimeError("Unknown device or dtype.")
-
-    x = numpy_to_tensor(np.random.randn(2, 3, 4), **dd)
+    # Own generator, so that the input does not depend on the tests run
+    # before this one.
+    x = numpy_to_tensor(
+        np.random.default_rng(0).standard_normal((2, 3, 4)), **dd
+    )
 
     d1 = storch.cdist(x)
     d2 = storch.distance.cdist_direct_expansion(x, x, p=2)
     d3 = storch.distance.euclidean_dist_quadratic_expansion(x, x)
 
-    assert pytest.approx(d1.cpu(), abs=tol) == d2.cpu()
-    assert pytest.approx(d2.cpu(), abs=tol) == d3.cpu()
-    assert pytest.approx(d3.cpu(), abs=tol) == d1.cpu()
+    different = ~torch.eye(3, dtype=torch.bool, device=d1.device)
+    different = different.expand_as(d1)
+    d1, d2, d3 = d1[different].cpu(), d2[different].cpu(), d3[different].cpu()
+
+    assert torch.equal(d1, d2)
+    assert pytest.approx(d2, abs=tol) == d3
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_distance_to_itself(dtype: torch.dtype) -> None:
+    """
+    The distance of a vector to itself is not zero but `sqrt(eps)`: the
+    squared distance is clamped to `eps` before the root, to keep the
+    gradient finite.
+    """
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+    sqrt_eps = torch.tensor(torch.finfo(dtype).eps, **dd).sqrt()
+
+    x = numpy_to_tensor(
+        np.random.default_rng(1).standard_normal((8, 16, 4)), **dd
+    )
+
+    for distances in (
+        storch.cdist(x),
+        storch.distance.cdist_direct_expansion(x, x, p=2),
+    ):
+        to_itself = torch.diagonal(distances, dim1=-2, dim2=-1)
+        assert bool((to_itself == sqrt_eps).all())
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_quadratic_expansion_distance_to_itself(dtype: torch.dtype) -> None:
+    """
+    In the quadratic expansion, the distance of a vector to itself is the
+    square root of a rounding residual of `|x|^2`, clamped to at least
+    `eps`. The residual depends on the summation order, which differs
+    between devices (on CUDA, up to `1.95 * sqrt(eps * |x|^2)`), so only its
+    scale is checked: positive and at most `4 * sqrt(eps * max(1, |x|^2))`.
+    """
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+    eps = torch.finfo(dtype).eps
+
+    x = numpy_to_tensor(
+        np.random.default_rng(1).standard_normal((8, 16, 4)), **dd
+    )
+    bound = 4.0 * torch.sqrt(eps * torch.clamp((x * x).sum(-1), min=1.0))
+
+    distances = storch.distance.euclidean_dist_quadratic_expansion(x, x)
+    to_itself = torch.diagonal(distances, dim1=-2, dim2=-1)
+    assert bool((to_itself > 0).all())
+    assert bool((to_itself <= bound).all())
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("p", [2, 3, 4, 5])
 def test_ps(dtype: torch.dtype, p: int) -> None:
-    dd: DD = {"device": DEVICE, "dtype": dtype}
-    tol = 1e-6 if dtype == torch.float else 1e-14
+    """
+    `storch.cdist` agrees with `torch.cdist` for every power `p`.
 
-    x = numpy_to_tensor(np.random.randn(2, 4, 5), **dd)
-    y = numpy_to_tensor(np.random.randn(2, 4, 5), **dd)
+    The tolerance is relative to the dtype's precision: over 3000 random
+    inputs, on CPU and CUDA, the two differ by at most 8 `eps`.
+    """
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+    tol = 100 * torch.finfo(dtype).eps
+
+    rng = np.random.default_rng(2)
+    x = numpy_to_tensor(rng.standard_normal((2, 4, 5)), **dd)
+    y = numpy_to_tensor(rng.standard_normal((2, 4, 5)), **dd)
 
     d1 = storch.cdist(x, y, p=p)
     d2 = torch.cdist(x, y, p=p)
@@ -127,17 +139,15 @@ def test_ps(dtype: torch.dtype, p: int) -> None:
 @pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_cdist_torch_compile_fullgraph() -> None:
     """
-    ``storch.cdist(p=2)`` calls ``euclidean_dist_quadratic_expansion``, which
-    calls ``storch.safe_sqrt``. A domain check there that branched on a
-    tensor value would be rejected by ``torch.compile(fullgraph=True)``
-    (Dynamo) as data-dependent control flow, blocking every dense path
-    built on ``storch.cdist`` (e.g. dense coordination-number paths,
-    ``molecule.property.enn``).
+    ``storch.cdist`` must trace with ``torch.compile(fullgraph=True)``,
+    since every dense path built on it (e.g. ``properties.enn``) does.
     """
     torch._dynamo.reset()
 
     dd: DD = {"device": DEVICE, "dtype": torch.float64}
-    x = numpy_to_tensor(np.random.randn(2, 4, 3), **dd)
+    x = numpy_to_tensor(
+        np.random.default_rng(3).standard_normal((2, 4, 3)), **dd
+    )
 
     def f(x: torch.Tensor) -> torch.Tensor:
         return storch.cdist(x)
@@ -147,11 +157,41 @@ def test_cdist_torch_compile_fullgraph() -> None:
     eager_value = f(x)
     compiled_value = compiled(x)
 
-    # The quadratic expansion leaves rounding noise of order ``eps`` under
-    # the square root of the diagonal, so it comes out as ``sqrt(eps)`` or
-    # a small multiple of it, and a fused (compiled) kernel rounds
-    # differently than the eager one. Only the off-diagonal has to agree
-    # tightly.
+    # The differences of a vector to itself are exactly zero in either, so
+    # only the other distances can round differently in a fused kernel.
+    assert pytest.approx(eager_value.cpu(), abs=1e-12) == compiled_value.cpu()
+    assert torch.equal(
+        torch.diagonal(eager_value, dim1=-2, dim2=-1),
+        torch.diagonal(compiled_value, dim1=-2, dim2=-1),
+    )
+
+
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+def test_quadratic_expansion_torch_compile_fullgraph() -> None:
+    """
+    The quadratic expansion calls ``storch.safe_sqrt``. A domain check there
+    that branched on a tensor value would be rejected by
+    ``torch.compile(fullgraph=True)`` (Dynamo) as data-dependent control
+    flow.
+    """
+    torch._dynamo.reset()
+
+    dd: DD = {"device": DEVICE, "dtype": torch.float64}
+    x = numpy_to_tensor(
+        np.random.default_rng(3).standard_normal((2, 4, 3)), **dd
+    )
+
+    def f(x: torch.Tensor) -> torch.Tensor:
+        return storch.distance.euclidean_dist_quadratic_expansion(x, x)
+
+    compiled = compile_fullgraph(f)
+
+    eager_value = f(x)
+    compiled_value = compiled(x)
+
+    # The diagonal is the square root of a rounding residual, which a fused
+    # (compiled) kernel rounds differently than the eager one. Only the
+    # other distances have to agree tightly.
     diagonal = torch.eye(x.shape[-2], dtype=torch.bool, device=x.device)
     off = ~diagonal.expand_as(eager_value)
     assert pytest.approx(eager_value[off].cpu(), abs=1e-12) == (

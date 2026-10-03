@@ -146,15 +146,49 @@ def pytest_configure(config: pytest.Config) -> None:
     if config.getoption("--tpo-threshold"):
         torch.set_printoptions(threshold=config.getoption("--tpo-threshold"))
 
-    # register an additional marker
+    # register additional markers
     config.addinivalue_line("markers", "cuda: mark test that require CUDA.")
+    config.addinivalue_line(
+        "markers",
+        "triton: mark test that require a CUDA device and the optional "
+        "`triton` dependency.",
+    )
+    config.addinivalue_line(
+        "markers",
+        "native: mark test that require the optional, JIT-compiled "
+        "native CPU neighbour-list extension (a C++ compiler and "
+        "OpenMP).",
+    )
 
 
 def pytest_runtest_setup(item: pytest.Function) -> None:
-    """Custom marker for tests requiring CUDA."""
+    """Custom markers for tests requiring CUDA and/or Triton."""
 
     for _ in item.iter_markers(name="cuda"):
         if not torch.cuda.is_available():
             pytest.skip(
                 "Torch not compiled with CUDA or no CUDA device available."
+            )
+
+    for _ in item.iter_markers(name="triton"):
+        if not torch.cuda.is_available():
+            pytest.skip(
+                "Torch not compiled with CUDA or no CUDA device available."
+            )
+        try:
+            import triton  # noqa: F401
+        except ImportError:
+            pytest.skip(
+                "Optional `triton` dependency not installed "
+                "(`pip install tad_mctc[triton]`)."
+            )
+
+    for _ in item.iter_markers(name="native"):
+        from tad_mctc.neighbor import _native
+
+        if not _native.is_available():
+            pytest.skip(
+                "Native CPU neighbour-list extension did not compile "
+                "(no C++ compiler, no OpenMP, or TAD_MCTC_DISABLE_NATIVE "
+                "is set)."
             )

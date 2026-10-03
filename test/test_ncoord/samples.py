@@ -17,10 +17,13 @@
 """
 Coordination number references computed by mctc-lib itself (see
 ``tools/refs``), one JSON file per structure under
-``test/references/<collection>/<record>.json``. `refs` holds every file
-found there, molecules and periodic cells alike, keyed by its
-``(collection, record)`` pair -- the same pair `test/utils.py`'s loaders
-take.
+``test/references/<collection>/<record>.json``. The molecules are listed
+in `MOLECULE_REFS`, the periodic cells in `CELL_REFS`, and `refs` holds
+the references of both, keyed by the ``(collection, record)`` pair --
+the same pair `test/utils.py`'s loaders take.
+
+Also the hand-built periodic structures that several tests share:
+`carbon_pair`, a small cell, and `bulk_and_slab`, a batch of two cells.
 """
 
 from __future__ import annotations
@@ -31,8 +34,10 @@ from typing import TypedDict
 
 import torch
 
-from tad_mctc.data.structures import get_structure
-from tad_mctc.typing import Tensor
+from tad_mctc.io.structure import Structure, pack_structures
+from tad_mctc.typing import DD, Tensor
+
+from ..utils import load_structure
 
 _REFERENCES_DIR = Path(__file__).resolve().parents[1] / "references"
 
@@ -66,43 +71,108 @@ def _refs(path: Path) -> Refs:
     }  # type: ignore[return-value]
 
 
-def _source(path: Path) -> tuple[str, str]:
-    """The ``(collection, record)`` pair a reference file belongs to."""
-    return path.parent.name, path.stem
+MOLECULE_REFS: list[tuple[str, str]] = [
+    ("heavy28", "pbh4_bih3"),
+    ("mb16_43", "01"),
+    ("mb16_43", "02"),
+    ("mb16_43", "03"),
+    ("mb16_43", "SiH4"),
+    ("other", "C6H5I-CH3SH"),
+]
+"""The reference molecules."""
 
+LARGE_CRYSTALS: list[tuple[str, str]] = [
+    ("x23", "acetic"),
+    ("x23", "anthracene"),
+]
+"""Cells whose all-pairs Jacobian takes ~1 s each (the sparse one takes
+milliseconds). Run through the all-pairs paths for every variant and
+dtype, they would be a third of the whole suite, and the smaller cells
+already cover the all-pairs periodic code."""
+
+SMALL_CELL_REFS: list[tuple[str, str]] = [
+    ("other", "diamond"),
+    ("other", "nacl"),
+    ("other", "periodic_cubic"),
+    ("other", "periodic_one_atom"),
+    ("other", "periodic_triclinic"),
+    ("x23", "ammonia"),
+]
+"""The reference cells except the `LARGE_CRYSTALS`."""
+
+CELL_REFS: list[tuple[str, str]] = SMALL_CELL_REFS + LARGE_CRYSTALS
+"""The reference cells."""
 
 refs: dict[tuple[str, str], Refs] = {
-    _source(path): _refs(path)
-    for path in sorted(_REFERENCES_DIR.glob("*/*.json"))
+    (collection, record): _refs(_REFERENCES_DIR / collection / f"{record}.json")
+    for collection, record in MOLECULE_REFS + CELL_REFS
 }
 
-
-def is_periodic(source: tuple[str, str]) -> bool:
-    """Whether `source` resolves to a `Structure` with a lattice."""
-    return get_structure(*source).lattice is not None
-
-
-REPRESENTATIVES: list[tuple[str, str]] = [
+REPRESENTATIVE_MOLECULES: list[tuple[str, str]] = [
     ("mb16_43", "SiH4"),  # small molecule
     ("mb16_43", "01"),  # mid-size molecule, many elements
+]
+"""Molecules for the tests that do not need every `refs` entry
+(gradients, autograd checks)."""
+
+REPRESENTATIVE_CELLS: list[tuple[str, str]] = [
     ("other", "periodic_one_atom"),  # interacts only with its own images
     ("other", "periodic_triclinic"),  # non-orthogonal cell
 ]
-"""Samples for the tests that do not need every `refs` entry
-(gradients, autograd checks)."""
+"""Cells for the tests that do not need every `refs` entry."""
 
-BATCH_PAIRS: list[tuple[tuple[str, str], tuple[str, str]]] = [
+MOLECULE_PAIRS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     # different sizes, the smaller one padded
     (("mb16_43", "01"), ("mb16_43", "SiH4")),
+]
+"""Molecules to batch. Molecules and periodic cells are never mixed, as
+`pack_structures` rejects that."""
+
+CELL_PAIRS: list[tuple[tuple[str, str], tuple[str, str]]] = [
     # different cells: the one-atom cell needs far more images, so the
     # shared shift table must cover the more demanding lattice
     (("other", "periodic_triclinic"), ("other", "periodic_one_atom")),
 ]
-"""One molecular and one periodic pair to batch. Molecules and periodic
-cells are never mixed, as `pack_structures` rejects that."""
+"""Cells to batch."""
+
+
+def source_id(source: tuple[str, str]) -> str:
+    """Readable pytest id for one sample, its record name."""
+    return source[1]
 
 
 def pair_id(pair: tuple[tuple[str, str], tuple[str, str]]) -> str:
-    """Readable pytest id for one `BATCH_PAIRS` entry, e.g. ``01+SiH4``."""
+    """Readable pytest id for a pair of samples, e.g. ``01+SiH4``."""
     (_, record1), (_, record2) = pair
     return f"{record1}+{record2}"
+
+
+def bulk_and_slab(dd: DD) -> Structure:
+    """A batch of two cells with different lattices and periodicity, so
+    each pair must pick up its own system's cell. Not a `CELL_PAIRS`
+    entry: the slab has no Fortran reference."""
+    bulk = load_structure("other", "periodic_cubic", dd)
+    triclinic = load_structure("other", "periodic_triclinic", dd)
+    slab = triclinic.replace(
+        periodic=torch.tensor([True, True, False], device=dd["device"])
+    )
+    return pack_structures([bulk, slab])
+
+
+PLACEHOLDER = 1.0
+"""A short lattice vector length for non-periodic axes, as the Turbomole
+`$cell` reader writes for a slab or wire. Images along such an axis would
+land inside the cutoff if they were not masked out."""
+
+
+def carbon_pair(dd: DD, lattice: Tensor, periodic: list[bool]) -> Structure:
+    """Two carbon atoms 2 Bohr apart in `lattice`, periodic along the axes
+    `periodic` marks."""
+    numbers = torch.tensor([6, 6], device=dd["device"])
+    positions = torch.tensor([[0.0, 0.0, 0.0], [1.4, 1.4, 0.0]], **dd)
+    return Structure(
+        numbers=numbers,
+        positions=positions,
+        lattice=lattice,
+        periodic=torch.tensor(periodic, device=dd["device"]),
+    )

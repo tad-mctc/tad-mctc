@@ -15,138 +15,146 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Periodic cells beyond a plain right-handed bulk cell.
+Periodic cells beyond a plain right-handed bulk cell, through every
+evaluation path (see `_paths.py`): atoms outside the primary cell, slabs
+and wires, placeholder lattice vectors on open axes, and left-handed
+cells. These are properties of the cell, not of how the coordination
+number is summed, so every path must give the same answers.
 
-A batch shares one shift table built for the union of its periodic axes.
-A system that is not periodic along one of those axes must still get the
-same coordination number as it does on its own. A left-handed cell is the
-same crystal as its right-handed counterpart, so it must give the same
-coordination number.
+Tests specific to one path, such as batches mixing bulk with slabs or the
+periodic shifts' own mask, live in the quadrant modules.
 """
 
 from __future__ import annotations
 
 import pytest
 import torch
-from torch.func import vmap
 
-from tad_mctc.io.structure import Structure, pack_structures
+from tad_mctc.io.structure import Structure
 from tad_mctc.ncoord import cn_d3
-from tad_mctc.neighbor.images import build_shared_periodic_shifts
-from tad_mctc.typing import DD, Tensor
+from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
+from ..utils import load_structure
+from ._paths import Bind, bind_dense, bind_precomputed, bind_sparse
+from .samples import PLACEHOLDER, carbon_pair
 
-# A short lattice vector along the non-periodic axes, as the Turbomole
-# `$cell` reader writes for a slab or wire. Images along such an axis
-# would land inside the cutoff if they were not masked out.
-PLACEHOLDER = 1.0
+# Every path accepts a single periodic structure.
+path_params = pytest.mark.parametrize(
+    "bind",
+    [bind_dense, bind_precomputed, bind_sparse],
+    ids=["dense", "precomputed", "sparse"],
+)
+
+LOWER_DIMENSIONAL = [
+    ([True, True, False], [6.0, 6.0, 40.0]),  # slab
+    ([True, False, False], [6.0, 40.0, 40.0]),  # wire
+]
+"""Periodic masks with an orthorhombic cell whose open axes carry a long
+vacuum vector."""
 
 
-def _carbon_pair(
-    dd: DD, lattice: torch.Tensor, periodic: list[bool]
+def _silicon_pair(
+    dd: DD, lengths: list[float], periodic: list[bool]
 ) -> Structure:
-    numbers = torch.tensor([6, 6], device=DEVICE)
-    positions = torch.tensor([[0.0, 0.0, 0.0], [1.4, 1.4, 0.0]], **dd)
+    """Two silicon atoms in an orthorhombic cell with edge `lengths`."""
     return Structure(
-        numbers=numbers,
-        positions=positions,
-        lattice=lattice,
+        numbers=torch.tensor([14, 14], device=DEVICE),
+        positions=torch.tensor([[0.0, 0.0, 0.0], [1.5, 1.5, 2.0]], **dd),
+        lattice=torch.diag(torch.tensor(lengths, **dd)),
         periodic=torch.tensor(periodic, device=DEVICE),
     )
 
 
-PERIODIC_CASES = [
-    [True, True, False],  # slab
-    [True, False, False],  # wire
-    [False, False, False],  # molecule in a box
-]
-
-
-def _bulk_and_lower_dim(dd: DD, periodic: list[bool]) -> Structure:
-    """A bulk cell packed with a system that is periodic only along
-    `periodic`, with placeholder lattice vectors on its open axes."""
-    bulk = _carbon_pair(dd, 4.7 * torch.eye(3, **dd), [True, True, True])
-
-    lattice = 4.7 * torch.eye(3, **dd)
-    for axis, is_periodic in enumerate(periodic):
-        if not is_periodic:
-            lattice[axis, axis] = PLACEHOLDER
-    lower_dim = _carbon_pair(dd, lattice, periodic)
-
-    return pack_structures([bulk, lower_dim])
-
-
-def _single_system_cns(batch: Structure) -> Tensor:
-    assert batch.lattice is not None and batch.periodic is not None
-    return torch.stack(
-        [
-            cn_d3(
-                Structure(
-                    numbers=batch.numbers[i],
-                    positions=batch.positions[i],
-                    lattice=batch.lattice[i],
-                    periodic=batch.periodic[i],
-                )
-            )
-            for i in range(batch.numbers.shape[0])
-        ]
-    )
-
-
-@pytest.mark.parametrize("periodic", PERIODIC_CASES)
-def test_batch_matches_single_for_mixed_periodicity(
-    periodic: list[bool],
-) -> None:
+@path_params
+def test_unwrapped_positions(bind: Bind) -> None:
+    """An atom written 20 lattice vectors away from the origin (a stand-in
+    for an unwrapped MD trajectory) must not change the result. Image
+    search only covers a cutoff sphere anchored at the primary cell, so
+    every path first folds positions into it -- the same invariant
+    mctc-lib's `wrap_to_central_cell` establishes for its callers."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
-    batch = _bulk_and_lower_dim(dd, periodic)
 
-    batched = cn_d3(batch)
+    structure = load_structure("other", "periodic_cubic", dd)
+    assert structure.lattice is not None
 
-    expected = _single_system_cns(batch)
-    assert torch.allclose(batched, expected, atol=1e-12, rtol=0)
+    unwrapped_positions = structure.positions.clone()
+    unwrapped_positions[0] += 20 * structure.lattice[0]
+    unwrapped = structure.replace(positions=unwrapped_positions)
+
+    wrapped_cn = bind(cn_d3, structure)(structure)
+    unwrapped_cn = bind(cn_d3, unwrapped)(unwrapped)
+
+    assert torch.allclose(wrapped_cn, unwrapped_cn, atol=1e-11, rtol=0)
 
 
-@pytest.mark.parametrize("periodic", PERIODIC_CASES)
-def test_vmap_matches_single_for_mixed_periodicity(
-    periodic: list[bool],
+@path_params
+@pytest.mark.parametrize(
+    "periodic,lengths", LOWER_DIMENSIONAL, ids=["slab", "wire"]
+)
+@pytest.mark.parametrize("axis", [0, 1, 2])
+def test_translation_by_lattice_vector(
+    bind: Bind, periodic: list[bool], lengths: list[float], axis: int
 ) -> None:
-    """Under `vmap` every lane is a single system, but the shift table is
-    still shared and built for the union of the lanes' periodic axes."""
+    """Moving one atom by a whole lattice vector gives the same crystal
+    along a periodic axis, but a different, more isolated system along an
+    open one. Folding positions along an open axis would hide that."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
-    batch = _bulk_and_lower_dim(dd, periodic)
-    assert batch.lattice is not None and batch.periodic is not None
 
-    shifts = build_shared_periodic_shifts(
-        batch.lattice, batch.periodic, cutoff=cn_d3.cutoff
-    )
+    structure = _silicon_pair(dd, lengths, periodic)
+    assert structure.lattice is not None
 
-    def cn_one(
-        numbers: Tensor, positions: Tensor, lattice: Tensor, mask: Tensor
-    ) -> Tensor:
-        structure = Structure(
-            numbers=numbers, positions=positions, lattice=lattice, periodic=mask
-        )
-        return cn_d3.with_precomputed_shifts(structure, shifts=shifts)
+    moved_positions = structure.positions.clone()
+    moved_positions[1] += structure.lattice[axis]
+    moved = structure.replace(positions=moved_positions)
 
-    vmapped = vmap(cn_one)(
-        batch.numbers, batch.positions, batch.lattice, batch.periodic
-    )
+    baseline = bind(cn_d3, structure)(structure)
+    after_move = bind(cn_d3, moved)(moved)
 
-    expected = _single_system_cns(batch)
-    assert torch.allclose(vmapped, expected, atol=1e-12, rtol=0)
+    same = torch.allclose(baseline, after_move, atol=1e-11, rtol=0)
+    assert same == periodic[axis]
 
 
+@path_params
+@pytest.mark.parametrize(
+    "periodic,lengths", LOWER_DIMENSIONAL, ids=["slab", "wire"]
+)
+def test_open_axis_lattice_vector_is_ignored(
+    bind: Bind, periodic: list[bool], lengths: list[float]
+) -> None:
+    """A short placeholder vector on an open axis puts its images well
+    inside the cutoff. Those images must be masked out, so the result
+    matches the same system with a long vacuum vector."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    placeholder_lengths = [
+        length if is_periodic else PLACEHOLDER
+        for length, is_periodic in zip(lengths, periodic)
+    ]
+    vacuum = _silicon_pair(dd, lengths, periodic)
+    placeholder = _silicon_pair(dd, placeholder_lengths, periodic)
+
+    vacuum_cn = bind(cn_d3, vacuum)(vacuum)
+    placeholder_cn = bind(cn_d3, placeholder)(placeholder)
+
+    assert torch.allclose(vacuum_cn, placeholder_cn, atol=1e-11, rtol=0)
+
+
+@path_params
 @pytest.mark.parametrize(
     "periodic",
     [
         [True, True, True],  # bulk
         [True, True, False],  # slab, as a left-handed `$lattice` block
     ],
+    ids=["bulk", "slab"],
 )
-def test_left_handed_cell_matches_right_handed(periodic: list[bool]) -> None:
+def test_left_handed_cell_matches_right_handed(
+    bind: Bind, periodic: list[bool]
+) -> None:
     """Swapping the first two lattice vectors flips the handedness of the
-    cell but describes the same crystal."""
+    cell but describes the same crystal, so the coordination number must
+    not change."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
     lattice = torch.tensor(
@@ -155,10 +163,11 @@ def test_left_handed_cell_matches_right_handed(periodic: list[bool]) -> None:
     if not periodic[2]:
         lattice[2, 2] = PLACEHOLDER
 
-    right_handed = _carbon_pair(dd, lattice, periodic)
+    right_handed = carbon_pair(dd, lattice, periodic)
     left_handed = right_handed.replace(lattice=lattice[[1, 0, 2]])
     assert left_handed.lattice is not None
     assert torch.linalg.det(left_handed.lattice) < 0
 
-    expected = cn_d3(right_handed)
-    assert torch.allclose(cn_d3(left_handed), expected, atol=1e-12, rtol=0)
+    expected = bind(cn_d3, right_handed)(right_handed)
+    got = bind(cn_d3, left_handed)(left_handed)
+    assert torch.allclose(got, expected, atol=1e-12, rtol=0)

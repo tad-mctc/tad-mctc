@@ -247,8 +247,8 @@ def test_frozen_instance_cannot_be_mutated() -> None:
 
 def test_pytree_omits_absent_optional_fields() -> None:
     """The pytree leaves are exactly the *set* fields -- an absent optional
-    field must not appear as a `None` leaf (that is the trap issue 18
-    exists to avoid: `None` is itself a pytree leaf, which breaks `vmap`)."""
+    field must not appear as a `None` leaf: `None` is itself a pytree leaf,
+    which breaks `vmap`."""
     numbers, positions = _water()
     structure = Structure(numbers=numbers, positions=positions)
 
@@ -467,9 +467,8 @@ def test_jacrev_with_respect_to_lattice() -> None:
 
 def _leaf_op(structure: Structure) -> Tensor:
     """A trivial, differentiable reduction that never routes through
-    `storch.cdist` (issue 17's already-tracked `torch.compile` blocker),
-    so a `fullgraph=True` failure here would point at the container
-    itself, not at that unrelated limitation."""
+    `storch.cdist`, so a `fullgraph=True` failure here points at the
+    container itself, not at the distance code."""
     total = structure.positions.sum()
     if structure.lattice is not None:
         total = total + structure.lattice.sum()

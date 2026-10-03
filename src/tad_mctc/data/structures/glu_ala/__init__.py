@@ -18,13 +18,18 @@
 Data: Structures - glu_ala
 ===========================
 
-The `glu_ala_a_0001_to_2048` size ladder from
+The full `glu_ala_a_0001_to_2048` size ladder from
 https://www.ergoscf.org/xyz/gluala.php -- 26 extended glutamine-alanine
-peptide conformers, 28 to 53,250 atoms -- packed into `data.npz` by
-`tools/glu_ala/convert.py`.
+peptide conformers, 28 to 53,250 atoms -- plus its two smallest
+genuinely-larger continuations from `glu_ala_b_512_to_65536` (106,498 and
+212,994 atoms), packed into `data.npz` by `tools/glu_ala/convert.py`. The
+rest of `glu_ala_b` (up to 1.7 million atoms) is not packaged, since
+float precision positions are essentially incompressible; see
+`examples/scaling/glu_ala.py`, which downloads and reads the full
+combined ladder directly instead.
 
 Record ids are the ladder's own zero-padded filenames (``"0001"`` ..
-``"2048"``), not atom counts. `data.npz` is opened on first access and
+``"8192"``), not atom counts. `data.npz` is opened on first access and
 only the arrays of the requested record are decompressed, so importing
 this module stays cheap. Look records up through
 :func:`tad_mctc.data.structures.get_structure` with collection

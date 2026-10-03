@@ -28,67 +28,85 @@ from tad_mctc.exceptions import (
     StructureWarning,
 )
 from tad_mctc.io import checks
+from tad_mctc.io.structure import Structure, pack_structures
 from tad_mctc.typing import MockTensor
 
 natoms = 4
 ncart = 3
 
 
+def _molecule(numbers: list[int], positions: list[list[float]]) -> Structure:
+    return Structure(
+        numbers=torch.tensor(numbers), positions=torch.tensor(positions)
+    )
+
+
 def test_coldfusion() -> None:
     # distances above threshold
-    numbers = torch.tensor([1, 2])
-    positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 2.0]])
-
-    # Should pass without error
-    assert checks.coldfusion_check(numbers, positions)
+    apart = _molecule([1, 2], [[0.0, 0.0, 0.0], [0.0, 0.0, 2.0]])
+    assert checks.coldfusion_check(apart)
 
     # distances below threshold
-    positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
+    close = _molecule([1, 2], [[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
     with pytest.raises(StructureError):
-        checks.coldfusion_check(numbers, positions_close, threshold=0.5)
+        checks.coldfusion_check(close, threshold=0.5)
 
 
 def test_coldfusion_default_threshold() -> None:
     # atoms 0.1 Bohr apart must be caught with no explicit `threshold`
-    numbers = torch.tensor([1, 2])
-    positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
+    close = _molecule([1, 2], [[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
 
     with pytest.raises(StructureError):
-        checks.coldfusion_check(numbers, positions_close)
+        checks.coldfusion_check(close)
 
 
 def test_coldfusion_threshold_already_a_tensor() -> None:
     # `threshold` given as a Tensor must be used as-is, not re-wrapped
-    numbers = torch.tensor([1, 2])
-    positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
+    close = _molecule([1, 2], [[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
 
     with pytest.raises(StructureError):
-        checks.coldfusion_check(
-            numbers, positions_close, threshold=torch.tensor(0.5)
-        )
+        checks.coldfusion_check(close, threshold=torch.tensor(0.5))
 
 
-def test_coldfusion_check_disabled() -> None:
+def test_content_checks_leave_distances_alone() -> None:
     numbers = torch.tensor([1, 2])
     positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
 
-    assert checks.coldfusion_check(
-        numbers, positions_close, threshold=0.5, check=False
-    )
-    assert checks.content_checks(
-        numbers, positions_close, check_coldfusion=False
-    )
+    assert checks.content_checks(numbers, positions_close)
 
 
 def test_coldfusion_cutoff_smaller_than_threshold() -> None:
     # `cutoff` must not limit the check: a clash beyond it is still caught
-    numbers = torch.tensor([1, 2])
-    positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    close = _molecule([1, 2], [[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
 
     with pytest.raises(StructureError):
-        checks.coldfusion_check(
-            numbers, positions_close, threshold=5.0, cutoff=0.1
-        )
+        checks.coldfusion_check(close, threshold=5.0, cutoff=0.1)
+
+
+def test_coldfusion_sparse_cutoff_smaller_than_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # as above, through the neighbour list a large molecule would use
+    monkeypatch.setattr(checks.structure, "_COLDFUSION_DENSE_MAX_ATOMS", 0)
+    close = _molecule([1, 2], [[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+
+    with pytest.raises(StructureError):
+        checks.coldfusion_check(close, threshold=5.0, cutoff=0.1)
+
+
+def test_coldfusion_small_molecule_builds_no_neighbor_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # a small molecule is compared densely, so reading one never loads
+    # (or compiles) the native neighbour-list extension
+    def fail(*args: object) -> None:
+        raise AssertionError("the neighbour list was built")
+
+    monkeypatch.setattr(checks.structure, "_coldfusion_check_sparse", fail)
+    close = _molecule([1, 2], [[0.0, 0.0, 0.0], [0.0, 0.0, 0.1]])
+
+    with pytest.raises(StructureError):
+        checks.coldfusion_check(close)
 
 
 def test_coldfusion_sparse_matches_dense_on_padded_batch() -> None:
@@ -101,19 +119,134 @@ def test_coldfusion_sparse_matches_dense_on_padded_batch() -> None:
             [[0.0, 0.0, 0.0], [0.0, 0.0, 1.5], [0.0, 1.5, 0.0]],
         ]
     )
-    assert checks.coldfusion_check(numbers, positions)
+    assert checks.coldfusion_check(
+        Structure(numbers=numbers, positions=positions)
+    )
     for n, p in zip(numbers, positions):
-        assert checks.coldfusion_check(n, p)
+        assert checks.coldfusion_check(Structure(numbers=n, positions=p))
 
 
 def test_coldfusion_sparse_ignores_zero_padding_clash() -> None:
     # a single, unbatched structure with a zero-padded row must not compare
     # that phantom row against a real atom sitting at the origin
-    numbers = torch.tensor([1, 8, 0])
-    positions = torch.tensor(
-        [[0.0, 0.0, 0.0], [0.0, 0.0, 1.5], [0.0, 0.0, 0.0]]
+    padded = _molecule(
+        [1, 8, 0], [[0.0, 0.0, 0.0], [0.0, 0.0, 1.5], [0.0, 0.0, 0.0]]
     )
-    assert checks.coldfusion_check(numbers, positions)
+    assert checks.coldfusion_check(padded)
+
+
+def test_coldfusion_sparse_ignores_zero_padding_clash_in_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # as above, through the neighbour list a large molecule would use
+    monkeypatch.setattr(checks.structure, "_COLDFUSION_DENSE_MAX_ATOMS", 0)
+    padded = _molecule(
+        [1, 8, 0], [[0.0, 0.0, 0.0], [0.0, 0.0, 1.5], [0.0, 0.0, 0.0]]
+    )
+    assert checks.coldfusion_check(padded)
+
+
+def test_coldfusion_sparse_moderate_scale() -> None:
+    # a molecule large enough to be checked through a non-trivial
+    # neighbour-list build
+    torch.manual_seed(0)
+    nat = 1500
+    assert nat > checks.structure._COLDFUSION_DENSE_MAX_ATOMS
+    numbers = torch.ones(nat, dtype=torch.long)
+
+    # Jittered grid, 2.5 Bohr apart: random positions at this density would
+    # themselves put some pair closer than the default threshold (0.5 Bohr).
+    axis = torch.arange(12, dtype=torch.double)
+    grid = torch.cartesian_prod(axis, axis, axis)[:nat]
+    jitter = 0.5 * (torch.rand((nat, 3), dtype=torch.double) - 0.5)
+    positions = 2.5 * grid + jitter
+    assert checks.coldfusion_check(
+        Structure(numbers=numbers, positions=positions)
+    )
+
+    positions[1] = positions[0]
+    with pytest.raises(StructureError):
+        checks.coldfusion_check(Structure(numbers=numbers, positions=positions))
+
+
+def _cell_with_contact_across_boundary(periodic: list[bool]) -> Structure:
+    """Two atoms 0.2 Bohr apart through the x boundary of a 10 Bohr cell,
+    but 9.8 Bohr apart inside it."""
+    return Structure(
+        numbers=torch.tensor([1, 1]),
+        positions=torch.tensor(
+            [[0.1, 5.0, 5.0], [9.9, 5.0, 5.0]], dtype=torch.double
+        ),
+        lattice=10.0 * torch.eye(3, dtype=torch.double),
+        periodic=torch.tensor(periodic),
+    )
+
+
+def test_coldfusion_catches_contact_across_periodic_boundary() -> None:
+    with pytest.raises(StructureError):
+        checks.coldfusion_check(_cell_with_contact_across_boundary(3 * [True]))
+
+
+def test_coldfusion_ignores_boundary_along_open_axis() -> None:
+    """Along a non-periodic axis there is no image, so no contact."""
+    wire_along_y = _cell_with_contact_across_boundary([False, True, True])
+    assert checks.coldfusion_check(wire_along_y)
+
+
+def test_coldfusion_catches_contact_in_batch_of_cells() -> None:
+    fine = _cell_with_contact_across_boundary([False, True, True])
+    fused = _cell_with_contact_across_boundary(3 * [True])
+
+    assert checks.coldfusion_check(pack_structures([fine, fine]))
+    with pytest.raises(StructureError):
+        checks.coldfusion_check(pack_structures([fine, fused]))
+
+
+def test_coldfusion_batch_sharing_one_cell() -> None:
+    """One `(1, 3, 3)` cell is shared by every system of the batch."""
+    fused = _cell_with_contact_across_boundary(3 * [True])
+    assert fused.lattice is not None
+    fine_positions = fused.positions.clone()
+    fine_positions[1, 0] = 5.0  # 4.9 Bohr from atom 0, also across the cell
+
+    def shared(*positions: torch.Tensor) -> Structure:
+        return Structure(
+            numbers=torch.tensor([[1, 1]] * len(positions)),
+            positions=torch.stack(positions),
+            lattice=fused.lattice.unsqueeze(0),
+            periodic=fused.periodic,
+        )
+
+    assert checks.coldfusion_check(shared(*[fine_positions] * 3))
+    with pytest.raises(StructureError):
+        checks.coldfusion_check(
+            shared(fine_positions, fused.positions, fine_positions)
+        )
+
+
+def test_coldfusion_large_batch_of_small_molecules_is_sparse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The all-pairs matrix of a whole trajectory is not built: past the
+    size of one large molecule, the batch takes the neighbour list."""
+    frames = 300
+    atoms = 100  # 300 * 100**2 entries, past 1024**2 / 3
+    numbers = torch.ones(frames, atoms, dtype=torch.long)
+    positions = torch.zeros(frames, atoms, 3, dtype=torch.double)
+    positions[..., 0] = 2.0 * torch.arange(atoms, dtype=torch.double)
+    ok = Structure(numbers=numbers, positions=positions)
+    assert checks.structure._coldfusion_uses_neighborlist(ok)
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise AssertionError("the dense all-pairs matrix was built")
+
+    monkeypatch.setattr(torch, "cdist", fail)
+    assert checks.coldfusion_check(ok)
+
+    fused = positions.clone()
+    fused[-1, 1, 0] = fused[-1, 0, 0] + 0.1
+    with pytest.raises(StructureError):
+        checks.coldfusion_check(Structure(numbers=numbers, positions=fused))
 
 
 def test_content() -> None:
@@ -372,7 +505,8 @@ def test_coldfusion_functorch_via_jacrev() -> None:
     positions_close = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1e-10]])
 
     def f(pos: torch.Tensor) -> torch.Tensor:
-        assert checks.coldfusion_check(numbers, pos) is True
+        structure = Structure(numbers=numbers, positions=pos)
+        assert checks.coldfusion_check(structure) is True
         return pos.sum()
 
     _ = torch.func.jacrev(f)(  # pyright: ignore[reportPrivateImportUsage]
@@ -395,7 +529,8 @@ def test_coldfusion_functorch_via_vmap() -> None:
     )
 
     def f(nums: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
-        assert checks.coldfusion_check(nums, pos) is True
+        structure = Structure(numbers=nums, positions=pos)
+        assert checks.coldfusion_check(structure) is True
         return pos.sum()
 
     _ = torch.func.vmap(f)(  # pyright: ignore[reportPrivateImportUsage]

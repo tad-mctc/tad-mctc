@@ -17,10 +17,9 @@
 """
 Test the ``memoize`` decorator against a small local class.
 
-``Mol`` used to be the only ``@memoize`` consumer in this codebase; now that
-it is gone (its cache-per-instance behavior is not part of ``Structure``,
-which is a plain dict), this decorator is exercised directly against a
-minimal stand-in class instead.
+No class in this codebase uses ``@memoize`` (``Structure`` is a plain dict
+without a per-instance cache), so the decorator is exercised directly
+against a minimal stand-in class.
 """
 
 from __future__ import annotations

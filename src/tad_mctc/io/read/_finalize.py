@@ -35,6 +35,21 @@ from ..checks import content_checks, deflatable_check, shape_checks
 
 __all__: list[str] = []
 
+# The reader options: those :func:`~tad_mctc.io.checks.deflatable_check`
+# reads, and `batch_agnostic`, which the xyz reader reads itself and passes
+# on. Every reader hands its keyword arguments to `finalize_geometry`, which
+# rejects any other name instead of ignoring it.
+_READER_OPTIONS = frozenset(
+    {
+        "padding_value",
+        "raise_padding_exception",
+        "raise_padding_warning",
+        "shift_for_last",
+        "shift_value",
+        "batch_agnostic",
+    }
+)
+
 
 def resolve_dd(
     device: torch.device | None,
@@ -73,8 +88,9 @@ def finalize_geometry(
     **kwargs: Any,
 ) -> Tensor:
     """
-    Validate a single parsed geometry (shapes, atomic numbers, optionally
-    interatomic distances, and clashes with the padding value).
+    Validate a single parsed geometry (shapes, atomic numbers, and clashes
+    with the padding value). Interatomic distances are checked on the
+    whole structure instead, by :func:`~tad_mctc.io.read.read_structure`.
 
     The checks raise on failure, so they also run under ``python -O``.
 
@@ -87,10 +103,8 @@ def finalize_geometry(
     fileobj : IO[Any]
         The file-like object that was read (only for error messages).
     **kwargs : Any
-        The reader's keyword arguments. ``check_coldfusion`` and
-        ``coldfusion_cutoff`` are forwarded to
-        :func:`~tad_mctc.io.checks.content_checks`; the padding options
-        (``padding_value``, ``shift_for_last``, ...) to
+        The reader's keyword arguments. The padding options
+        (``padding_value``, ``shift_for_last``, ...) are forwarded to
         :func:`~tad_mctc.io.checks.deflatable_check`.
 
     Returns
@@ -98,14 +112,25 @@ def finalize_geometry(
     Tensor
         The positions. With ``shift_for_last=True``, a clash with the
         padding value shifts them in place.
+
+    Raises
+    ------
+    TypeError
+        A keyword argument is not a reader option. The padding checks only
+        read their options when the positions clash with the padding
+        value, so a misspelled option would otherwise be ignored silently.
     """
+    unknown = sorted(set(kwargs) - _READER_OPTIONS)
+    if unknown:
+        raise TypeError(
+            f"Unknown reader option(s): {unknown}. The reader options are "
+            f"{sorted(_READER_OPTIONS)}. The interatomic distance check "
+            "needs the whole structure: pass `check_coldfusion=True` to "
+            "`read`/`read_structure`, or call "
+            "`tad_mctc.io.checks.coldfusion_check` on the structure."
+        )
+
     shape_checks(numbers, positions, allow_batched=False)
-    content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-    )
+    content_checks(numbers, positions, allow_batched=False)
     deflatable_check(positions, fileobj, **kwargs)
     return positions

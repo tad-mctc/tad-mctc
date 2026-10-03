@@ -25,9 +25,20 @@ the file type from the file name or extension.
 
 Example
 -------
+>>> import tempfile
+>>> from pathlib import Path
 >>> from tad_mctc.io import read
->>> path = "mol.xyz"
->>> structure = read.read(path)  # doctest: +SKIP
+>>>
+>>> path = Path(tempfile.mkdtemp()) / "water.xyz"
+>>> _ = path.write_text(
+...     "3\\nwater\\n"
+...     "O 0.000 0.000 0.119\\n"
+...     "H 0.000 0.763 -0.477\\n"
+...     "H 0.000 -0.763 -0.477\\n"
+... )
+>>> structure = read.read(path)
+>>> structure.numbers
+tensor([8, 1, 1])
 """
 
 from .aims import *

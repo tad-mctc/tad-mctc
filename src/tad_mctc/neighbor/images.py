@@ -18,13 +18,15 @@
 Neighbour search: periodic images
 ===================================
 
-Turns a lattice and a cutoff into a *ghost pool*: every atom of the
-primary cell, replicated once per periodic image within reach of the
-cutoff. The pool is plain Cartesian data, so :class:`.Tiles` and
-:func:`.tile_pairs` (:mod:`.tiles`) search it unchanged -- the whole point
-of the ghost-pool route over the modular-wrapping alternative used by
-LASP-D3 and NVIDIA's ``nvalchemiops`` is that nothing downstream has to
-learn about periodicity at all.
+Turns a lattice and a cutoff into the integer image shifts within reach
+of the cutoff (:func:`build_periodic_shifts`). The dense periodic
+coordination number sums over them directly. The neighbour search of
+:mod:`.list` replicates the atoms of the cell at these shifts into a
+*ghost pool*, plain Cartesian data that its tile search handles
+unchanged -- the whole point of the ghost-pool route over the
+modular-wrapping alternative used by LASP-D3 and NVIDIA's
+``nvalchemiops`` is that nothing downstream has to learn about
+periodicity at all.
 
 Two, independently-sourced formulas answer the same question -- how many
 image rings are needed along each lattice axis to cover a cutoff sphere
@@ -39,7 +41,7 @@ interplanar spacing plus a ``floor``.
 spacing plus a ``ceil``. Empirically tighter (fewer excess rings) than
 the CP2K version while remaining just as safe -- see the module's own
 test suite for the brute-force comparison -- so :func:`build_periodic_shifts`
-and :func:`build_shared_periodic_shifts` use this one; the CP2K version
+uses this one; the CP2K version
 stays available on its own for a caller that wants it specifically.
 
 Both share the same per-axis projection -- the lattice vector's component
@@ -47,10 +49,9 @@ along the unit normal of the plane spanned by the other two -- which is
 what stays correct for a triclinic cell where the three lattice vectors
 are not orthogonal.
 
-The ring counts and shift tables here are data-dependent (a lattice
-determines how many images exist at all) and are meant to run under
-``torch.no_grad()`` as
-part of neighbour-list *construction*, exactly like :mod:`.tiles`. The
+Both functions here are data-dependent (a lattice determines how many
+images exist at all) and are meant to run under ``torch.no_grad()`` as
+part of neighbour-list *construction*, exactly like the tile search. The
 ghost positions they produce are used only to decide *which* pairs exist;
 the differentiable translation term is re-formed from ``positions`` and
 the integer ``shift`` at *consumption* time (see ``ncoord/common.py``),
@@ -72,18 +73,21 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 
+from ..autograd import is_functorch_tensor
 from ..typing import Tensor
+from ._tiles import _integer_box
+
+if TYPE_CHECKING:
+    from ..io.structure import Structure
 
 __all__ = [
     "count_image_rings_cp2k",
     "count_image_rings_mctclib",
     "build_periodic_shifts",
-    "build_shared_periodic_shifts",
-    "build_ghost_pool",
     "wrap_to_central_cell",
     "PeriodicShifts",
 ]
@@ -111,17 +115,18 @@ class PeriodicShifts:
 
     Frozen because this is a value, and ``eq=False`` (matching
     :class:`tad_mctc.ncoord.common.CNModel`'s own precedent) because a
-    generated ``__eq__`` would compare ``shifts``/``periodic`` directly,
-    which raises (a tensor's ``==`` returns another tensor, not a
-    ``bool``).
+    generated ``__eq__`` would compare ``shifts``/``periodic_axes``
+    directly, which raises (a tensor's ``==`` returns another tensor, not
+    a ``bool``).
 
     Parameters
     ----------
     shifts : Tensor
         Integer lattice-translation shifts, shape ``(n_shift, 3)``,
         ``torch.long``.
-    periodic : Tensor
-        Boolean mask, shape ``(3,)``, which axes are periodic.
+    periodic_axes : Tensor
+        Boolean mask, shape ``(3,)``, which axes the table translates
+        along.
     cutoff : float
         Real-space cutoff this table was built to cover, in Bohr. A plain
         Python float, never a traced tensor: a consumer compares it
@@ -133,11 +138,11 @@ class PeriodicShifts:
     ------
     RuntimeError
         ``shifts`` is not an ``(n_shift, 3)`` ``torch.long`` tensor, or
-        ``periodic`` is not a ``(3,)`` ``torch.bool`` tensor.
+        ``periodic_axes`` is not a ``(3,)`` ``torch.bool`` tensor.
     """
 
     shifts: Tensor
-    periodic: Tensor
+    periodic_axes: Tensor
     cutoff: float
 
     def __post_init__(self) -> None:
@@ -152,21 +157,103 @@ class PeriodicShifts:
                 f"`shifts` must be a `torch.long` tensor, but dtype is "
                 f"'{self.shifts.dtype}'."
             )
-        if self.periodic.shape != (3,):
+        if self.periodic_axes.shape != (3,):
             raise RuntimeError(
-                "`periodic` must be a `(3,)` tensor, but shape is "
-                f"{tuple(self.periodic.shape)}."
+                "`periodic_axes` must be a `(3,)` tensor, but shape is "
+                f"{tuple(self.periodic_axes.shape)}."
             )
-        if self.periodic.dtype != torch.bool:
+        if self.periodic_axes.dtype != torch.bool:
             raise RuntimeError(
-                f"`periodic` must be a `torch.bool` tensor, but dtype is "
-                f"'{self.periodic.dtype}'."
+                "`periodic_axes` must be a `torch.bool` tensor, but dtype "
+                f"is '{self.periodic_axes.dtype}'."
+            )
+
+    def check_compatible(self, structure: Structure, cutoff: float) -> None:
+        """
+        Raise unless this table is compatible with ``structure`` and
+        ``cutoff``, i.e. using it cannot silently drop a periodic image.
+
+        Covering more axes than ``structure`` is periodic along is fine:
+        a consumer drops the shifts along each system's open axes itself
+        (see :func:`build_periodic_shifts`). So is covering more
+        rings than ``structure.lattice`` needs at ``cutoff``, but not
+        fewer: a table built for a larger cell (before an NPT step
+        compressed it, or for another cell of a batch) misses the outer
+        images of a smaller one.
+
+        The axis and ring comparisons read the values of
+        ``structure.periodic`` and ``structure.lattice``, so they are
+        skipped under ``torch.compile``, ``vmap`` and ``jacrev``. Call
+        this once eagerly before transforming an evaluation.
+
+        Parameters
+        ----------
+        structure : Structure
+            The system(s) the table is about to be used with.
+        cutoff : float
+            Real-space cutoff of the consumer, e.g. a model's ``cutoff``.
+
+        Raises
+        ------
+        ValueError
+            ``structure.lattice`` is ``None``; ``self.cutoff`` is smaller
+            than ``cutoff``; the table misses a periodic axis of
+            ``structure``; or it holds fewer image rings along an axis
+            than ``structure.lattice`` needs at ``cutoff``.
+        """
+        if structure.lattice is None:
+            raise ValueError(
+                "`structure.lattice` is `None`; a `Structure` with no "
+                "lattice has nothing periodic to evaluate."
+            )
+
+        if self.cutoff < cutoff:
+            raise ValueError(
+                f"`shifts.cutoff` ({self.cutoff}) is smaller than the "
+                f"consumer's cutoff ({cutoff}); the table would silently "
+                "drop periodic images. Build it with "
+                "`build_periodic_shifts(lattice, periodic, cutoff=...)` "
+                "at at least that cutoff."
+            )
+
+        # `Structure` fills in a mask whenever it has a lattice.
+        periodic = structure.periodic
+        assert periodic is not None
+        if is_functorch_tensor(periodic):
+            return
+
+        table_axes = self.periodic_axes.to(periodic.device)
+        if (periodic & ~table_axes).any():
+            raise ValueError(
+                f"`shifts.periodic_axes` ({table_axes.tolist()}) does not "
+                "cover every periodic axis of the structure "
+                f"({periodic.tolist()}); the images along the missing axes "
+                "would be silently dropped. Build the table with the "
+                "structure's own `periodic` mask."
+            )
+
+        lattice = structure.lattice
+        if is_functorch_tensor(lattice):
+            return
+
+        # The table spans `-rings..rings` along each axis (see
+        # `build_periodic_shifts`). Every cell of a batch must fit in it.
+        needed = count_image_rings_mctclib(lattice, periodic, cutoff)
+        needed = needed.reshape(-1, 3).amax(0)
+        table_rings = self.shifts.abs().amax(0).to(needed.device)
+        if (table_rings < needed).any():
+            raise ValueError(
+                f"`shifts` reaches {table_rings.tolist()} image rings along "
+                f"each axis, but the structure's lattice needs "
+                f"{needed.tolist()} at a cutoff of {cutoff}; the outer "
+                "images would be silently dropped. Rebuild the table from "
+                "this lattice."
             )
 
     def replace(self, **changes: Any) -> PeriodicShifts:
         """
-        Copy this shift table with some fields swapped out, e.g. a
-        different ``periodic`` mask.
+        Copy these periodic shifts with some fields swapped out, e.g. a
+        different ``periodic_axes`` mask.
 
         Thin wrapper around :func:`dataclasses.replace` so call sites do
         not need their own import of it. Re-runs the shape/dtype checks
@@ -176,7 +263,8 @@ class PeriodicShifts:
         Parameters
         ----------
         **changes : Any
-            Field name/value pairs to override, e.g. ``periodic=mask``.
+            Field name/value pairs to override, e.g.
+            ``periodic_axes=mask``.
 
         Returns
         -------
@@ -195,16 +283,15 @@ def wrap_to_central_cell(
     Port of ``wrap_to_central_cell`` (``mctc-lib/src/mctc/cutoff.f90``,
     and the identical routine in ``s-dftd3/src/dftd3/utils.f90``), which
     s-dftd3 applies to every structure entering its API before any energy
-    evaluation. :func:`build_ghost_pool` needs it for the same reason:
-    the pool it builds reaches a fixed number of image rings out from the
+    evaluation. The neighbour search (:mod:`.list`) needs it for the same
+    reason: its ghost pool reaches a fixed number of image rings out from the
     cell, sized from ``lattice`` and the cutoff alone, so a pair between
     atoms written more than that many cells apart would simply not be in
     it -- the ordinary case for an unwrapped MD trajectory.
 
     Unlike the Fortran original, which folds all three components as soon
     as *any* axis is periodic, this wraps each axis independently: a slab
-    must keep its non-periodic axis untouched, matching
-    :func:`tad_mctc.neighbor.list._wrap_minimum_image`.
+    must keep its non-periodic axis untouched.
 
     The integer cell offset applied is returned alongside the coordinates
     rather than discarded, because ``positions`` here is the caller's
@@ -343,14 +430,14 @@ def count_image_rings_cp2k(
     spacing (:func:`_axis_spacing`), floored. See
     :func:`count_image_rings_mctclib` for an independently-sourced
     formula answering the same question, empirically tighter at the same
-    safety margin -- :func:`build_periodic_shifts` and
-    :func:`build_shared_periodic_shifts` use that one; this one stays
+    safety margin -- :func:`build_periodic_shifts` uses that one; this one
+    stays
     available on its own.
 
     A non-periodic axis always gets zero rings, regardless of ``cutoff``.
     A periodic axis can still come back zero here when ``cutoff`` does
     not reach past the cell's own boundary in that direction --
-    :func:`build_ghost_pool` raises that to one ring, because an atom
+    :func:`build_periodic_shifts` raises that to one ring, because an atom
     sitting right at a periodic boundary can have a real neighbour
     arbitrarily close on the other side of it, however small ``cutoff``
     is.
@@ -359,7 +446,7 @@ def count_image_rings_cp2k(
     case still works, as ``...`` is then empty): each lattice in the batch
     gets its own ring count, independent of every other one -- this
     function does not combine them into a single shared count (see
-    :func:`build_shared_periodic_shifts` for that).
+    :func:`build_periodic_shifts` for that).
 
     Parameters
     ----------
@@ -408,8 +495,7 @@ def count_image_rings_mctclib(
     :func:`build_periodic_shifts` table) at the same safety margin: never
     observed to under-cover across randomized cubic, orthorhombic and
     triclinic lattices, including cutoffs set to exact spacing multiples.
-    This is the formula :func:`build_periodic_shifts` and
-    :func:`build_shared_periodic_shifts` use.
+    This is the formula :func:`build_periodic_shifts` uses.
 
     A non-periodic axis always gets zero rings, regardless of ``cutoff``.
     Unlike the CP2K version, a periodic axis only comes back zero here
@@ -420,7 +506,7 @@ def count_image_rings_mctclib(
     case still works, as ``...`` is then empty): each lattice in the batch
     gets its own ring count, independent of every other one -- this
     function does not combine them into a single shared count (see
-    :func:`build_shared_periodic_shifts` for that).
+    :func:`build_periodic_shifts` for that).
 
     Parameters
     ----------
@@ -454,40 +540,81 @@ def count_image_rings_mctclib(
     return torch.where(periodic, rings, torch.zeros_like(rings))
 
 
+def _image_rings(lattice: Tensor, periodic: Tensor, cutoff: float) -> Tensor:
+    """
+    The image rings of each lattice along each axis: those of
+    :func:`count_image_rings_mctclib`, raised to at least one ring along a
+    periodic axis. An atom sitting right at a periodic boundary can have a
+    real neighbour arbitrarily close on the other side of it, however
+    small ``cutoff`` is.
+
+    Parameters
+    ----------
+    lattice : Tensor
+        Lattice vectors as rows, shape ``(..., 3, 3)``, in Bohr.
+    periodic : Tensor
+        Boolean mask, shape ``(..., 3)`` or ``(3,)``, which axes are
+        periodic.
+    cutoff : float
+        Sphere radius to cover, in Bohr.
+
+    Returns
+    -------
+    Tensor
+        Ring counts, shape ``(..., 3)``.
+    """
+    rings = count_image_rings_mctclib(lattice, periodic, cutoff)
+    return torch.maximum(rings, periodic.long())
+
+
 @torch.no_grad()
 def build_periodic_shifts(
     lattice: Tensor, periodic: Tensor, cutoff: float
 ) -> PeriodicShifts:
     """
     Integer lattice-translation shifts covering every periodic image
-    within reach of ``cutoff``.
+    within reach of ``cutoff``, for one cell or a batch of cells.
 
-    Every combination of per-axis rings from :func:`count_image_rings_mctclib`
-    (raised to at least one ring per periodic axis, for the same reason
-    :func:`build_ghost_pool` raises it -- see that function's docstring),
-    including the zero shift for the primary cell itself. This is the
-    same shift table :func:`build_ghost_pool` builds internally; it is
-    exposed on its own for a caller that wants the periodic translations
-    without a ghost pool of Cartesian positions attached to them, such as
-    the dense periodic coordination-number path in
-    :mod:`tad_mctc.ncoord.common`. Bundled with the ``periodic`` mask and
-    ``cutoff`` that produced it (:class:`PeriodicShifts`) so the three
-    can never be supplied out of step with each other.
+    Every combination of per-axis rings from :func:`_image_rings`,
+    including the zero shift for the primary cell itself. For a batch,
+    one table covers every cell: it reaches the per-axis **maximum** ring
+    count of the batch. A system that needs fewer rings just has its
+    extra shift entries masked out downstream by the ordinary
+    ``distance_squared <= cutoff**2`` check -- over-covering a periodic
+    axis is free, under-covering is what silently drops real neighbours.
+    This lets one dense-periodic batch evaluation (see
+    :mod:`tad_mctc.ncoord.common`) use a single, fixed-shape ``shifts``
+    tensor for every system in the batch, no ``torch.func.vmap`` required.
+
+    The table is bundled with the ``periodic`` mask and ``cutoff`` that
+    produced it (:class:`PeriodicShifts`) so the three can never be
+    supplied out of step with each other. For a batch, its
+    ``periodic_axes`` is the batch's per-axis ``.any()`` -- the union of
+    what any system needs. A consumer must apply each system's own
+    ``periodic`` mask, not this reduced one, both to fold positions into
+    the central cell and to drop shifts along an axis that is not periodic
+    for that system. The cutoff check does not remove those shifts: a
+    non-periodic axis may carry a short placeholder lattice vector, which
+    puts its images well inside the cutoff (see
+    ``test_batch_matches_single_for_mixed_periodicity`` in
+    ``test/test_ncoord/test_dense_periodic.py``).
 
     Parameters
     ----------
     lattice : Tensor
-        Lattice vectors as rows, shape ``(3, 3)``, in Bohr.
+        Lattice vectors as rows, shape ``(3, 3)`` or ``(..., 3, 3)``, in
+        Bohr.
     periodic : Tensor
-        Boolean mask, shape ``(3,)``, which axes are periodic.
+        Boolean mask, shape ``(3,)`` or ``(..., 3)``, which axes are
+        periodic.
     cutoff : float
-        Sphere radius to cover, in Bohr.
+        Sphere radius to cover, in Bohr, for every lattice in the batch.
 
     Returns
     -------
     PeriodicShifts
         ``shifts``, shape ``(n_shift, 3)``, ``torch.long``, bundled with
-        this call's ``periodic`` and ``cutoff``.
+        the (batch-reduced) ``periodic`` mask and this call's ``cutoff``.
 
     Example
     -------
@@ -499,185 +626,15 @@ def build_periodic_shifts(
     >>> bundle = build_periodic_shifts(lattice, periodic, cutoff=1.0)
     >>> bundle.shifts.shape
     torch.Size([27, 3])
+    >>> batch = torch.stack([lattice, 2.0 * lattice])
+    >>> build_periodic_shifts(batch, periodic, cutoff=20.0).shifts.shape
+    torch.Size([125, 3])
     """
-    rings = count_image_rings_mctclib(lattice, periodic, cutoff)
-    rings = torch.maximum(rings, periodic.long())
-    return _shifts_from_rings(rings, periodic, cutoff, device=lattice.device)
-
-
-@torch.no_grad()
-def build_shared_periodic_shifts(
-    lattice: Tensor, periodic: Tensor, cutoff: float
-) -> PeriodicShifts:
-    """
-    One shift table covering every lattice in a batch, sized to the
-    per-axis **maximum** ring count the batch needs at ``cutoff``.
-
-    A system that needs fewer rings than this shared maximum just has its
-    extra shift entries masked out downstream by the ordinary
-    ``distance_squared <= cutoff**2`` check -- over-covering a periodic
-    axis is free, under-covering is what silently drops real neighbours.
-    This is what lets one dense-periodic batch evaluation (see
-    ``tad_mctc.ncoord.common``) use a single, fixed-shape ``shifts``
-    tensor for every system in the batch, no ``torch.func.vmap`` required.
-
-    The returned bundle's ``.periodic`` is the batch's per-axis ``.any()``
-    -- the union of what any system in the batch needs. A consumer must
-    apply each system's own ``periodic`` mask, not this reduced one, both
-    to fold positions into the central cell and to drop shifts along an
-    axis that is not periodic for that system. The cutoff check does not
-    remove those shifts: a non-periodic axis may carry a short placeholder
-    lattice vector, which puts its images well inside the cutoff (see
-    ``test_batch_matches_single_for_mixed_periodicity`` in
-    ``test/test_ncoord/test_periodic_cells.py``).
-
-    Parameters
-    ----------
-    lattice : Tensor
-        Lattice vectors as rows, shape ``(B, 3, 3)``, in Bohr.
-    periodic : Tensor
-        Boolean mask, shape ``(B, 3)`` or ``(3,)``, which axes are
-        periodic.
-    cutoff : float
-        Sphere radius to cover, in Bohr, for every lattice in the batch.
-
-    Returns
-    -------
-    PeriodicShifts
-        ``shifts`` covering the maximum per-axis ring count across the
-        whole batch, bundled with the batch's reduced ``periodic`` (see
-        above) and this call's single ``cutoff``.
-
-    Example
-    -------
-    >>> import torch
-    >>> from tad_mctc.neighbor.images import build_shared_periodic_shifts
-    >>>
-    >>> lattice = torch.stack(
-    ...     [12.0 * torch.eye(3, dtype=torch.double),
-    ...      15.0 * torch.eye(3, dtype=torch.double)]
-    ... )
-    >>> periodic = torch.tensor([True, True, True])
-    >>> bundle = build_shared_periodic_shifts(lattice, periodic, cutoff=1.0)
-    >>> bundle.shifts.shape
-    torch.Size([27, 3])
-    """
-    rings = count_image_rings_mctclib(lattice, periodic, cutoff)  # (B, 3)
-    periodic_any = periodic.any(0) if periodic.ndim > 1 else periodic  # (3,)
-    rings = torch.maximum(rings, periodic_any.long())
-
-    # `rings.ndim == 1` means `lattice` itself had no batch dimension (a
-    # single lattice shared by every system in the batch) -- nothing to
-    # reduce over in that case, unlike `rings.amax(dim=())`, whose
-    # reduction semantics for an empty `dim` tuple are version-dependent.
-    max_rings = (
-        rings
-        if rings.ndim == 1
-        else rings.amax(dim=tuple(range(rings.ndim - 1)))
+    rings = _image_rings(lattice, periodic, cutoff)
+    max_rings = rings.reshape(-1, 3).amax(0)
+    periodic_axes = periodic.reshape(-1, 3).any(0)
+    return PeriodicShifts(
+        shifts=_integer_box(max_rings),
+        periodic_axes=periodic_axes,
+        cutoff=cutoff,
     )
-
-    return _shifts_from_rings(
-        max_rings, periodic_any, cutoff, device=lattice.device
-    )
-
-
-def _shifts_from_rings(
-    rings: Tensor, periodic: Tensor, cutoff: float, *, device: torch.device
-) -> PeriodicShifts:
-    """
-    Every combination of per-axis integer shifts ``-rings[axis]`` through
-    ``rings[axis]``, bundled into a :class:`PeriodicShifts`.
-
-    Shared tail of :func:`build_periodic_shifts` and
-    :func:`build_shared_periodic_shifts`, which differ only in how
-    ``rings`` and ``periodic`` are obtained (a single lattice's own count,
-    or a batch's per-axis maximum) -- both then hand off here unchanged.
-    """
-    axis_shifts = [
-        torch.arange(-int(rings[axis]), int(rings[axis]) + 1, device=device)
-        for axis in range(3)
-    ]
-    shifts = torch.cartesian_prod(*axis_shifts)
-    return PeriodicShifts(shifts=shifts, periodic=periodic, cutoff=cutoff)
-
-
-@torch.no_grad()
-def build_ghost_pool(
-    positions: Tensor,
-    lattice: Tensor,
-    periodic: Tensor,
-    cutoff: float,
-) -> tuple[Tensor, Tensor, Tensor]:
-    """
-    Replicate every atom into every periodic image within reach of
-    ``cutoff``.
-
-    The pool reaches a fixed number of rings out from the cell, sized
-    from ``lattice`` and ``cutoff`` alone, so it only covers pairs
-    between atoms lying within that many cells of each other. Callers
-    that cannot guarantee that -- an unwrapped trajectory, say -- must
-    fold ``positions`` with :func:`wrap_to_central_cell` first, as
-    :func:`tad_mctc.neighbor.list.build_neighborlists` does.
-
-    Parameters
-    ----------
-    positions : Tensor
-        Cartesian coordinates of the primary cell, shape ``(nat, 3)``.
-        Expected to lie inside it; see above.
-    lattice : Tensor
-        Lattice vectors as rows, shape ``(3, 3)``, in Bohr.
-    periodic : Tensor
-        Boolean mask, shape ``(3,)``, which axes are periodic.
-    cutoff : float
-        Sphere radius to cover, in Bohr.
-
-    Returns
-    -------
-    tuple[Tensor, Tensor, Tensor]
-        ``ghost_positions``, shape ``(nat * n_image, 3)``: Cartesian
-        coordinates of every image, including the un-translated primary
-        cell itself (``shift == 0``).
-
-        ``owner``, shape ``(nat * n_image,)``: index, into ``positions``,
-        of the atom each ghost is an image of.
-
-        ``shift``, shape ``(nat * n_image, 3)``, ``torch.long``: the
-        integer lattice translation of each ghost, so that
-        ``ghost_positions == positions[owner] + shift.to(positions.dtype)
-        @ lattice``.
-
-    Example
-    -------
-    >>> import torch
-    >>> from tad_mctc.neighbor.images import build_ghost_pool
-    >>>
-    >>> positions = torch.tensor([[1.0, 1.0, 1.0]], dtype=torch.double)
-    >>> lattice = 10.0 * torch.eye(3, dtype=torch.double)
-    >>> periodic = torch.tensor([True, True, True])
-    >>> ghosts, owner, shift = build_ghost_pool(
-    ...     positions, lattice, periodic, cutoff=1.0
-    ... )
-    >>> bool((owner == 0).all())
-    True
-    >>> tuple(shift[(shift == 0).all(-1)][0].tolist())
-    (0, 0, 0)
-    """
-    nat = positions.shape[0]
-
-    shift = build_periodic_shifts(lattice, periodic, cutoff).shifts
-    n_image = shift.shape[0]
-
-    translation = shift.to(dtype=positions.dtype) @ lattice  # (n_image, 3)
-
-    # Broadcast every atom against every translation: the atom index
-    # varies slowest, so flattening this in row-major order lines up with
-    # `owner`'s `repeat_interleave` and `shift`'s plain `repeat` below.
-    ghost_positions = positions.unsqueeze(1) + translation.unsqueeze(0)
-    ghost_positions = ghost_positions.reshape(nat * n_image, 3)
-
-    owner = torch.arange(nat, device=positions.device)
-    owner = owner.repeat_interleave(n_image)
-
-    shift = shift.to(device=positions.device).repeat(nat, 1)
-
-    return ghost_positions, owner, shift

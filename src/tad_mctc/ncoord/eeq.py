@@ -60,11 +60,8 @@ cn_eeq = CNModel(
 """
 The EEQ coordination number: the error-function counting function with
 EEQ's steepness, cutoff and CN cap (:mod:`tad_mctc.ncoord.defaults`).
-Callable as ``cn_eeq(structure)``: the molecular, all-pairs path when
-``structure.lattice is None``, the periodic path (auto-building a shift
-table every call) otherwise. ``cn_eeq.with_precomputed_shifts(structure,
-shifts=...)`` is the ``vmap``/``jacrev``-over-``lattice``-safe periodic
-alternative, reusing a precomputed shift table instead of rebuilding one.
+Callable as ``cn_eeq(structure)`` for a molecule or a cell.
+See :meth:`.CNModel.__call__` for how pairs are enumerated.
 """
 
 cn_eeq_en = CNModel(

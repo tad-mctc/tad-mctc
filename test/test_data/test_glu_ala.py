@@ -30,11 +30,11 @@ def test_list_records_ascending_by_size() -> None:
     records = list_records("glu_ala")
     assert records == sorted(records, key=int)
     assert records[0] == "0001"
-    assert records[-1] == "2048"
-    assert len(records) == 26
+    assert records[-1] == "8192"
+    assert len(records) == 28
 
 
-@pytest.mark.parametrize("record", ["0001", "0064", "2048"])
+@pytest.mark.parametrize("record", ["0001", "0064", "2048", "8192"])
 def test_get_structure_looks_up_real_records(record: str) -> None:
     structure = get_structure("glu_ala", record)
 

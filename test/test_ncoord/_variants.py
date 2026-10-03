@@ -16,14 +16,11 @@
 # limitations under the License.
 """
 The one table naming every coordination-number variant this package ships,
-each against its own :class:`~tad_mctc.typing.CNFunc`, cutoff, and the two
+each against its own :class:`~tad_mctc.ncoord.common.CNModel`, cutoff, and the two
 Fortran reference keys :mod:`samples`' ``Refs`` stores for it (the value
-``cn_<variant>`` and the derivative ``dcn_<variant>dr``). ``test_reference.py``
-(value correctness) and every file in ``test_grad/`` (gradient correctness)
-share this same table rather than each listing the seven variants for
-themselves -- two independently-typed variant lists is exactly the kind of
-drift an architecture review flagged: `test_grad/`'s once listed four of
-the seven and silently missed the other three.
+``cn_<variant>`` and the derivative ``dcn_<variant>dr``). Every test that
+runs over all variants takes them from this table rather than listing
+them itself, so a new variant cannot be silently missed by one file.
 """
 
 from __future__ import annotations
@@ -44,10 +41,6 @@ from tad_mctc.ncoord.common import CNModel
 
 
 class Variant(NamedTuple):
-    # `CNModel`, not the narrower `CNFunc` Protocol: `test_precomputed_shifts.py`
-    # calls `.with_precomputed_shifts` on this, which `CNFunc` (a plain
-    # `__call__`) does not declare, and every preset in `VARIANTS` below
-    # is a `CNModel` instance regardless.
     call: CNModel
     ref_key: str
     dref_key: str
