@@ -35,7 +35,6 @@ from ..utils import load_batch, load_structure
 from ._variants import VARIANTS
 from .samples import BATCH_PAIRS, pair_id, refs
 
-
 ATOL_DOUBLE = 1e-11
 """Double-precision tolerance for every sample but `CUTOFF_SOURCE`."""
 
