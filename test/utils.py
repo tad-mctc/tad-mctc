@@ -44,12 +44,28 @@ __all__ = [
     "DYNAMO_SUPPORTED",
     "DYNAMO_UNSUPPORTED_REASON",
     "hydrogens",
+    "jacfwd",
+    "jacrev",
     "load_batch",
     "load_pair",
     "load_sample",
     "load_structure",
     "run_compiled_or_skip",
 ]
+
+
+def jacrev(
+    f: Callable[..., Any], *args: Any, **kwargs: Any
+) -> Callable[..., Any]:
+    """`torch.func.jacrev` typed to return `Any` instead of a `PyTree` union."""
+    return torch.func.jacrev(f, *args, **kwargs)
+
+
+def jacfwd(
+    f: Callable[..., Any], *args: Any, **kwargs: Any
+) -> Callable[..., Any]:
+    """`torch.func.jacfwd` typed to return `Any` instead of a `PyTree` union."""
+    return torch.func.jacfwd(f, *args, **kwargs)
 
 
 def _rng(size: tuple[int, ...] | int, dd: DD) -> Tensor:

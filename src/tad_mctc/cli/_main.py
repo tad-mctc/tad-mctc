@@ -59,7 +59,11 @@ def _build_neighborlist(
     def nlist_stage(label: str) -> contextlib.AbstractContextManager[None]:
         return timings.stage(f"nlist: {label}")
 
-    (nbl,) = _build_neighborlists(structure, (cutoff,), stage=nlist_stage)
+    (nbl,) = _build_neighborlists(
+        structure,
+        (cutoff,),  # pyright: ignore[reportCallIssue]
+        stage=nlist_stage,
+    )
     return nbl
 
 

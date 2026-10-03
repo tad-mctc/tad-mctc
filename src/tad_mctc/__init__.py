@@ -41,6 +41,9 @@ In particular, the *tad-mctc* library provides:
 
 - typing (base class for tensor-like behavior of arbitrary classes)
 
+- tree (frozen tensor containers that work under `torch.func` transforms and
+  `torch.compile`)
+
 - units
 
 The name is inspired by the Fortran pendant "modular computation tool chain
@@ -115,6 +118,7 @@ from . import (
     ncoord,
     neighbor,
     storch,
+    tree,
     typing,
     units,
 )

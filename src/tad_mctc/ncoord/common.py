@@ -35,11 +35,9 @@ masking are shared (:func:`_masked_pair_counts`).
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Callable
-from dataclasses import dataclass
 from functools import partial
-from typing import Any, Literal, NamedTuple, Protocol
+from typing import Literal, NamedTuple, Protocol
 
 import torch
 import torch.utils.checkpoint
@@ -58,6 +56,7 @@ from ..neighbor.images import (
 )
 from ..neighbor.list import NeighborList
 from ..tools import is_compiling
+from ..tree import Node, child, context
 from ..typing import CountingFunction, PairWeightFunction, TableFunction, Tensor
 from . import defaults
 
@@ -169,8 +168,7 @@ class CNFunc(Protocol):
         ...
 
 
-@dataclass(frozen=True, eq=False)
-class CNModel:
+class CNModel(Node):
     """
     One coordination-number variant, as a value.
 
@@ -182,8 +180,13 @@ class CNModel:
     obtained with :meth:`replace` (``cn_d4.replace(cutoff=40.0)``), never
     a subclass.
 
-    Frozen because a model is a value, and ``eq=False`` because a
-    generated ``__eq__`` would compare the tensor fields and raise.
+    A frozen :class:`~tad_mctc.tree.Node`: a model is a value, compared and
+    hashed by identity, because comparing the tensor fields would raise. A
+    tensor in ``cn_max``, ``rcov`` or ``en`` is a pytree leaf, so it can be
+    differentiated or batched with ``torch.func``; a table function or a
+    number is static. ``count`` and ``pair_weight`` are static too, and
+    hashable by identity: two models only have the same tree structure if
+    they share the same function objects.
 
     Parameters
     ----------
@@ -211,14 +214,14 @@ class CNModel:
         weight on atom ``j``'s count as it is added to ``cn[i]``.
     """
 
-    count: CountingFunction
-    cutoff: float = 25.0
-    cn_max: Tensor | float | int | None = None
-    rcov: Tensor | TableFunction = radii.COV_D3
-    en: Tensor | TableFunction = eneg.PAULING
-    pair_weight: PairWeightFunction | None = None
+    count: CountingFunction = context()
+    cutoff: float = context(default=25.0)
+    cn_max: Tensor | float | int | None = child(default=None)
+    rcov: Tensor | TableFunction = child(default=radii.COV_D3)
+    en: Tensor | TableFunction = child(default=eneg.PAULING)
+    pair_weight: PairWeightFunction | None = context(default=None)
 
-    def __post_init__(self) -> None:
+    def _validate(self) -> None:
         # Checked once when the model is built. `replace()` builds through
         # `__init__`, so every variant is checked too, also under `vmap`
         # where `cn_max` is a 0-d tensor per lane.
@@ -347,31 +350,6 @@ class CNModel:
             return cn
 
         return cut_coordination_number(cn, self.cn_max)
-
-    def replace(self, **changes: Any) -> CNModel:
-        """
-        Copy this model with some fields swapped out, e.g. a different
-        ``cutoff`` or ``cn_max``.
-
-        Like :func:`dataclasses.replace`, which :func:`torch.compile`
-        cannot trace, so this builds the new instance itself. This is the
-        documented way to get a different variant (see the class
-        docstring); a subclass is not.
-
-        Parameters
-        ----------
-        **changes : Any
-            Field name/value pairs to override, e.g. ``cutoff=40.0``.
-
-        Returns
-        -------
-        CNModel
-            A new instance with the given fields replaced.
-        """
-        current = {
-            f.name: getattr(self, f.name) for f in dataclasses.fields(self)
-        }
-        return type(self)(**{**current, **changes})
 
 
 def _masked_pair_counts(

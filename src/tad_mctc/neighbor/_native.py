@@ -348,7 +348,7 @@ def _load_with_info() -> tuple[Any | None, BuildInfo]:
 
         started = time.time()
         with _without_wrong_compiler_warning():
-            module = load(
+            module: Any = load(
                 name=_jit_name(compiler, ninja, cflags),
                 sources=[_SOURCE],
                 extra_cflags=list(cflags),

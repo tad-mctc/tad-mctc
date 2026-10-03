@@ -205,7 +205,8 @@ def test_coldfusion_catches_contact_in_batch_of_cells() -> None:
 def test_coldfusion_batch_sharing_one_cell() -> None:
     """One `(1, 3, 3)` cell is shared by every system of the batch."""
     fused = _cell_with_contact_across_boundary(3 * [True])
-    assert fused.lattice is not None
+    lattice = fused.lattice
+    assert lattice is not None
     fine_positions = fused.positions.clone()
     fine_positions[1, 0] = 5.0  # 4.9 Bohr from atom 0, also across the cell
 
@@ -213,7 +214,7 @@ def test_coldfusion_batch_sharing_one_cell() -> None:
         return Structure(
             numbers=torch.tensor([[1, 1]] * len(positions)),
             positions=torch.stack(positions),
-            lattice=fused.lattice.unsqueeze(0),
+            lattice=lattice.unsqueeze(0),
             periodic=fused.periodic,
         )
 
@@ -509,9 +510,7 @@ def test_coldfusion_functorch_via_jacrev() -> None:
         assert checks.coldfusion_check(structure) is True
         return pos.sum()
 
-    _ = torch.func.jacrev(f)(  # pyright: ignore[reportPrivateImportUsage]
-        positions_close
-    )
+    _ = torch.func.jacrev(f)(positions_close)
 
 
 def test_coldfusion_functorch_via_vmap() -> None:
@@ -533,9 +532,7 @@ def test_coldfusion_functorch_via_vmap() -> None:
         assert checks.coldfusion_check(structure) is True
         return pos.sum()
 
-    _ = torch.func.vmap(f)(  # pyright: ignore[reportPrivateImportUsage]
-        numbers_batch, positions_close
-    )
+    _ = torch.func.vmap(f)(numbers_batch, positions_close)
 
 
 def test_content_functorch_via_vmap() -> None:
@@ -556,6 +553,4 @@ def test_content_functorch_via_vmap() -> None:
         assert checks.content_checks(nums, pos) is True
         return pos.sum()
 
-    _ = torch.func.vmap(f)(  # pyright: ignore[reportPrivateImportUsage]
-        numbers_batch, positions_batch
-    )
+    _ = torch.func.vmap(f)(numbers_batch, positions_batch)

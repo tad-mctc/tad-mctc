@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import pytest
 import torch
-from torch.func import jacrev, vmap
+from torch.func import vmap
 
 from tad_mctc.autograd import dgradcheck
 from tad_mctc.io.structure import Structure, pack_structures
@@ -43,6 +43,7 @@ from ..utils import (
     DYNAMO_SUPPORTED,
     DYNAMO_UNSUPPORTED_REASON,
     compile_fullgraph,
+    jacrev,
     load_structure,
 )
 from .samples import bulk_and_slab

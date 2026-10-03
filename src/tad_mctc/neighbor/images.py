@@ -71,13 +71,12 @@ tensor([2, 2, 2])
 
 from __future__ import annotations
 
-import dataclasses
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import torch
 
 from ..autograd import is_functorch_tensor
+from ..tree import Node, child, context
 from ..typing import Tensor
 from ._tiles import _integer_box
 
@@ -106,18 +105,15 @@ _FLOOR_EPS = 1e-10
 _WRAP_EPS = 1e-14
 
 
-@dataclass(frozen=True, eq=False)
-class PeriodicShifts:
+class PeriodicShifts(Node):
     """
     A shift table bundled with the periodic-axis mask and cutoff that
     produced it, so the three can never be supplied out of step with each
     other -- see :func:`build_periodic_shifts`, which constructs one.
 
-    Frozen because this is a value, and ``eq=False`` (matching
-    :class:`tad_mctc.ncoord.common.CNModel`'s own precedent) because a
-    generated ``__eq__`` would compare ``shifts``/``periodic_axes``
-    directly, which raises (a tensor's ``==`` returns another tensor, not
-    a ``bool``).
+    A frozen :class:`~tad_mctc.tree.Node`: a value, compared and hashed by
+    identity, because comparing ``shifts``/``periodic_axes`` directly
+    raises (a tensor's ``==`` returns another tensor, not a ``bool``).
 
     Parameters
     ----------
@@ -141,11 +137,11 @@ class PeriodicShifts:
         ``periodic_axes`` is not a ``(3,)`` ``torch.bool`` tensor.
     """
 
-    shifts: Tensor
-    periodic_axes: Tensor
-    cutoff: float
+    shifts: Tensor = child()
+    periodic_axes: Tensor = child()
+    cutoff: float = context()
 
-    def __post_init__(self) -> None:
+    def _validate(self) -> None:
         if self.shifts.ndim != 2 or self.shifts.shape[-1] != 3:
             raise RuntimeError(
                 "`shifts` must be an `(n_shift, 3)` tensor of integer "
@@ -249,29 +245,6 @@ class PeriodicShifts:
                 "images would be silently dropped. Rebuild the table from "
                 "this lattice."
             )
-
-    def replace(self, **changes: Any) -> PeriodicShifts:
-        """
-        Copy these periodic shifts with some fields swapped out, e.g. a
-        different ``periodic_axes`` mask.
-
-        Thin wrapper around :func:`dataclasses.replace` so call sites do
-        not need their own import of it. Re-runs the shape/dtype checks
-        in :meth:`__post_init__` on the new instance, same as the
-        constructor.
-
-        Parameters
-        ----------
-        **changes : Any
-            Field name/value pairs to override, e.g.
-            ``periodic_axes=mask``.
-
-        Returns
-        -------
-        PeriodicShifts
-            A new, re-validated instance with the given fields replaced.
-        """
-        return dataclasses.replace(self, **changes)
 
 
 def wrap_to_central_cell(

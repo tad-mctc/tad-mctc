@@ -34,6 +34,7 @@ import torch
 from tad_mctc.io.structure import Structure
 from tad_mctc.ncoord.common import CNModel
 from tad_mctc.neighbor.list import NeighborList, build_neighborlist
+from tad_mctc.tree import stack
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
@@ -97,7 +98,7 @@ def _mapped_cn(model: CNModel, systems: list[Structure]):
         shift: Tensor,
         mask: Tensor,
     ) -> Tensor:
-        nbl = NeighborList(
+        nbl = NeighborList.create(
             idx_i,
             idx_j,
             shift,
@@ -125,9 +126,7 @@ def test_vmap_over_systems_values(
     numbers = torch.stack([s.numbers for s in systems])
     positions = torch.stack([s.positions for s in systems])
 
-    out = torch.func.vmap(f)(
-        numbers, positions, *stacked
-    )  # pyright: ignore[reportPrivateImportUsage]
+    out = torch.func.vmap(f)(numbers, positions, *stacked)
 
     # Each system through its own list, one at a time.
     nbls = _lists(model, systems)
@@ -136,6 +135,25 @@ def test_vmap_over_systems_values(
 
     # Padding atoms have no pairs, so no coordination number.
     assert (out[numbers == 0] == 0).all()
+
+
+@pytest.mark.parametrize("variant_name", list(VARIANTS))
+def test_vmap_over_stacked_lists_matches_manual_stacking(
+    variant_name: str,
+) -> None:
+    """The lists are one `vmap` argument (`in_dims=0`), stacked as a tree,
+    instead of their tensors being stacked and the list rebuilt per lane."""
+    model = VARIANTS[variant_name].call
+    systems = _systems(torch.double)
+    f, stacked = _mapped_cn(model, systems)
+    numbers = torch.stack([s.numbers for s in systems])
+    positions = torch.stack([s.positions for s in systems])
+    manual = torch.func.vmap(f)(numbers, positions, *stacked)
+
+    nbls = _lists(model, systems)
+    out = torch.func.vmap(model, in_dims=0)(stack(systems), stack(nbls))
+
+    assert torch.allclose(out, manual, atol=1e-12, rtol=0)
 
 
 @pytest.mark.parametrize("variant_name", list(VARIANTS))
@@ -149,16 +167,10 @@ def test_vmap_over_systems_gradient_finite(variant_name: str) -> None:
     def total(pos: Tensor, num: Tensor, *rest: Tensor) -> Tensor:
         return f(num, pos, *rest).sum()
 
-    grad = torch.func.vmap(
-        torch.func.grad(total)
-    )(  # pyright: ignore[reportPrivateImportUsage]
+    grad = torch.func.vmap(torch.func.grad(total))(positions, numbers, *stacked)
+    jac = torch.func.vmap(torch.func.jacrev(lambda p, n, *r: f(n, p, *r)))(
         positions, numbers, *stacked
     )
-    jac = torch.func.vmap(  # pyright: ignore[reportPrivateImportUsage]
-        torch.func.jacrev(
-            lambda p, n, *r: f(n, p, *r)
-        )  # pyright: ignore[reportPrivateImportUsage]
-    )(positions, numbers, *stacked)
 
     assert torch.isfinite(grad).all()
     assert torch.isfinite(jac).all()
@@ -220,7 +232,7 @@ def _mapped_cell_cn(model: CNModel, cells: list[Structure]):
         shift: Tensor,
         mask: Tensor,
     ) -> Tensor:
-        nbl = NeighborList(
+        nbl = NeighborList.create(
             idx_i,
             idx_j,
             shift,
@@ -253,9 +265,7 @@ def test_vmap_over_cells_values(variant_name: str) -> None:
         for name in ("numbers", "positions", "lattice", "periodic")
     )
 
-    out = torch.func.vmap(f)(
-        *args, *stacked
-    )  # pyright: ignore[reportPrivateImportUsage]
+    out = torch.func.vmap(f)(*args, *stacked)
 
     loop = torch.stack([model(c, n) for c, n in zip(cells, nbls)])
     assert torch.allclose(out, loop, atol=1e-12, rtol=0)
@@ -277,10 +287,8 @@ def test_vmap_over_cells_gradients(variant_name: str) -> None:
     def total(pos, lat, num, per, *rest):
         return f(num, pos, lat, per, *rest).sum()
 
-    grad = torch.func.grad  # pyright: ignore[reportPrivateImportUsage]
-    d_pos, d_lat = torch.func.vmap(
-        grad(total, argnums=(0, 1))
-    )(  # pyright: ignore[reportPrivateImportUsage]
+    grad = torch.func.grad
+    d_pos, d_lat = torch.func.vmap(grad(total, argnums=(0, 1)))(
         positions, lattice, numbers, periodic, *stacked
     )
 

@@ -48,8 +48,8 @@ def _structure(name: str, source: tuple[str, str] | None) -> Structure:
 # `Structure` is a validating dataclass, not a mapping, so it cannot be
 # `**`-unpacked into the merged `Record` dict below the way the old
 # `Structure` `TypedDict` could. This pulls out only the *set* fields,
-# mirroring `io.structure._flatten`'s own "absent optional field is
-# omitted, not `None`" rule, so a closed-shell sample does not grow a
+# mirroring `Node`'s handling of `None` fields (an absent optional field
+# is not a leaf, not a `None` entry), so a closed-shell sample does not grow a
 # spurious `uhf: None` entry either.
 def _structure_dict(structure: Structure) -> dict[str, Tensor]:
     present = {}

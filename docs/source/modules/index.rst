@@ -19,5 +19,6 @@ The following modules are contained with `tad_mctc`.
    properties/index
    storch/index
    tools/index
+   tree/index
    typing/index
    units/index

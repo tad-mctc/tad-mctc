@@ -23,12 +23,14 @@ Collection of utility functions for testing.
 
 from __future__ import annotations
 
+import contextlib
 import itertools
+from collections.abc import Generator
 from typing import Any
 
 import torch
 from torch.autograd.gradcheck import gradcheck, gradgradcheck
-from torch.func import jacrev, vmap
+from torch.func import jacfwd, jacrev, vmap
 
 from ..io.structure import Structure
 from ..typing import Callable, Tensor, TensorOrTensors
@@ -36,7 +38,10 @@ from ..typing import Callable, Tensor, TensorOrTensors
 __all__ = [
     "dgradcheck",
     "dgradgradcheck",
+    "dgradgradgradcheck",
+    "jacfwd_matches_jacrev",
     "jacrev_matches_finite_diff",
+    "no_vmap_fallback",
     "numgrad",
     "vmap_matches_loop",
 ]
@@ -114,6 +119,94 @@ def dgradgradcheck(
     return _wrap_gradcheck(gradgradcheck, func, diffvars, **kwargs)
 
 
+def dgradgradgradcheck(
+    func: Callable[..., Tensor],
+    diffvars: Tensor | tuple[Tensor, ...],
+    **kwargs: Any,
+) -> bool:
+    """
+    Third-order check: `dgradgradcheck` of the gradient of `func`.
+
+    The gradient of ``func(*diffvars).sum()`` with respect to ``diffvars``
+    is built with ``create_graph=True`` and then checked to second order.
+
+    Parameters
+    ----------
+    func : Callable[..., Tensor]
+        Forward function.
+    diffvars : Tensor | tuple[Tensor, ...]
+        Variables w.r.t. which we differentiate.
+    **kwargs : Any
+        Passed on to :func:`dgradgradcheck`.
+
+    Returns
+    -------
+    bool
+        Status of check.
+    """
+    inputs = (diffvars,) if isinstance(diffvars, Tensor) else tuple(diffvars)
+
+    def grad_fn(*args: Tensor) -> tuple[Tensor, ...]:
+        out = func(*args)
+        return torch.autograd.grad(out.sum(), args, create_graph=True)
+
+    return dgradgradcheck(grad_fn, inputs, **kwargs)
+
+
+def jacfwd_matches_jacrev(
+    f: Callable[[Tensor], Tensor],
+    x: Tensor,
+    atol: float = 1e-10,
+    rtol: float = 1e-8,
+) -> bool:
+    """
+    Check that forward- and reverse-mode Jacobians agree.
+
+    Parameters
+    ----------
+    f : Callable[[Tensor], Tensor]
+        Differentiable function of a single tensor argument.
+    x : Tensor
+        Point at which the Jacobians are evaluated.
+    atol : float, optional
+        Absolute tolerance passed to `torch.allclose`. Defaults to `1e-10`.
+    rtol : float, optional
+        Relative tolerance passed to `torch.allclose`. Defaults to `1e-8`.
+
+    Returns
+    -------
+    bool
+        Whether the two Jacobians agree within tolerance.
+    """
+    jf = jacfwd(f)(x)
+    assert isinstance(jf, Tensor)
+
+    jr = jacrev(f)(x)
+    assert isinstance(jr, Tensor)
+
+    return torch.allclose(jf, jr, atol=atol, rtol=rtol)
+
+
+@contextlib.contextmanager
+def no_vmap_fallback() -> Generator[None, None, None]:
+    """
+    Make `vmap` raise instead of silently looping when an operation has no
+    batching rule.
+
+    Yields
+    ------
+    None
+        Within the context, the vmap fallback is disabled.
+    """
+    functorch = torch._C._functorch  # pylint: disable=protected-access
+    previous = functorch._is_vmap_fallback_enabled()
+    functorch._set_vmap_fallback_enabled(False)
+    try:
+        yield
+    finally:
+        functorch._set_vmap_fallback_enabled(previous)
+
+
 def jacrev_matches_finite_diff(
     f: Callable[[Tensor], Tensor],
     x: Tensor,
@@ -145,7 +238,9 @@ def jacrev_matches_finite_diff(
     bool
         Whether the two Jacobians agree within `atol`.
     """
-    jacobian: Tensor = jacrev(f)(x)
+    jacobian = jacrev(f)(x)
+    assert isinstance(jacobian, Tensor)
+
     numeric = torch.zeros_like(jacobian)
 
     for idx in itertools.product(*(range(s) for s in x.shape)):

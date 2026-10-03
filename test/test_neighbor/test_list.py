@@ -1571,13 +1571,14 @@ def test_cells_are_split_into_chunks_by_estimated_pairs(
     dd: DD = {"device": DEVICE, "dtype": torch.double}
     cell = load_structure("other", "periodic_cubic", dd)
     batch = pack_structures([cell, cell, cell])
-    assert batch.lattice is not None
+    lattice = batch.lattice
+    assert lattice is not None
 
     def chunks(budget: int) -> list[tuple[int, int]]:
         monkeypatch.setattr(
             "tad_mctc.neighbor.list._PAIRS_PER_CELL_SEARCH", budget
         )
-        return _split_cells_by_pair_budget(batch.numbers, batch.lattice, 6.5)
+        return _split_cells_by_pair_budget(batch.numbers, lattice, 6.5)
 
     assert chunks(100) == [(0, 2), (2, 3)]
     assert chunks(1) == [(0, 1), (1, 2), (2, 3)]

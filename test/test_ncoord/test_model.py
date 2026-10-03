@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import pytest
 import torch
-from torch.func import jacrev, vmap
+from torch.func import vmap
 
 from tad_mctc._version import __tversion__
 from tad_mctc.autograd import jacrev_matches_finite_diff
@@ -51,6 +51,7 @@ from ..utils import (
     DYNAMO_SUPPORTED,
     DYNAMO_UNSUPPORTED_REASON,
     compile_fullgraph,
+    jacrev,
     run_compiled_or_skip,
 )
 
@@ -290,7 +291,9 @@ def test_table_cache_survives_cold_fill_under_jacrev() -> None:
 
     assert len(_TABLE_CACHE) > 0
     for cached in _cached_tables():
-        assert not torch._C._functorch.is_functorch_wrapped_tensor(cached)
+        assert not getattr(torch._C, "_functorch").is_functorch_wrapped_tensor(
+            cached
+        )
 
     # A second Hessian and a plain call reuse the cached table.
     assert torch.allclose(hess(positions), first)

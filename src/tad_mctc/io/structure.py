@@ -33,26 +33,20 @@ than as bound methods.
 Python binding (`dftd3.interface.Structure`): construction runs
 `io.checks.structure.structure_check` and raises on a malformed field, and
 the instance cannot be mutated afterwards -- `.to()`/`.type()` return a
-new, re-validated instance instead.
+new instance instead (conversion runs no checks).
 
-Pytree registration and the vmap constraint it exists for
------------------------------------------------------------
-`Structure` is registered with `torch.utils._pytree` so it can be passed
-directly through `torch.func.vmap`, `torch.func.jacrev` and
-`torch.compile`. The flatten function omits every unset optional field
-from the emitted leaves entirely, putting the *set* of present field names
-into the pytree's treespec context instead -- exactly mirroring how a
-plain dict's key set, not a `None` value, is what makes a key "absent".
-
-This matters because `None` is itself a pytree leaf: a naive
-implementation that always emits six children (with `None` standing in
-for an unset optional field) breaks `vmap(f, in_dims=0)` the moment any
-optional field is unset, since vmap cannot assign an `in_dim` to a
-non-Tensor leaf. Emitting only the present fields avoids that trap.
+Pytree behaviour and the vmap constraint
+----------------------------------------
+`Structure` is a :class:`~tad_mctc.tree.Node`, so it is registered as a
+pytree and can be passed directly through `torch.func.vmap`,
+`torch.func.jacrev` and `torch.compile`. The fields holding a tensor are
+the leaves; an absent optional field (``None``) is part of the tree
+structure, not a leaf -- exactly mirroring how a plain dict's key set, not
+a `None` value, is what makes a key "absent".
 
 One consequence carries over from the dict analogy: every element of a
 batch passed through `vmap` must agree on which optional fields are
-present, the same way stacking a batch of dicts requires the same key set
+set, the same way stacking a batch of dicts requires the same key set
 in each one. Mixing, say, one structure with `lattice` and one without in
 the same batched call is not supported.
 
@@ -69,60 +63,37 @@ True
 
 from __future__ import annotations
 
-import dataclasses
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
-from typing import Any
+from collections.abc import Sequence
 
 import torch
 from torch import Tensor
 
-try:
-    from torch.utils._pytree import register_pytree_node
-except ImportError:  # pragma: no cover
-    # PyTorch < 2.1 only has the private, otherwise identical predecessor
-    # this was later renamed from.
-    from torch.utils._pytree import (
-        _register_pytree_node as register_pytree_node,
-    )
-
 from ..batch import pack
+from ..tree import Node, child
 from .checks.structure import structure_check
 
 __all__ = ["Structure", "pack_structures"]
 
 
-# The six fields that may be absent. Order here fixes the order in which
-# a present optional field appears among the pytree's leaves.
-_OPTIONAL_FIELDS = (
-    "charge",
-    "uhf",
-    "lattice",
-    "periodic",
-    "bonds",
-    "bond_orders",
-)
-
-# `numbers`, `uhf`, `periodic` and `bonds` are integer/boolean data (atomic
-# numbers, an electron count, a boundary-condition mask, atom-index pairs);
-# a floating `.type()` call must never touch them, mirroring
-# `NeighborList.to()`'s int/bool-vs-float distinction in
-# `src/tad_mctc/neighbor/list.py`. Enforced in `.to()` by passing
-# `follow_dtype=False` for exactly these four fields.
-
-
-@dataclass(frozen=True, eq=False)
-class Structure:
+class Structure(Node):
     """
     One atomic structure: species, positions, and the optional fields that
     extend them (total charge, unpaired electron count, periodic unit
     cell, bond connectivity).
 
     Frozen because a structure is a value, not a place to mutate in place.
-    `eq=False` because the generated `__eq__` a dataclass would otherwise
-    get compares the tensor fields directly, which raises (a tensor's
-    `==` returns another tensor, not a `bool`) -- the same reason
-    `ncoord.common.CNModel` also opts out of it.
+    Equality and hashing are by identity (see :class:`~tad_mctc.tree.Node`),
+    because comparing the tensor fields directly raises (a tensor's `==`
+    returns another tensor, not a `bool`).
+
+    On construction, floating-point ``charge``, ``lattice`` and
+    ``bond_orders`` tensors with a dtype different from ``positions`` are
+    cast to the dtype of ``positions``, and a missing ``periodic`` mask is
+    filled in for a periodic structure (see below). ``numbers``, ``uhf``,
+    ``periodic`` and ``bonds`` are integer/boolean data and are never cast
+    to a floating dtype by `.to()`/`.type()`. Every *set* field moves with
+    ``device`` in `.to()`, so that the device-consistency check of
+    `structure_check` keeps passing.
 
     Parameters
     ----------
@@ -162,25 +133,38 @@ class Structure:
         The given tensors do not all live on the same device.
     """
 
-    numbers: Tensor
-    positions: Tensor
-    charge: Tensor | None = None
-    uhf: Tensor | None = None
-    lattice: Tensor | None = None
-    periodic: Tensor | None = None
-    bonds: Tensor | None = None
-    bond_orders: Tensor | None = None
+    numbers: Tensor = child()
+    positions: Tensor = child()
+    charge: Tensor | None = child(default=None)
+    uhf: Tensor | None = child(default=None, keep_dtype=True)
+    lattice: Tensor | None = child(default=None)
+    periodic: Tensor | None = child(default=None)
+    bonds: Tensor | None = child(default=None)
+    bond_orders: Tensor | None = child(default=None)
 
-    def __post_init__(self) -> None:
+    def _normalize(self) -> dict[str, Tensor]:
+        updates: dict[str, Tensor] = {}
+
         if self.lattice is not None and self.periodic is None:
-            all_axes = torch.ones(
+            updates["periodic"] = torch.ones(
                 self.lattice.shape[:-1],
                 dtype=torch.bool,
                 device=self.lattice.device,
             )
-            # The dataclass is frozen, so assign past its `__setattr__`.
-            object.__setattr__(self, "periodic", all_axes)
 
+        dtype = self.positions.dtype
+        for name in ("charge", "lattice", "bond_orders"):
+            value = getattr(self, name)
+            if (
+                isinstance(value, Tensor)
+                and value.is_floating_point()
+                and value.dtype != dtype
+            ):
+                updates[name] = value.to(dtype=dtype)
+
+        return updates
+
+    def _validate(self) -> None:
         structure_check(
             self.numbers,
             self.positions,
@@ -191,119 +175,6 @@ class Structure:
             bonds=self.bonds,
             bond_orders=self.bond_orders,
         )
-
-    def to(
-        self,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> Structure:
-        """
-        Copy this structure to a new device and/or floating dtype.
-
-        Every *set* field moves to ``device``, required and optional
-        alike -- a partial move would leave `structure_check`'s
-        device-consistency check failing the next time this structure (or
-        a copy of it) is validated. Only the floating-point fields
-        (``positions``, ``charge``, ``lattice``, ``bond_orders``) follow
-        ``dtype``; ``numbers``, ``uhf``, ``periodic`` and ``bonds`` are
-        integer/boolean and are never cast to a floating dtype.
-
-        Parameters
-        ----------
-        device : torch.device | None, optional
-            Device to move every set field to. ``None`` keeps the current
-            device.
-        dtype : torch.dtype | None, optional
-            Floating dtype for the floating-point fields. ``None`` keeps
-            the current dtype.
-
-        Returns
-        -------
-        Structure
-            A new, re-validated instance on the requested device/dtype.
-        """
-        if device is None and dtype is None:
-            return self
-
-        target_device = device if device is not None else self.numbers.device
-        target_dtype = dtype if dtype is not None else self.positions.dtype
-
-        def convert_optional(
-            value: Tensor | None, *, follow_dtype: bool
-        ) -> Tensor | None:
-            """Move one optional field, skipping the ones left unset.
-            `follow_dtype=False` for the integer/boolean fields (`uhf`,
-            `periodic`), which must never be cast to a floating dtype."""
-            if value is None:
-                return None
-            if follow_dtype:
-                return value.to(device=target_device, dtype=target_dtype)
-            return value.to(device=target_device)
-
-        # `numbers`/`positions` are required, so they are converted
-        # directly rather than through `convert_optional` -- keeping
-        # their type as plain `Tensor`, not `Tensor | None`, for the
-        # constructor call below.
-        return Structure(
-            numbers=self.numbers.to(device=target_device),
-            positions=self.positions.to(
-                device=target_device, dtype=target_dtype
-            ),
-            charge=convert_optional(self.charge, follow_dtype=True),
-            uhf=convert_optional(self.uhf, follow_dtype=False),
-            lattice=convert_optional(self.lattice, follow_dtype=True),
-            periodic=convert_optional(self.periodic, follow_dtype=False),
-            bonds=convert_optional(self.bonds, follow_dtype=False),
-            bond_orders=convert_optional(self.bond_orders, follow_dtype=True),
-        )
-
-    def type(self, dtype: torch.dtype) -> Structure:
-        """
-        Copy this structure to a new floating dtype, keeping its device.
-
-        See :meth:`to` for which fields ``dtype`` actually applies to.
-
-        Parameters
-        ----------
-        dtype : torch.dtype
-            Floating dtype for the floating-point fields.
-
-        Returns
-        -------
-        Structure
-            A new, re-validated instance with the requested dtype.
-        """
-        return self.to(dtype=dtype)
-
-    def replace(self, **changes: Any) -> Structure:
-        """
-        Copy this structure with some fields swapped out, e.g. for a
-        perturbed positions tensor during a finite-difference check.
-
-        Thin wrapper around :func:`dataclasses.replace` so call sites do
-        not need their own import of it. Re-runs `structure_check` on the
-        new instance, same as the constructor. Called as
-        `dataclasses.replace` (module-qualified, not the bare name) so it
-        cannot be mistaken for a recursive call to this same-named method.
-
-        Fields not named in ``changes`` are copied as they are, including
-        a ``periodic`` mask that was filled in by default. To drop the
-        cell, clear both: ``replace(lattice=None, periodic=None)``.
-
-        Parameters
-        ----------
-        **changes : Any
-            Field name/value pairs to override, e.g. ``positions=pos``.
-            Typed `Any`, like `CNModel.replace`, because the dataclass
-            fields differ in type (required `Tensor` vs. optional
-            `Tensor | None`); `structure_check` validates the result.
-
-        Returns
-        -------
-        Structure
-            A new, re-validated instance with the given fields replaced.
-        """
-        return dataclasses.replace(self, **changes)
 
 
 # Unset means neutral / closed-shell, so a structure that leaves one of
@@ -393,49 +264,3 @@ def pack_structures(structures: Sequence[Structure]) -> Structure:
         positions=pack([structure.positions for structure in structures]),
         **optional,
     )
-
-
-def _flatten(structure: Structure) -> tuple[list[Tensor], tuple[str, ...]]:
-    """Pytree flatten function: emit only the *set* fields as leaves, in a
-    fixed order, and record which fields those were as the treespec
-    context -- see the module docstring for why an absent field must not
-    become a `None` leaf."""
-    fields: dict[str, Tensor] = {
-        "numbers": structure.numbers,
-        "positions": structure.positions,
-    }
-    for name in _OPTIONAL_FIELDS:
-        value = getattr(structure, name)
-        if value is not None:
-            fields[name] = value
-
-    return list(fields.values()), tuple(fields.keys())
-
-
-def _unflatten(children: Iterable[Any], context: tuple[str, ...]) -> Structure:
-    """Pytree unflatten function: pair the recorded field names back up
-    with their (possibly transformed) leaves.
-
-    `children` is typed `Iterable[Any]`, not `Iterable[Tensor]`, because it
-    is not always one: `vmap` and friends probe a treespec by unflattening
-    placeholder, non-Tensor leaves (e.g. plain ints) purely to inspect its
-    shape.
-
-    Deliberately bypasses `__init__`/`__post_init__` (via `object.__new__`
-    plus direct attribute assignment) rather than calling
-    `Structure(**dict(zip(context, children)))` directly: running
-    `structure_check` against the placeholder leaves described above would
-    raise. The leaves reaching this function during real use were already
-    valid at flatten time, and the transforms this container supports
-    (`vmap` slicing a batch dimension, `jacrev`/`torch.compile` wrapping a
-    leaf) cannot turn a valid leaf into one `structure_check` would reject,
-    so skipping re-validation here loses no safety.
-    """
-    structure = object.__new__(Structure)
-    present = dict(zip(context, children))
-    for name in ("numbers", "positions") + _OPTIONAL_FIELDS:
-        object.__setattr__(structure, name, present.get(name))
-    return structure
-
-
-register_pytree_node(Structure, _flatten, _unflatten)

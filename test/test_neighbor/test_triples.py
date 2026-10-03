@@ -23,6 +23,7 @@ resulting candidate-triple index tensors.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import cast
 
 import pytest
 import torch
@@ -233,7 +234,10 @@ def _brute_force_periodic_triples(
         upward: list[Point] = []
         for atom in range(nat):
             for index in range(shifts.shape[0]):
-                shift = tuple(int(x) for x in shifts[index].tolist())
+                shift = cast(
+                    tuple[int, int, int],
+                    tuple(int(x) for x in shifts[index].tolist()),
+                )
                 if float(distance[atom, index]) > cutoff:
                     continue
                 if (atom, shift) > (c, (0, 0, 0)):
@@ -892,6 +896,7 @@ def test_periodic_triples_chunks_straddle_the_boundary_between_systems() -> (
     # reaches from one system into the next. (The vectorized path cuts
     # the flat candidate range instead, where a boundary chunk may keep
     # rows of one system only.) Called directly, on the batch's CPU copy.
+    assert batch.lattice is not None and batch.periodic is not None
     cpu_batch = Structure(
         numbers=batch.numbers.cpu(),
         positions=batch.positions.cpu(),
@@ -930,6 +935,7 @@ def test_periodic_triples_unequal_batch_cuda_match_cpu() -> None:
     assert len(expected) > 0
 
     packed = pack_structures([small, larger])
+    assert packed.lattice is not None and packed.periodic is not None
     batch = Structure(
         numbers=packed.numbers.cuda(),
         positions=packed.positions.cuda(),

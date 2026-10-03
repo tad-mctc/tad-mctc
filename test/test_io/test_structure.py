@@ -32,7 +32,7 @@ import dataclasses
 
 import pytest
 import torch
-from torch.func import jacrev, vmap
+from torch.func import vmap
 from torch.utils._pytree import tree_flatten
 
 from tad_mctc.exceptions import DtypeError
@@ -42,6 +42,7 @@ from tad_mctc.typing import Tensor
 from ..utils import (
     DYNAMO_SUPPORTED,
     DYNAMO_UNSUPPORTED_REASON,
+    jacrev,
     run_compiled_or_skip,
 )
 
@@ -96,7 +97,10 @@ def test_construction_all_fields() -> None:
         bond_orders=bond_orders,
     )
 
-    assert structure.charge is charge
+    # A float32 `charge` is cast to the dtype of `positions`.
+    assert structure.charge is not None
+    assert structure.charge.dtype == positions.dtype
+    assert torch.equal(structure.charge, charge.to(positions.dtype))
     assert structure.uhf is uhf
     assert structure.lattice is lattice
     assert structure.periodic is periodic
@@ -296,7 +300,9 @@ def test_pytree_includes_bonds_after_periodic_fields() -> None:
     assert leaves[2] is lattice
     assert leaves[3] is periodic
     assert leaves[4] is bonds
-    assert leaves[5] is bond_orders
+    # a float32 `bond_orders` is cast to the dtype of `positions`
+    assert leaves[5].dtype == positions.dtype
+    assert torch.equal(leaves[5], bond_orders.to(positions.dtype))
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])

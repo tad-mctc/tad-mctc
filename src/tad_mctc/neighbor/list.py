@@ -85,14 +85,15 @@ from __future__ import annotations
 
 import contextlib
 import math
-from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Protocol
 
 import torch
 
 from ..autograd.checks import is_functorch_tensor, is_vmapped
 from ..autograd.unwrap import unwrap_gradtracking
 from ..batch import real_atoms
-from ..typing import DD, Self, Tensor, TensorLike
+from ..tree import Node, child, context
+from ..typing import DD, Tensor
 from . import _distance_kernels, _native
 from ._distance_kernels import DistanceKernelName
 from ._tiles import Tiles, _integer_box, _is_forward, _ragged_runs, tile_pairs
@@ -147,12 +148,15 @@ def _no_stage_hook(label: str) -> contextlib.AbstractContextManager[None]:
     return contextlib.nullcontext()
 
 
-class NeighborList(TensorLike):
+class NeighborList(Node):
     """
     Fixed-capacity, padded neighbour list.
 
-    Holds integer index data only, so it carries no gradient and can be
-    built once and reused across many evaluations.
+    Holds integer index data only (plus detached snapshots of the build
+    state), so it carries no gradient and can be built once and reused
+    across many evaluations. It is a frozen :class:`~tad_mctc.tree.Node`:
+    construct it with :meth:`create`, which derives the fields that follow
+    from the others.
 
     Consumer rule: each entry stands for the pair in both directions,
     ``(idx_i, idx_j, +shift)`` and ``(idx_j, idx_i, -shift)``, and each
@@ -198,10 +202,17 @@ class NeighborList(TensorLike):
         ``bool``, fixed at construction, so a consumer can branch on it
         (as :meth:`check_compatible` does to decide whether a lattice is
         required) without reading any tensor's value. The lattice itself
-        is never stored publicly: consumers take it as a call-time
-        argument (see :mod:`tad_mctc.ncoord.common`), so that
-        differentiating with respect to it sees the argument, not a
-        build-time snapshot with no gradient history.
+        is stored only as the detached snapshot ``build_lattice``:
+        consumers take it as a call-time argument (see
+        :mod:`tad_mctc.ncoord.common`), so that differentiating with respect
+        to it sees the argument, not a build-time snapshot with no gradient
+        history.
+    build_positions : Tensor
+        Detached copy of the positions the list was built from, for
+        :meth:`stale`.
+    build_lattice : Tensor | None
+        Detached copy of the lattice the list was built from, ``None`` for
+        a molecular list.
     periodic_axes : Tensor | None
         Boolean mask of the axes the list was built periodic along, the
         structure's own ``periodic`` (``(3,)`` or per system
@@ -225,23 +236,26 @@ class NeighborList(TensorLike):
         rebuild with a larger capacity rather than trusting the energy.
     """
 
-    __slots__ = [
-        "idx_i",
-        "idx_j",
-        "shift",
-        "mask",
-        "periodic",
-        "cutoff",
-        "skin",
-        "overflow",
-        "_build_positions",
-        "periodic_axes",
-        "numbers_shape",
-        "_build_lattice",
-    ]
+    idx_i: Tensor = child()
+    idx_j: Tensor = child()
+    shift: Tensor = child()
+    mask: Tensor = child()
+    # Copied, not referenced (see `create`): an MD step that updates the
+    # caller's positions in place (`positions += velocity * dt`) would
+    # otherwise move this snapshot along with them, and `stale()` would
+    # never see any drift.
+    build_positions: Tensor = child()
+    build_lattice: Tensor | None = child(default=None)
+    periodic_axes: Tensor | None = child(default=None)
+    cutoff: float = context()
+    skin: float = context()
+    overflow: bool = context()
+    periodic: bool = context()
+    numbers_shape: tuple[int, ...] = context()
 
-    def __init__(
-        self,
+    @classmethod
+    def create(
+        cls,
         idx_i: Tensor,
         idx_j: Tensor,
         shift: Tensor,
@@ -252,126 +266,111 @@ class NeighborList(TensorLike):
         overflow: bool,
         lattice: Tensor | None = None,
         periodic_axes: Tensor | None = None,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        super().__init__(device, dtype)
-
-        self.idx_i = idx_i
-        self.idx_j = idx_j
-        self.shift = shift
-        self.mask = mask
-        # Copied, not referenced: an MD step that updates the caller's
-        # positions in place (`positions += velocity * dt`) would otherwise
-        # move this snapshot along with them, and `stale()` would never
-        # see any drift.
-        self._build_positions = build_positions.detach().clone()
-        self.cutoff = cutoff
-        self.skin = skin
-        self.overflow = overflow
-        # Derived, not a separate constructor argument: a periodic list is
-        # exactly one built with a lattice, and the two must never disagree.
-        self.periodic = lattice is not None
-        self.numbers_shape = tuple(build_positions.shape[:-1])
-        # Detached and copied, like `_build_positions`: this snapshot exists
-        # only for `stale()`'s own cell-change check, never as a gradient
-        # path, and must not follow an in-place change of the caller's
-        # lattice. Consumers receive the lattice as a call-time argument
-        # instead (`tad_mctc.ncoord.common`), which is what makes `jacrev`
-        # with respect to it see a live argument rather than this snapshot.
-        self._build_lattice = (
-            None if lattice is None else lattice.detach().clone()
-        )
-        self.periodic_axes = periodic_axes
-
-    def to(
-        self,
-        device: torch.device | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> Self:
+    ) -> NeighborList:
         """
-        Copy this list to a new device and/or floating dtype.
+        Build a list from its pair data and the state it was built from.
 
-        Overrides :meth:`TensorLike.to`, which would cast every slot to
-        the requested dtype, including the integer index data
-        (``idx_i``, ``idx_j``, ``shift``) and the boolean ``mask``. Those
-        slots move device only; ``dtype`` applies to the floating-point
-        slots (the build-time lattice and position snapshots).
+        The fields ``periodic``, ``numbers_shape`` and the two build
+        snapshots are derived here, so the constructor of the class itself
+        takes them as they are stored.
 
         Parameters
         ----------
-        device : torch.device | None, optional
-            Device to move every slot to. ``None`` keeps the current
-            device.
-        dtype : torch.dtype | None, optional
-            Floating dtype for the floating-point slots. ``None`` keeps
-            the current dtype.
+        idx_i, idx_j : Tensor
+            First and second atom of each pair, ``torch.long``.
+        shift : Tensor
+            Integer image shift of each pair.
+        mask : Tensor
+            ``True`` for a real pair.
+        build_positions : Tensor
+            Positions the list was built from. Detached and copied.
+        cutoff : float
+            Real-space cutoff the list was built for.
+        skin : float
+            Extra radius searched beyond ``cutoff``.
+        overflow : bool
+            Whether an explicit capacity was too small.
+        lattice : Tensor | None, optional
+            Lattice the list was built from; its presence makes the list
+            periodic. Detached and copied.
+        periodic_axes : Tensor | None, optional
+            Axes the list was built periodic along.
 
         Returns
         -------
         NeighborList
-            A copy on the requested device and dtype.
+            The new list.
         """
-        target_device = device if device is not None else self.device
-        target_dtype = dtype if dtype is not None else self.dtype
-        if self.device == target_device and self.dtype == target_dtype:
-            return self
+        # Detached and copied, like `build_positions`: the lattice snapshot
+        # exists only for `stale()`'s own cell-change check, never as a
+        # gradient path, and must not follow an in-place change of the
+        # caller's lattice. Consumers receive the lattice as a call-time
+        # argument instead (`tad_mctc.ncoord.common`), which is what makes
+        # `jacrev` with respect to it see a live argument rather than this
+        # snapshot.
+        return cls(
+            idx_i=idx_i,
+            idx_j=idx_j,
+            shift=shift,
+            mask=mask,
+            build_positions=build_positions.detach().clone(),
+            build_lattice=None if lattice is None else lattice.detach().clone(),
+            periodic_axes=periodic_axes,
+            cutoff=cutoff,
+            skin=skin,
+            overflow=overflow,
+            # Derived, not a separate argument: a periodic list is exactly
+            # one built with a lattice, and the two must never disagree.
+            periodic=lattice is not None,
+            numbers_shape=tuple(build_positions.shape[:-1]),
+        )
 
-        lattice = (
-            None
-            if self._build_lattice is None
-            else self._build_lattice.to(
-                device=target_device, dtype=target_dtype
+    def _validate(self) -> None:
+        if self.periodic != (self.build_lattice is not None):
+            raise ValueError(
+                f"`periodic` is {self.periodic}, but `build_lattice` is "
+                f"{'set' if self.build_lattice is not None else 'None'}; a "
+                "list is periodic exactly if it was built with a lattice."
             )
-        )
-        periodic_axes = (
-            None
-            if self.periodic_axes is None
-            else self.periodic_axes.to(device=target_device)
-        )
+        if self.numbers_shape != tuple(self.build_positions.shape[:-1]):
+            raise ValueError(
+                f"`numbers_shape` {self.numbers_shape} does not match "
+                "`build_positions`, whose atoms have shape "
+                f"{tuple(self.build_positions.shape[:-1])}."
+            )
+        for name in ("idx_i", "idx_j"):
+            dtype = getattr(self, name).dtype
+            if dtype != torch.long:
+                raise ValueError(
+                    f"`{name}` must be a `torch.long` tensor, but dtype is "
+                    f"'{dtype}'."
+                )
+        if self.mask.dtype != torch.bool:
+            raise ValueError(
+                f"`mask` must be a `torch.bool` tensor, but dtype is "
+                f"'{self.mask.dtype}'."
+            )
 
+    def _convert_child(
+        self,
+        name: str,
+        value: Any,
+        device: torch.device | str | None,
+        dtype: torch.dtype | None,
+    ) -> Any:
         # Moving a zero-stride view copies it into a full tensor, so a
         # molecular list's shift is created anew on the target device.
-        shift = (
-            self.shift.to(device=target_device)
-            if self.periodic
-            else _molecular_shift(self.shift.shape[0], target_device)
-        )
-
-        return type(self)(
-            idx_i=self.idx_i.to(device=target_device),
-            idx_j=self.idx_j.to(device=target_device),
-            shift=shift,
-            mask=self.mask.to(device=target_device),
-            build_positions=self._build_positions.to(
-                device=target_device, dtype=target_dtype
-            ),
-            cutoff=self.cutoff,
-            skin=self.skin,
-            overflow=self.overflow,
-            lattice=lattice,
-            periodic_axes=periodic_axes,
-            device=target_device,
-            dtype=target_dtype,
-        )
-
-    def type(self, dtype: torch.dtype) -> Self:
-        """
-        Copy this list to a new floating dtype, keeping its device.
-
-        See :meth:`to` for which slots ``dtype`` actually applies to.
-
-        Parameters
-        ----------
-        dtype : torch.dtype
-            Floating dtype for the floating-point slots.
-
-        Returns
-        -------
-        NeighborList
-            A copy with the requested dtype.
-        """
-        return self.to(dtype=dtype)
+        if name == "shift" and not self.periodic and device is not None:
+            target = torch.device(device)
+            # "cuda" (no index) is the same device as "cuda:0"
+            same = target.type == value.device.type and (
+                target.index is None or target.index == value.device.index
+            )
+            if not same:
+                # zero-stride for any leading (batch) dimensions
+                zero = torch.zeros(3, dtype=value.dtype, device=target)
+                return zero.expand(value.shape)
+        return super()._convert_child(name, value, device, dtype)
 
     def check_compatible(self, structure: Structure, cutoff: float) -> None:
         """
@@ -492,7 +491,7 @@ class NeighborList(TensorLike):
         if self.skin == 0.0:
             return torch.tensor(True, device=positions.device)
 
-        displacement = positions - self._build_positions
+        displacement = positions - self.build_positions
         lattice_changed = torch.tensor(False, device=positions.device)
 
         if self.periodic:
@@ -505,7 +504,7 @@ class NeighborList(TensorLike):
                 )
             assert (
                 self.periodic_axes is not None
-                and self._build_lattice is not None
+                and self.build_lattice is not None
             ), "a periodic list always records its axes and lattice"
             # `displacement` is deliberately *not* wrapped to its minimum
             # image: `shift` counts cells relative to the caller's own
@@ -518,7 +517,7 @@ class NeighborList(TensorLike):
             # Conservative: any change to the cell counts as stale, since a
             # strained cell changes every pair distance, not just the ones
             # belonging to atoms that moved in fractional coordinates.
-            lattice_changed = torch.any(lattice != self._build_lattice)
+            lattice_changed = torch.any(lattice != self.build_lattice)
 
         drift = displacement.norm(dim=-1).max()
         return (drift > self.skin / 2) | lattice_changed
@@ -605,7 +604,7 @@ def estimate_neighborlist_memory(capacity: int, *, periodic: bool) -> int:
     the list afterwards -- both depend on the consumer and on
     implementation details that can change independently of this exact
     arithmetic. It also excludes the build-time position snapshot
-    (``NeighborList``'s private ``_build_positions``), which scales with
+    (``NeighborList``'s ``build_positions``), which scales with
     ``nat``, not ``capacity``.
 
     This function does not predict ``capacity`` from ``positions`` and
@@ -1220,7 +1219,7 @@ def _neighbor_list(
         )
         shift[:npair] = shift_raw[:npair]
 
-    return NeighborList(
+    return NeighborList.create(
         idx_i=pairs.idx_i,
         idx_j=pairs.idx_j,
         shift=shift,
@@ -1231,8 +1230,6 @@ def _neighbor_list(
         overflow=overflow,
         lattice=lattice,
         periodic_axes=periodic_axes,
-        device=dd["device"],
-        dtype=dd["dtype"],
     )
 
 
@@ -1936,6 +1933,12 @@ def _pop_transform_layers() -> Generator[None]:
             "list outside the transform."
         )
 
+    from torch._C._functorch import (  # pyright: ignore[reportMissingImports]
+        peek_interpreter_stack,
+        pop_dynamic_layer_stack,
+        push_dynamic_layer_stack,
+    )
+
     popped = []
     try:
         while peek_interpreter_stack() is not None:
@@ -2138,7 +2141,7 @@ def build_neighborlists(
     """
     return _build_neighborlists(
         structure,
-        cutoffs,
+        cutoffs,  # pyright: ignore[reportCallIssue]
         tile=tile,
         skin=skin,
         capacity=capacity,

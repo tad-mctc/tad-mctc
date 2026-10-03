@@ -335,7 +335,7 @@ def test_system_info_leaves_out_charge_and_uhf_if_unset(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     numbers = torch.tensor([2])
-    structure = Structure(numbers, torch.zeros(1, 3))
+    structure = Structure(numbers=numbers, positions=torch.zeros(1, 3))
 
     print_system_info("he.xyz", structure)
     out = capsys.readouterr().out
@@ -349,8 +349,8 @@ def test_system_info_lists_charge_and_uhf_of_every_frame(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     structure = Structure(
-        torch.tensor([[2, 0], [1, 1]]),
-        torch.zeros(2, 2, 3),
+        numbers=torch.tensor([[2, 0], [1, 1]]),
+        positions=torch.zeros(2, 2, 3),
         charge=torch.tensor([0.0, 1.0]),
         uhf=torch.tensor([0.0, 2.0]),
     )

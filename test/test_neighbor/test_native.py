@@ -283,6 +283,7 @@ def test_the_loaded_module_reports_its_source_digest() -> None:
     would not have been used otherwise); a JIT build, which `setup.py`
     does not configure, carries an empty one."""
     module = _native._load()
+    assert module is not None
     info = _native.build_info()
 
     if info.origin == "precompiled":

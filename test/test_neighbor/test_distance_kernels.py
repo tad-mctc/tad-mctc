@@ -155,7 +155,7 @@ def test_build_neighborlist_distance_kernel_unknown_name_raises() -> None:
     positions = torch.rand(10, 3, dtype=torch.float64, device="cpu")
     with pytest.raises(ValueError, match="not a known kernel"):
         build_neighborlist(
-            hydrogens(positions), cutoff=3.0, distance_kernel="nonexistent"
+            hydrogens(positions), cutoff=3.0, distance_kernel="nonexistent"  # type: ignore[arg-type]
         )
 
 
