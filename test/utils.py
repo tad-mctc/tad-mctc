@@ -175,7 +175,7 @@ def compile_fullgraph(fn: Callable[..., Any]) -> Callable[..., Any]:
             fn, fullgraph=True, dynamic=False, backend=COMPILE_BACKEND
         )
     except Exception as exc:  # pylint: disable=broad-except
-        pytest.skip(f"torch.compile unsupported here: {exc}")
+        return pytest.skip(f"torch.compile unsupported here: {exc}")
 
 
 def run_compiled_or_skip(
@@ -210,4 +210,4 @@ def run_compiled_or_skip(
         )
         return compiled(*args)
     except Exception as exc:  # pylint: disable=broad-except
-        pytest.skip(f"torch.compile unsupported here: {exc}")
+        return pytest.skip(f"torch.compile unsupported here: {exc}")
