@@ -2,7 +2,6 @@
 import torch
 
 import tad_mctc as mctc
-from tad_mctc.io.structure import Structure
 
 # a small cubic cell with a few different elements
 numbers = torch.tensor([3, 8, 14, 16, 17, 9])
@@ -22,7 +21,9 @@ positions = torch.tensor(
 # cubic lattice vectors as rows, in Bohr
 lattice = 8.0 * torch.eye(3)
 
-structure = Structure(numbers=numbers, positions=positions, lattice=lattice)
+structure = mctc.Structure(
+    numbers=numbers, positions=positions, lattice=lattice
+)
 
 # `structure.lattice` being set routes `CNModel.__call__` to the periodic
 # path: it auto-builds the periodic-image table from `structure.lattice`

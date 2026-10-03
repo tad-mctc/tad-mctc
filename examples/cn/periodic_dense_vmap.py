@@ -2,7 +2,6 @@
 import torch
 
 import tad_mctc as mctc
-from tad_mctc.io.structure import Structure
 from tad_mctc.neighbor.images import build_periodic_shifts
 
 # a small cubic cell with a few different elements
@@ -39,7 +38,9 @@ batch_lattice = torch.stack([lattice * scale for scale in (1.00, 1.01, 1.02)])
 
 
 def cn_of_lattice(lat: torch.Tensor) -> torch.Tensor:
-    structure = Structure(numbers=numbers, positions=positions, lattice=lat)
+    structure = mctc.Structure(
+        numbers=numbers, positions=positions, lattice=lat
+    )
     return mctc.ncoord.cn_d3.with_precomputed_shifts(structure, shifts=shifts)
 
 

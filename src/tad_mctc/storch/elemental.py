@@ -210,7 +210,8 @@ def safe_pow(
         return _int(x, exponent)
 
     if isinstance(exponent, float):
-        if exponent.is_integer():
+        # `exponent % 1`, not `float.is_integer`, which Dynamo cannot trace
+        if exponent % 1 == 0:
             return _int(x, int(exponent))
 
         return _float(x, exponent)

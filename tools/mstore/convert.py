@@ -47,10 +47,10 @@ import re
 import subprocess
 import sys
 import textwrap
+from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Sequence
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = REPO_ROOT / "src" / "tad_mctc" / "data" / "structures" / "mstore"

@@ -28,10 +28,10 @@ from typing import Any
 
 import torch
 from torch.autograd.gradcheck import gradcheck, gradgradcheck
+from torch.func import jacrev, vmap
 
 from ..io.structure import Structure
 from ..typing import Callable, Tensor, TensorOrTensors
-from .internals import jacrev, vmap
 
 __all__ = [
     "dgradcheck",

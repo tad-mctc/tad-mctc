@@ -33,8 +33,9 @@ this module stays cheap. Look records up through
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from pathlib import Path
-from typing import Dict, Iterator, Mapping
+from typing import Dict
 
 import numpy as np
 import torch
@@ -47,7 +48,7 @@ __all__ = ["glu_ala"]
 _DATA_PATH = Path(__file__).parent / "data.npz"
 
 
-class _GluAlaRecords(Mapping[str, Dict[str, Tensor]]):
+class _GluAlaRecords(Mapping[str, dict[str, Tensor]]):
     """
     Read-only mapping from record id to that record's `numbers` and
     `positions` (bohr), backed by `data.npz`.

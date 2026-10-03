@@ -40,7 +40,8 @@ own:
 
 from __future__ import annotations
 
-from typing import Mapping, TypeVar
+from collections.abc import Mapping
+from typing import TypeVar
 
 import torch
 from torch import Tensor

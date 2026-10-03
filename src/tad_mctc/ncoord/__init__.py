@@ -57,7 +57,7 @@ Example
 ...     ]),
 ... ))
 >>>
->>> structure = mctc.io.structure.Structure(numbers=numbers, positions=positions)
+>>> structure = mctc.Structure(numbers=numbers, positions=positions)
 >>>
 >>> torch.set_printoptions(precision=4)
 >>> print(mctc.ncoord.cn_d4(structure))

@@ -4,10 +4,7 @@
 
 .. toctree::
 
-   batched
    checks
-   compat
    gradcheck
-   hessian
-   internals
    nonfunctorch
+   unwrap

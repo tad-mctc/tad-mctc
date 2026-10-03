@@ -31,9 +31,10 @@ import torch
 from .. import storch
 from ..batch import real_pairs
 from ..data import radii
+from ..data.table import resolve_table
 from ..typing import DD, CountingFunction, TableFunction, Tensor
 from . import defaults
-from .common import CNModel, _resolve_table, _species
+from .common import CNModel, _species
 from .count import dexp_count, exp_count
 
 __all__ = ["cn_d3", "cn_d3_gradient"]
@@ -105,13 +106,13 @@ def cn_d3_gradient(
         cutoff = torch.tensor(defaults.CUTOFF_D3, **dd)
 
     # Per-element table, indexed by atomic number — the same convention as
-    # `CNModel.rcov`/`_resolve_table` (common.py), resolved here rather than
-    # re-implemented so the two never drift apart again. Padding atoms are
-    # mapped to element 1 via `_species` before the gather, exactly as
-    # `_cn_dense_mol` does, so this analytical gradient agrees with the
+    # `CNModel.rcov`, resolved by the same `tad_mctc.data.resolve_table`
+    # rather than re-implemented so the two never drift apart again. Padding
+    # atoms are mapped to element 1 via `_species` before the gather, exactly
+    # as `_cn_dense_mol` does, so this analytical gradient agrees with the
     # autograd-derived one on batched/padded input instead of gathering
     # `rcov[0] == 0` and risking a non-finite `r0**norm_exp` term.
-    rcov_table = _resolve_table(
+    rcov_table = resolve_table(
         radii.COV_D3 if rcov is None else rcov, positions
     )
     rcov_atoms = rcov_table[_species(numbers)]

@@ -65,7 +65,6 @@ The following dependencies are required
 
 - `numpy <https://numpy.org/>`__
 - `opt_einsum <https://optimized-einsum.readthedocs.io/en/stable/>`__
-- `psutil <https://psutil.readthedocs.io/en/latest/>`__
 - `pytest <https://docs.pytest.org/>`__ (tests only)
 - `scipy <https://scipy.org/>`__ (tests only)
 - `torch <https://pytorch.org/>`__

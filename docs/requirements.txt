@@ -6,6 +6,5 @@ sphinx-copybutton
 sphinx-design
 numpy
 opt_einsum
-psutil
 torch
 jinja2>=3.1.6

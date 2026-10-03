@@ -39,6 +39,7 @@ from ..autograd import is_functorch_tensor
 from ..batch import real_pairs
 from ..data import en as eneg
 from ..data import radii
+from ..data.table import resolve_table
 from ..io.structure import Structure
 from ..neighbor.images import (
     PeriodicShifts,
@@ -57,70 +58,6 @@ from ..typing import (
 from . import defaults
 
 __all__ = ["CNModel", "cut_coordination_number"]
-
-# Cache of resolved `TableFunction` tensors, keyed by the table's own
-# identity (not any `CNModel` instance) plus the device/dtype it was
-# resolved for. Function-level, not instance state: a `CNModel` is a
-# frozen dataclass and `dataclasses.replace()` copies are meant to share
-# this rather than each holding (and possibly going stale on) their own
-# cached tensor.
-#
-# Keyed on the table object itself (relying on the default,
-# identity-based `__hash__`/`__eq__` every plain function and callable
-# object has unless it opts out) rather than on `id(table)`: using a bare
-# `id()` as a dict key does not keep the underlying object alive, so once
-# it is garbage-collected CPython is free to reuse that same id for an
-# unrelated object, which would then collide with a stale cache entry.
-# Using the table object as (part of) the key instead makes the cache
-# dict hold a strong reference to it, so that failure mode cannot occur.
-# Module-level `TableFunction`s such as `radii.COV_D3` already live for
-# the process lifetime regardless, so this only matters for callables
-# constructed more dynamically.
-#
-# Cardinality in practice is tiny (a handful of named tables times a
-# handful of device/dtype combinations actually used), so a plain dict
-# that is never evicted is simpler than `functools.lru_cache` and avoids
-# any risk of its wrapping interacting badly with `torch.compile`.
-_TABLE_CACHE: dict[tuple[TableFunction, torch.device, torch.dtype], Tensor] = {}
-
-
-def _resolve_table(table: Tensor | TableFunction, like: Tensor) -> Tensor:
-    """
-    Resolve a per-element table on the device and dtype of ``like``.
-
-    A plain :class:`Tensor` is just moved with :meth:`Tensor.to` (a no-op
-    if it is already on the right device/dtype). A :class:`TableFunction`
-    such as :func:`tad_mctc.data.radii.COV_D3` is memoized at function
-    level, keyed by the table's identity and ``(device, dtype)``: the
-    first call for a given combination builds and caches the tensor
-    (including any H2D copy), every later call for that same combination
-    reuses it instead of rebuilding it from scratch.
-
-    Parameters
-    ----------
-    table : Tensor | TableFunction
-        Either an already-built table, or a callable such as
-        :func:`tad_mctc.data.radii.COV_D3` that builds one for a given
-        device and dtype.
-    like : Tensor
-        Tensor whose device and dtype the table is resolved to.
-
-    Returns
-    -------
-    Tensor
-        The table, one entry per atomic number. Callers must treat it as
-        read-only: it is shared, via the cache, with every other call
-        site that resolves the same table on the same device/dtype.
-    """
-    if isinstance(table, Tensor):
-        return table.to(device=like.device, dtype=like.dtype)
-
-    key = (table, like.device, like.dtype)
-    cached = _TABLE_CACHE.get(key)
-    if cached is None:
-        cached = table(device=like.device, dtype=like.dtype)
-        _TABLE_CACHE[key] = cached
-    return cached
 
 
 def _species(numbers: Tensor) -> Tensor:
@@ -322,10 +259,10 @@ class CNModel:
         Copy this model with some fields swapped out, e.g. a different
         ``cutoff`` or ``cn_max``.
 
-        Thin wrapper around :func:`dataclasses.replace` so call sites do
-        not need their own import of it. This is the documented way to
-        get a different variant (see the class docstring); a subclass is
-        not.
+        Like :func:`dataclasses.replace`, which :func:`torch.compile`
+        cannot trace, so this builds the new instance itself. This is the
+        documented way to get a different variant (see the class
+        docstring); a subclass is not.
 
         Parameters
         ----------
@@ -337,7 +274,10 @@ class CNModel:
         CNModel
             A new instance with the given fields replaced.
         """
-        return dataclasses.replace(self, **changes)
+        current = {
+            f.name: getattr(self, f.name) for f in dataclasses.fields(self)
+        }
+        return type(self)(**{**current, **changes})
 
     def _dispatch(
         self, structure: Structure, *, shifts: PeriodicShifts | None
@@ -354,9 +294,9 @@ class CNModel:
         from :meth:`__call__`, since :meth:`with_precomputed_shifts`
         rejects that case before ever calling here.
         """
-        rcov = _resolve_table(self.rcov, structure.positions)
+        rcov = resolve_table(self.rcov, structure.positions)
         en = (
-            _resolve_table(self.en, structure.positions)
+            resolve_table(self.en, structure.positions)
             if self.pair_weight is not None
             else None
         )

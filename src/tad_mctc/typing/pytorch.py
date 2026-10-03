@@ -33,6 +33,7 @@ from typing import (
     NoReturn,
     Protocol,
     TypedDict,
+    TypeVar,
     cast,
 )
 
@@ -40,7 +41,7 @@ import torch
 from torch import Tensor
 
 from ..exceptions import DtypeError
-from .compat import CountingFunction, Self, TypeVar
+from .compat import CountingFunction, Self
 
 if TYPE_CHECKING:
     # Only for the `CNFunc` annotation below -- importing `Structure` at

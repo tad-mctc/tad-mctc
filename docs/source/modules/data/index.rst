@@ -12,4 +12,5 @@
    pse
    radii
    structures/index
+   table
    zeff
