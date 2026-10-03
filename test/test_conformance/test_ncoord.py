@@ -74,7 +74,11 @@ from tad_mctc.neighbor.list import NeighborList, build_neighborlist
 from tad_mctc.tree import stack
 
 from ..conftest import DEVICE
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    compile_fullgraph,
+)
 
 DD = {"device": DEVICE, "dtype": torch.float64}
 
@@ -230,7 +234,7 @@ def test_compile_matches_eager(model: CNModel, path: str) -> None:
     # the closures share one code object: start from a clean cache, or
     # Dynamo's recompilation limit is reached
     torch._dynamo.reset()  # pylint: disable=protected-access
-    compiled = torch.compile(f, fullgraph=True)
+    compiled = compile_fullgraph(f)
     assert torch.allclose(compiled(positions), f(positions), atol=1e-12)
 
 
@@ -314,5 +318,5 @@ def test_counting_forward_matches_reverse(f: Evaluation) -> None:
 @pytest.mark.parametrize("f", COUNTING)
 def test_counting_compile_matches_eager(f: Evaluation) -> None:
     torch._dynamo.reset()  # pylint: disable=protected-access
-    compiled = torch.compile(f, fullgraph=True)
+    compiled = compile_fullgraph(f)
     assert torch.allclose(compiled(_r()), f(_r()))

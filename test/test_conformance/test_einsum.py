@@ -40,7 +40,11 @@ from tad_mctc.autograd import (
 from tad_mctc.math import einsum, einsum_greedy, einsum_optimal
 
 from ..conftest import DEVICE
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    compile_fullgraph,
+)
 
 EQUATION = "ij,jk,kl->il"
 
@@ -113,5 +117,5 @@ def test_compile_matches_eager(f: Callable[..., torch.Tensor]) -> None:
     ) -> torch.Tensor:
         return f(EQUATION, a, b, c)
 
-    compiled = torch.compile(contract, fullgraph=True)
+    compiled = compile_fullgraph(contract)
     assert torch.allclose(compiled(a, b, c), contract(a, b, c))

@@ -34,7 +34,11 @@ from tad_mctc.autograd import no_vmap_fallback
 from tad_mctc.batch import real_atoms, real_pairs, real_triples
 
 from ..conftest import DEVICE
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    compile_fullgraph,
+)
 
 
 def _numbers() -> torch.Tensor:
@@ -91,5 +95,5 @@ def test_compile_matches_eager(
 ) -> None:
     numbers = _numbers()
 
-    compiled = torch.compile(f, fullgraph=True)
+    compiled = compile_fullgraph(f)
     assert torch.equal(compiled(numbers), f(numbers))

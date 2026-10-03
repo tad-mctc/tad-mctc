@@ -50,7 +50,11 @@ from tad_mctc.autograd import (
 from tad_mctc.storch import eighb
 
 from ..conftest import DEVICE
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    compile_fullgraph,
+)
 
 Method = Literal["cond", "lorn"] | None
 
@@ -116,8 +120,8 @@ def test_forward_matches_reverse(method: Method) -> None:
 
 
 OLD_TORCH = pytest.mark.skipif(
-    __tversion__ < (2, 5, 0),
-    reason="Dynamo cannot inline the custom autograd function before 2.5",
+    __tversion__ < (2, 6, 0),
+    reason="Dynamo cannot inline the custom autograd function before 2.6",
 )
 
 COMPILE_METHODS = [
@@ -133,5 +137,5 @@ def test_compile_matches_eager(method: Method) -> None:
     a = _symmetric()
 
     for f in (_eigenvalues(method), _projector(method)):
-        compiled = torch.compile(f, fullgraph=True)
+        compiled = compile_fullgraph(f)
         assert torch.allclose(compiled(a), f(a), atol=1e-10)

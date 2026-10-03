@@ -52,7 +52,11 @@ from tad_mctc.storch import (
 )
 
 from ..conftest import DEVICE
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    compile_fullgraph,
+)
 
 DD = {"device": DEVICE, "dtype": torch.float64}
 
@@ -178,7 +182,7 @@ def test_derivatives_finite_at_masked_point(
 def test_compile_matches_eager(
     f: Callable[[torch.Tensor], torch.Tensor],
 ) -> None:
-    compiled = torch.compile(f, fullgraph=True)
+    compiled = compile_fullgraph(f)
     for x in (_regular(f), _masked(f)):
         assert torch.allclose(compiled(x), f(x))
 

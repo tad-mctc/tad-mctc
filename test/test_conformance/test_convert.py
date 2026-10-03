@@ -38,7 +38,11 @@ from tad_mctc.autograd import (
 from tad_mctc.convert import symmetrize
 
 from ..conftest import DEVICE
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    compile_fullgraph,
+)
 
 
 def _matrix(seed: int = 0, batch: int | None = None) -> torch.Tensor:
@@ -89,5 +93,5 @@ def test_forward_matches_reverse() -> None:
 def test_compile_matches_eager() -> None:
     x = _matrix()
 
-    compiled = torch.compile(_forced, fullgraph=True)
+    compiled = compile_fullgraph(_forced)
     assert torch.allclose(compiled(x), _forced(x))
