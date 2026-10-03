@@ -159,7 +159,7 @@ def _has_cxx_compiler() -> bool:
 COMPILE_BACKEND = "inductor" if _has_cxx_compiler() else "aot_eager"
 """The ``torch.compile`` backend for tests. The compile tests check that a
 function traces as one graph (``fullgraph=True``), which Dynamo decides
-before any backend runs. Without a C++ compiler, ``"aot_eager"`` still traces 
+before any backend runs. Without a C++ compiler, ``"aot_eager"`` still traces
 and runs AOTAutograd, just without generating C++ code."""
 
 
