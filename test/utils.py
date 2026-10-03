@@ -43,6 +43,7 @@ __all__ = [
     "compile_fullgraph",
     "DYNAMO_SUPPORTED",
     "DYNAMO_UNSUPPORTED_REASON",
+    "hydrogens",
     "load_batch",
     "load_pair",
     "load_sample",
@@ -59,6 +60,22 @@ def _rng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
 
 def _symrng(size: tuple[int, ...] | int, dd: DD) -> Tensor:
     return symmetrizef(_rng(size, dd))
+
+
+def hydrogens(
+    positions: Tensor,
+    lattice: Tensor | None = None,
+    periodic: Tensor | None = None,
+) -> Structure:
+    """`positions` as a `Structure` of hydrogen atoms, for neighbour-search
+    tests where only the geometry matters. Without `periodic`, a
+    `Structure` with a lattice is periodic along all three axes."""
+    numbers = torch.ones(
+        positions.shape[:-1], dtype=torch.long, device=positions.device
+    )
+    return Structure(
+        numbers=numbers, positions=positions, lattice=lattice, periodic=periodic
+    )
 
 
 def load_structure(collection: str, record: str, dd: DD) -> Structure:

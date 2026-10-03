@@ -31,8 +31,8 @@ neither ``vmap`` nor ``fullgraph`` can represent them. Use the alternative:
 
 - ``neighbor.images.count_image_rings_*``, ``build_periodic_shifts``,
   ``build_ghost_pool``: build the table once, eagerly, with
-  ``build_shared_periodic_shifts`` and pass it to
-  ``CNModel.with_precomputed_shifts``.
+  ``build_shared_periodic_shifts`` and pass it to a
+  ``CNModel`` as ``pairs``.
 - ``batch.pack``/``unpack``/``deflate``, ``properties.sum_formula``,
   ``io.*``, ``convert.*_to_*`` string/NumPy converters: host-side
   bookkeeping, not tensor math.
@@ -902,7 +902,7 @@ def test_cn_d3_periodic_precomputed_transforms() -> None:
         s = Structure(
             numbers=NUMBERS, positions=x, lattice=l, periodic=PERIODIC
         )
-        return cn_d3.with_precomputed_shifts(s, shifts=shifts)
+        return cn_d3(s, pairs=shifts)
 
     _assert_vmap(f, p, lat)
     _assert_jac(f, p[0], lat[0], argnums=0)
@@ -918,7 +918,7 @@ def test_cn_d3_periodic_precomputed_compile() -> None:
         s = Structure(
             numbers=NUMBERS, positions=x, lattice=l, periodic=PERIODIC
         )
-        return cn_d3.with_precomputed_shifts(s, shifts=shifts)
+        return cn_d3(s, pairs=shifts)
 
     _assert_compile(f, p[0], lat[0])
     _assert_compile_jacrev(f, p[0], lat[0])

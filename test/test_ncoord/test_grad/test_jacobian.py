@@ -16,8 +16,11 @@
 # limitations under the License.
 """
 Jacobian of every coordination-number variant w.r.t. positions, via
-`jacrev`, against finite differences and against mctc-lib's own Fortran
-derivative -- for molecules and periodic cells alike.
+`jacrev`, against mctc-lib's own Fortran derivative, for molecules and
+periodic cells alike, over every evaluation path that accepts the sample
+(see `_paths.py`); and `vmap(jacrev)` over a batch against finite differences,
+on the dense path. The Jacobian of a batch on every path is checked by
+`test_gradcheck_batch` in `test_autodiff.py`.
 """
 
 from __future__ import annotations
@@ -33,76 +36,22 @@ from tad_mctc.typing import DD, Tensor
 
 from ...conftest import DEVICE
 from ...utils import load_batch, load_structure
+from .._paths import Bind, bind_dense, bind_precomputed, bind_sparse
 from .._variants import VARIANTS
-from ..samples import BATCH_PAIRS, REPRESENTATIVES, is_periodic, pair_id, refs
-
-
-@pytest.mark.parametrize("variant_name", list(VARIANTS))
-@pytest.mark.parametrize("dtype", [torch.float, torch.double])
-@pytest.mark.parametrize("source", REPRESENTATIVES, ids=lambda s: s[1])
-def test_single(
-    variant_name: str, dtype: torch.dtype, source: tuple[str, str]
-) -> None:
-    dd: DD = {"device": DEVICE, "dtype": dtype}
-    tol = torch.finfo(dtype).eps ** 0.5 * 50
-    variant = VARIANTS[variant_name]
-
-    structure = load_structure(*source, dd)
-
-    # numerical gradient as ref
-    numdr = numgrad(variant.call, structure)
-
-    def wrapper(pos: Tensor) -> Tensor:
-        return variant.call(structure.replace(positions=pos))
-
-    pos = structure.positions.detach().clone().requires_grad_(True)
-    jac: Tensor = jacrev(wrapper)(pos)
-    assert pytest.approx(numdr.cpu(), abs=tol) == tensor_to_numpy(jac)
-
-
-@pytest.mark.parametrize("variant_name", list(VARIANTS))
-@pytest.mark.parametrize("dtype", [torch.float, torch.double])
-@pytest.mark.parametrize("pair", BATCH_PAIRS, ids=pair_id)
-def test_batch(
-    variant_name: str,
-    dtype: torch.dtype,
-    pair: tuple[tuple[str, str], tuple[str, str]],
-) -> None:
-    dd: DD = {"device": DEVICE, "dtype": dtype}
-    tol = torch.finfo(dtype).eps ** 0.5 * 50
-    variant = VARIANTS[variant_name]
-
-    structure = load_batch(pair, dd)
-
-    # numerical gradient as ref
-    numdr = numgrad(variant.call, structure)
-
-    def wrapper(pos: Tensor) -> Tensor:
-        return variant.call(structure.replace(positions=pos))
-
-    # Plain `jacrev` over the whole batch rather than `vmap(jacrev)`: vmapping
-    # a periodic batch through `__call__` would hit its data-dependent
-    # shift-table build. Structures in a batch do not interact, so only
-    # the diagonal blocks of the (batch, nat, batch, nat, 3) Jacobian are
-    # nonzero; keep those.
-    pos = structure.positions.detach().clone().requires_grad_(True)
-    full: Tensor = jacrev(wrapper)(pos)
-    batch = torch.arange(pos.shape[0], device=pos.device)
-    jac = full[batch, :, batch]
-    assert pytest.approx(numdr.cpu(), abs=tol) == tensor_to_numpy(jac)
-
-    off_diagonal = full.clone()
-    off_diagonal[batch, :, batch] = 0.0
-    assert (off_diagonal == 0).all()
-
-
-@pytest.mark.parametrize("variant_name", list(VARIANTS))
-@pytest.mark.parametrize("dtype", [torch.float, torch.double])
-@pytest.mark.parametrize(
-    "pair",
-    [pair for pair in BATCH_PAIRS if not is_periodic(pair[0])],
-    ids=pair_id,
+from ..samples import (
+    LARGE_CRYSTALS,
+    MOLECULE_PAIRS,
+    MOLECULE_REFS,
+    SMALL_CELL_REFS,
+    pair_id,
+    refs,
+    source_id,
 )
+
+
+@pytest.mark.parametrize("variant_name", list(VARIANTS))
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+@pytest.mark.parametrize("pair", MOLECULE_PAIRS, ids=pair_id)
 def test_batch_vmap(
     variant_name: str,
     dtype: torch.dtype,
@@ -111,7 +60,8 @@ def test_batch_vmap(
     """`jacrev` vmapped over the batch, for molecules only:
     for a periodic batch, `__call__` builds its shift table inside the
     vmap, which is data-dependent. The vmap route for periodic structures
-    is `with_precomputed_shifts` (see `test_precomputed_shifts.py`)."""
+    is a precomputed shift table passed as `pairs` (see
+    `test_dense_periodic.py`)."""
     dd: DD = {"device": DEVICE, "dtype": dtype}
     tol = torch.finfo(dtype).eps ** 0.5 * 50
     variant = VARIANTS[variant_name]
@@ -129,22 +79,81 @@ def test_batch_vmap(
     assert pytest.approx(numdr.cpu(), abs=tol) == tensor_to_numpy(jac)
 
 
-@pytest.mark.parametrize("variant_name", list(VARIANTS))
-@pytest.mark.parametrize("source", REPRESENTATIVES, ids=lambda s: s[1])
-def test_matches_fortran_reference(
-    variant_name: str, source: tuple[str, str]
+def _reference_atol(dtype: torch.dtype) -> float:
+    """
+    Absolute tolerance of a Jacobian against mctc-lib's derivative.
+
+    Measured over every reference sample, variant and evaluation path, on
+    CPU and CUDA: the largest deviation is ~2e-14 in `float64` and ~7e-6
+    in `float32`, for Jacobian entries up to ~0.5. Unlike the
+    finite-difference checks above, this reference is exact, so the
+    tolerance stays close to those values; `rtol=0` because most entries
+    are near zero.
+    """
+    return 1e-11 if dtype == torch.double else 2e-5
+
+
+# Every reference sample on CPU. On GPU only two small ones: the dense
+# periodic Jacobian of the larger cells takes up to ~2 GB each, and the
+# device handling is the same for every sample. The large crystals skip
+# the all-pairs paths (see `LARGE_CRYSTALS`).
+if DEVICE is None:
+    _MOLECULES = MOLECULE_REFS
+    _SMALL_CELLS = SMALL_CELL_REFS
+    _LARGE_CELLS = LARGE_CRYSTALS
+else:
+    _MOLECULES = [("mb16_43", "SiH4")]
+    _SMALL_CELLS = [("other", "periodic_triclinic")]
+    _LARGE_CELLS = []
+
+
+def _check_matches_fortran_reference(
+    bind: Bind, source: tuple[str, str], variant_name: str, dtype: torch.dtype
 ) -> None:
-    """`jacrev` against mctc-lib's own Fortran-computed derivative."""
-    dd: DD = {"device": DEVICE, "dtype": torch.double}
-    tol = torch.finfo(torch.double).eps ** 0.5 * 50
+    """`jacrev` against mctc-lib's own Fortran-computed derivative -- for
+    periodic cells this includes the `shift @ lattice` term."""
+    dd: DD = {"device": DEVICE, "dtype": dtype}
     variant = VARIANTS[variant_name]
 
     structure = load_structure(*source, dd)
     ref = refs[source][variant.dref_key].to(**dd)  # type: ignore[literal-required]
+    cn = bind(variant.call, structure)
 
     def wrapper(pos: Tensor) -> Tensor:
-        return variant.call(structure.replace(positions=pos))
+        return cn(structure.replace(positions=pos))
 
     pos = structure.positions.detach().clone().requires_grad_(True)
     jac: Tensor = jacrev(wrapper)(pos)
-    assert pytest.approx(ref.cpu(), abs=tol) == tensor_to_numpy(jac)
+    atol = _reference_atol(dtype)
+    torch.testing.assert_close(jac, ref, atol=atol, rtol=0)
+
+
+@pytest.mark.parametrize("variant_name", list(VARIANTS))
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+@pytest.mark.parametrize("source", _MOLECULES + _SMALL_CELLS, ids=source_id)
+def test_matches_fortran_reference_dense(
+    variant_name: str, dtype: torch.dtype, source: tuple[str, str]
+) -> None:
+    _check_matches_fortran_reference(bind_dense, source, variant_name, dtype)
+
+
+@pytest.mark.parametrize("variant_name", list(VARIANTS))
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+@pytest.mark.parametrize("source", _SMALL_CELLS, ids=source_id)
+def test_matches_fortran_reference_precomputed(
+    variant_name: str, dtype: torch.dtype, source: tuple[str, str]
+) -> None:
+    _check_matches_fortran_reference(
+        bind_precomputed, source, variant_name, dtype
+    )
+
+
+@pytest.mark.parametrize("variant_name", list(VARIANTS))
+@pytest.mark.parametrize("dtype", [torch.float, torch.double])
+@pytest.mark.parametrize(
+    "source", _MOLECULES + _SMALL_CELLS + _LARGE_CELLS, ids=source_id
+)
+def test_matches_fortran_reference_sparse(
+    variant_name: str, dtype: torch.dtype, source: tuple[str, str]
+) -> None:
+    _check_matches_fortran_reference(bind_sparse, source, variant_name, dtype)

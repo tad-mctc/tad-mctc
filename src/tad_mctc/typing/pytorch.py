@@ -44,14 +44,16 @@ from ..exceptions import DtypeError
 from .compat import CountingFunction, Self
 
 if TYPE_CHECKING:
-    # Only for the `CNFunc` annotation below -- importing `Structure` at
-    # runtime would cycle back here, since `io.checks.structure` already
-    # imports from this package (`..typing`).
+    # Only for the `CNFunc` annotation below -- importing these at runtime
+    # would cycle back here, since `io.checks.structure` already imports
+    # from this package (`..typing`).
     from ..io.structure import Structure
+    from ..ncoord.common import NeighborListMode
+    from ..neighbor.images import PeriodicShifts
+    from ..neighbor.list import NeighborList
 
 __all__ = [
     "CNFunc",
-    "CNGradFunction",
     "DD",
     "MockTensor",
     "ModuleLike",
@@ -593,31 +595,14 @@ class CNFunc(Protocol):
     ``cn_d4``, ...) satisfies.
     """
 
-    def __call__(self, structure: Structure) -> Tensor:
-        """
-        Calculate the coordination number of each atom in the system.
-        """
-        ...
-
-
-class CNGradFunction(Protocol):
-    """
-    Type annotation for coordination number function.
-    """
-
     def __call__(
         self,
-        numbers: Tensor,
-        positions: Tensor,
+        structure: Structure,
+        pairs: PeriodicShifts | NeighborList | None = None,
         *,
-        dcounting_function: CountingFunction | None = None,
-        rcov: Tensor | None = None,
-        en: Tensor | None = None,
-        cutoff: Tensor | None = None,
-        kcn: float = 7.5,
-        **kwargs: Any,
+        mode: NeighborListMode = "graph",
     ) -> Tensor:
         """
-        Calculate the coordination number gradient of each atom in the system.
+        Calculate the coordination number of each atom in the system.
         """
         ...

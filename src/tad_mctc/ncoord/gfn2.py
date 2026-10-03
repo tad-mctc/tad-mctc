@@ -33,10 +33,6 @@ __all__ = ["cn_gfn2"]
 cn_gfn2 = CNModel(count=gfn2_count, cutoff=defaults.CUTOFF_GFN2)
 """
 The double-exponential (GFN2-xTB) coordination number
-(:mod:`tad_mctc.ncoord.defaults`). Callable as ``cn_gfn2(structure)``:
-the molecular, all-pairs path when ``structure.lattice is None``, the
-periodic path (auto-building a shift table every call) otherwise.
-``cn_gfn2.with_precomputed_shifts(structure, shifts=...)`` is the
-``vmap``/``jacrev``-over-``lattice``-safe periodic alternative, reusing a
-precomputed shift table instead of rebuilding one.
+(:mod:`tad_mctc.ncoord.defaults`). Callable as ``cn_gfn2(structure)`` for a molecule or a cell.
+See :meth:`.CNModel.__call__` for how pairs are enumerated.
 """

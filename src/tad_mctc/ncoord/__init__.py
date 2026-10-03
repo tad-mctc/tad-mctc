@@ -59,7 +59,7 @@ Example
 >>>
 >>> structure = mctc.Structure(numbers=numbers, positions=positions)
 >>>
->>> torch.set_printoptions(precision=4)
+>>> torch.set_printoptions(precision=4, linewidth=80)
 >>> print(mctc.ncoord.cn_d4(structure))
 tensor([[2.6886, 2.6886, 2.6314, 2.6314, 0.8595, 0.9231, 0.8605, 0.8605, 0.8595,
          0.9231, 0.8568, 0.8568],

@@ -73,8 +73,9 @@ def finalize_geometry(
     **kwargs: Any,
 ) -> Tensor:
     """
-    Validate a single parsed geometry (shapes, atomic numbers, optionally
-    interatomic distances, and clashes with the padding value).
+    Validate a single parsed geometry (shapes, atomic numbers, and clashes
+    with the padding value). Interatomic distances are checked on the
+    whole structure instead, by :func:`~tad_mctc.io.read.read_structure`.
 
     The checks raise on failure, so they also run under ``python -O``.
 
@@ -87,10 +88,8 @@ def finalize_geometry(
     fileobj : IO[Any]
         The file-like object that was read (only for error messages).
     **kwargs : Any
-        The reader's keyword arguments. ``check_coldfusion`` and
-        ``coldfusion_cutoff`` are forwarded to
-        :func:`~tad_mctc.io.checks.content_checks`; the padding options
-        (``padding_value``, ``shift_for_last``, ...) to
+        The reader's keyword arguments. The padding options
+        (``padding_value``, ``shift_for_last``, ...) are forwarded to
         :func:`~tad_mctc.io.checks.deflatable_check`.
 
     Returns
@@ -98,14 +97,24 @@ def finalize_geometry(
     Tensor
         The positions. With ``shift_for_last=True``, a clash with the
         padding value shifts them in place.
+
+    Raises
+    ------
+    TypeError
+        ``check_coldfusion`` or ``coldfusion_cutoff`` is passed. The
+        distance check needs the whole structure, so a single format's
+        reader does not run it; the option would otherwise be ignored
+        silently.
     """
+    for name in ("check_coldfusion", "coldfusion_cutoff"):
+        if name in kwargs:
+            raise TypeError(
+                f"`{name}` is not a reader option. Pass `check_coldfusion` "
+                "to `read`/`read_structure`, or call "
+                "`tad_mctc.io.checks.coldfusion_check` on the structure."
+            )
+
     shape_checks(numbers, positions, allow_batched=False)
-    content_checks(
-        numbers,
-        positions,
-        allow_batched=False,
-        check_coldfusion=kwargs.get("check_coldfusion", False),
-        coldfusion_cutoff=kwargs.get("coldfusion_cutoff", 2.0),
-    )
+    content_checks(numbers, positions, allow_batched=False)
     deflatable_check(positions, fileobj, **kwargs)
     return positions

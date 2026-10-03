@@ -29,6 +29,7 @@ from typing import IO, Any
 import torch
 
 from ...typing import PathLike
+from ..checks import coldfusion_check
 from ..structure import Structure
 from .aims import read_aims_fileobj
 from .cjson import read_cjson_fileobj
@@ -170,6 +171,8 @@ def read(
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
     dtype_int: torch.dtype = torch.long,
+    *,
+    check_coldfusion: bool = False,
     **kwargs: Any,
 ) -> Structure:
     """
@@ -189,6 +192,13 @@ def read(
         Floating point data type of the tensor. Defaults to `None`.
     dtype_int : torch.dtype, optional
         Integer data type of the tensor. Defaults to `torch.long`.
+    check_coldfusion : bool, optional
+        Check the structure that was read for atoms closer than
+        0.5 Bohr, periodic images included (see
+        :func:`tad_mctc.io.checks.coldfusion_check`). Defaults to
+        ``False``: the check builds a neighbour list, which can dominate
+        read time for a large structure; pass ``True`` to opt in for an
+        untrusted geometry.
 
     Returns
     -------
@@ -202,6 +212,8 @@ def read(
     ------
     FileNotFoundError
         Given file does not exist.
+    StructureError
+        ``check_coldfusion`` is set and two atoms are too close.
     """
     path = Path(filepath)
 
@@ -213,7 +225,7 @@ def read(
         ftype = path.suffix.lower()[1:]
 
     with open(path, mode=mode, encoding="utf-8") as fileobj:
-        return read_from_fileobj(
+        structure = read_from_fileobj(
             fileobj,
             ftype,
             device=device,
@@ -221,6 +233,10 @@ def read(
             dtype_int=dtype_int,
             **kwargs,
         )
+
+    if check_coldfusion:
+        coldfusion_check(structure)
+    return structure
 
 
 def read_structure(
@@ -250,11 +266,7 @@ def read_structure(
     dtype_int : :class:`torch.dtype`, optional
         Integer data type of the tensors. Defaults to ``torch.long``.
     check_coldfusion : bool, optional
-        Run the interatomic-distance sanity check while reading. Defaults
-        to ``False``: the check compares all atom pairs (see
-        :func:`tad_mctc.io.checks.coldfusion_check`), so it can dominate
-        read time for a large structure; pass ``True`` to opt in for an
-        untrusted geometry.
+        See :func:`read`. Defaults to ``False``.
 
     Returns
     -------
@@ -266,6 +278,8 @@ def read_structure(
     ------
     FileNotFoundError
         Given file does not exist.
+    StructureError
+        ``check_coldfusion`` is set and two atoms are too close.
     """
     structure = read(
         filepath,

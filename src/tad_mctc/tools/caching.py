@@ -26,8 +26,6 @@ from __future__ import annotations
 from functools import wraps
 from typing import Any, TypeVar
 
-import torch
-
 from ..typing import CacheKey, Callable
 
 __all__ = ["memoize", "memoize_all_instances"]
@@ -154,69 +152,3 @@ def memoize_all_instances(fcn: Callable[..., T]) -> Callable[..., T]:
     setattr(wrapper, "get_cache", get)
 
     return wrapper
-
-
-def memoize_with_deps(
-    *dependency_getters: Callable[..., Any]
-) -> Callable[..., Any]:  # pragma: no cover
-    """
-    Memoization with multiple dependency-based cache invalidation. This
-    decorator allows specification of `__slots__`. It works with and without
-    function arguments.
-
-    Warning
-    -------
-    This is an experimental feature, which can cause memory leaks!
-    """
-
-    def decorator(fcn: Callable[..., T]) -> Callable[..., T]:
-        # creating the cache outside the wrapper shares it across instances
-        cache: dict[CacheKey, T] = {}
-        dependency_cache: dict[CacheKey, tuple[Any, ...]] = {}
-
-        @wraps(fcn)
-        def wrapper(self: Any, *args: Any, **kwargs: Any) -> T:
-            # create unique key for all instances in cache dictionary
-            key = (id(self), fcn.__name__, args, frozenset(kwargs.items()))
-
-            # get current deps
-            current_deps = tuple(getter(self) for getter in dependency_getters)
-            cached_deps = dependency_cache.get(key)
-
-            # Check if the cache has been invalidated
-            cache_invalidated = False
-            if cached_deps is None or len(cached_deps) != len(current_deps):
-                cache_invalidated = True
-            else:
-                for curr, cached in zip(current_deps, cached_deps):
-                    if not torch.equal(curr, cached):
-                        cache_invalidated = True
-                        break
-
-            if not cache_invalidated and key in cache:
-                return cache[key]
-
-            # If result is not in cache or deps have changed, compute result
-            result = fcn(self, *args, **kwargs)
-            cache[key] = result
-            dependency_cache[key] = current_deps
-            return result
-
-        def clear() -> None:
-            cache.clear()
-            dependency_cache.clear()
-
-        def get() -> dict[CacheKey, T]:
-            return cache
-
-        def get_dep() -> dict[CacheKey, tuple[Any, ...]]:
-            return dependency_cache
-
-        setattr(wrapper, "clear", clear)
-        setattr(wrapper, "clear_cache", clear)
-        setattr(wrapper, "get_cache", get)
-        setattr(wrapper, "get_dep_cache", get_dep)
-
-        return wrapper
-
-    return decorator

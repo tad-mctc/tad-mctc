@@ -56,11 +56,8 @@ counting function generalized by EEQBC's ``norm_exp``
 (:data:`defaults.NORM_EXP_EEQBC`), EEQBC's own covalent radii
 (:func:`tad_mctc.data.radii.EEQBC_COV_RADII`) and steepness
 (:data:`defaults.KCN_EEQBC`), and no CN cap. Callable as
-``cn_eeqbc(structure)``: the molecular, all-pairs path when
-``structure.lattice is None``, the periodic path (auto-building a shift
-table every call) otherwise. ``cn_eeqbc.with_precomputed_shifts(structure,
-shifts=...)`` is the ``vmap``/``jacrev``-over-``lattice``-safe periodic
-alternative, reusing a precomputed shift table instead of rebuilding one.
+``cn_eeqbc(structure)`` for a molecule or a cell. See
+:meth:`.CNModel.__call__` for how pairs are enumerated.
 """
 
 cn_eeqbc_en = CNModel(

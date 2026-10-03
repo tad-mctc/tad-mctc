@@ -353,7 +353,8 @@ def pack_structures(structures: Sequence[Structure]) -> Structure:
         `structures` is empty, one of them is already batched, or some
         set ``lattice``/``periodic`` and others do not -- a molecule next
         to a periodic cell. To batch a molecule with periodic cells, give
-        it any ``lattice`` together with ``periodic=[False, False, False]``.
+        it any non-singular ``lattice`` (e.g. the identity) together with
+        ``periodic=[False, False, False]``.
     NotImplementedError
         A structure sets ``bonds``, for which there is no padding
         convention yet (zero-padding would invent bonds to atom 0).
@@ -374,8 +375,8 @@ def pack_structures(structures: Sequence[Structure]) -> Structure:
         raise ValueError(
             "Cannot pack molecules with periodic structures: `lattice` is "
             "set on some structures but not on others. To batch a molecule "
-            "with periodic cells, give it a lattice and "
-            "periodic=[False, False, False]."
+            "with periodic cells, give it a non-singular lattice (e.g. the "
+            "identity) and periodic=[False, False, False]."
         )
     if all(has_lattice):
         for name in _CELL_FIELDS:

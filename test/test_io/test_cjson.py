@@ -370,11 +370,11 @@ def test_read_periodic_fractional() -> None:
     assert lattice.shape == (3, 3)
     assert positions.shape == (6, 3)
 
-    # regression test for a former bug (fixed here, reported upstream to
-    # mctc-lib) where fractional coordinates were *also* multiplied by
-    # AA2AU before the lattice transform, stretching every periodic bond
-    # by that factor -- checked against the real rutile Ti-O bond lengths
-    # (~1.949/~1.980 Angstrom experimentally)
+    # Fractional coordinates must not *also* be multiplied by AA2AU before
+    # the lattice transform, which would stretch every periodic bond by
+    # that factor (mctc-lib does, as of writing). Checked against the
+    # real rutile Ti-O bond lengths (~1.949/~1.980 Angstrom
+    # experimentally).
     dists = torch.cdist(positions, positions)
     dists.fill_diagonal_(float("inf"))
     ti_o_bohr = dists[:2].min(dim=1).values
@@ -390,8 +390,7 @@ def test_read_periodic_fractional_no_double_aatoau_scaling() -> None:
     lattice carries a unit, so the Angstrom->bohr conversion must apply to
     cartesian coordinates only, not be applied to the raw fractional array
     a second time before the lattice transform (see the module docstring;
-    formerly a bug ported from mctc-lib, now fixed here and reported
-    upstream)."""
+    mctc-lib's reader applies it twice)."""
     dd: DD = {"device": None, "dtype": torch.double}
 
     data = {

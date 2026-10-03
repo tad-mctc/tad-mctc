@@ -1,4 +1,10 @@
 # SPDX-Identifier: CC0-1.0
+"""
+`examples/cn/molecular_dense_single.py`'s EEQ-CN calculation batched over two differently
+sized geometries via `tad_mctc.batch.pack`'s zero-padding, contrasted with
+one system at a time in that single-structure example.
+"""
+
 import torch
 
 import tad_mctc as mctc

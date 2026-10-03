@@ -65,10 +65,11 @@ def _write_fused(tmp_path: Path, ftype: str) -> Path:
 
 
 @pytest.mark.parametrize("name,ftype", FIXTURES)
-def test_read_structure_accepts_check_coldfusion(
+def test_read_structure_fixtures_pass_coldfusion_check(
     name: str, ftype: str | None
 ) -> None:
-    """Every reader accepts the keyword arguments `read_structure` forwards."""
+    """Every fixture passes the cold-fusion check, periodic ones with their
+    images."""
     structure = read.read_structure(
         FILES / name, ftype=ftype, check_coldfusion=True
     )
@@ -77,7 +78,8 @@ def test_read_structure_accepts_check_coldfusion(
 
 @pytest.mark.parametrize("ftype", FUSED)
 def test_read_structure_fused_atoms(tmp_path: Path, ftype: str) -> None:
-    """Every reader honours `check_coldfusion`, and only when asked."""
+    """`read_structure` checks for fused atoms in every format, and only
+    when asked."""
     filepath = _write_fused(tmp_path, ftype)
 
     structure = read.read_structure(filepath, ftype=ftype)
@@ -85,6 +87,30 @@ def test_read_structure_fused_atoms(tmp_path: Path, ftype: str) -> None:
 
     with pytest.raises(StructureError):
         read.read_structure(filepath, ftype=ftype, check_coldfusion=True)
+
+
+@pytest.mark.parametrize("ftype", FUSED)
+def test_read_fused_atoms(tmp_path: Path, ftype: str) -> None:
+    """`read` checks for fused atoms too, and only when asked."""
+    filepath = _write_fused(tmp_path, ftype)
+
+    structure = read.read(filepath, ftype=ftype)
+    assert structure.numbers.shape == (2,)
+
+    with pytest.raises(StructureError):
+        read.read(filepath, ftype=ftype, check_coldfusion=True)
+
+
+@pytest.mark.parametrize("option", ["check_coldfusion", "coldfusion_cutoff"])
+def test_format_reader_rejects_coldfusion_options(
+    tmp_path: Path, option: str
+) -> None:
+    """A single format's reader does not run the distance check, so it
+    rejects the options instead of ignoring them."""
+    filepath = _write_fused(tmp_path, "xyz")
+
+    with pytest.raises(TypeError, match=option):
+        read.read_xyz(filepath, **{option: True})
 
 
 def test_checks_run_without_asserts(tmp_path: Path) -> None:

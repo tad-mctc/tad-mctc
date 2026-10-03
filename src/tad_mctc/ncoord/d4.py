@@ -74,9 +74,6 @@ cn_d4 = CNModel(
 The D4 fractional coordination number: the error-function counting
 function, DFT-D4's steepness and cutoff, and the electronegativity pair
 weight :func:`d4_en_weight` (:mod:`tad_mctc.ncoord.defaults`). Callable as
-``cn_d4(structure)``: the molecular, all-pairs path when
-``structure.lattice is None``, the periodic path (auto-building a shift
-table every call) otherwise. ``cn_d4.with_precomputed_shifts(structure,
-shifts=...)`` is the ``vmap``/``jacrev``-over-``lattice``-safe periodic
-alternative, reusing a precomputed shift table instead of rebuilding one.
+``cn_d4(structure)`` for a molecule or a cell.
+See :meth:`.CNModel.__call__` for how pairs are enumerated.
 """

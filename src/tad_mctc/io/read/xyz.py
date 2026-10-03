@@ -457,9 +457,8 @@ def _parse_atom_block(
     overhead that ``numpy.loadtxt``'s C parser and a symbol->number lookup
     vectorised over only the *distinct* symbols amortise across the whole
     block instead. Only the first four whitespace-separated columns are
-    used (``usecols``), matching the old loop's ``line[:4]``: a trailing
-    column (e.g. a comment or velocity in an extended xyz variant) is
-    ignored, not an error.
+    used (``usecols``): a trailing column (e.g. a comment or velocity in
+    an extended xyz variant) is ignored, not an error.
     """
     lines = itertools.islice(fileobj, natoms)
     block = "".join(lines)

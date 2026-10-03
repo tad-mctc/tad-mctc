@@ -44,17 +44,14 @@ a constant if a clash is detected
 
 For more details and examples, check `test/test_io/test_deflatable.py`.
 
-`coldfusion_check`'s all-pairs distance check is likewise controlled through
-reader keyword arguments:
-- check_coldfusion (`bool`, default: False): run the check at all
-- coldfusion_cutoff (`float`, default: 2.0): reserved for a future O(nat)
-fast path (see `coldfusion_check`'s `cutoff` parameter); currently unused,
-as the check below is O(nat^2) for both single and batched structures
+`coldfusion_check` takes a whole `Structure`, so that it can include
+periodic images. `read_structure` runs it once on the structure it read when
+called with `check_coldfusion=True`.
 """
 
 from __future__ import annotations
 
-from typing import IO, Any, NoReturn
+from typing import IO, TYPE_CHECKING, Any, NoReturn
 
 import torch
 
@@ -67,7 +64,15 @@ from ...exceptions import (
     StructureError,
     StructureWarning,
 )
+from ...neighbor import (
+    build_neighborlist,
+    pair_distance_squared,
+    split_lattice,
+)
 from ...typing import DD, Tensor
+
+if TYPE_CHECKING:
+    from ..structure import Structure
 
 __all__ = [
     "coldfusion_check",
@@ -85,57 +90,71 @@ __all__ = [
 # but keep this in mind for very large or far-shifted structures.
 _COLDFUSION_THRESHOLD = 0.5
 
+# Molecules are checked by comparing all pairs as long as the distance
+# matrix, ``(..., nat, nat)`` over the whole batch, holds no more entries
+# than that of one molecule of this many atoms: within 8 MiB (float64). A
+# single molecule of up to this size, or a batch of small ones, qualifies;
+# a long trajectory of them does not. The dense check takes a few
+# milliseconds at most, while the neighbour list's first use on CPU loads
+# (about 0.2 s) or even compiles (several seconds) the native extension,
+# which a small molecule read with `check_coldfusion=True` should not pay.
+# Beyond this size the neighbour list wins: 30x faster at 4000 atoms, and
+# it needs memory only for the pairs within the cutoff.
+_COLDFUSION_DENSE_MAX_ATOMS = 1024
+
 
 def coldfusion_check(
-    numbers: Tensor,
-    positions: Tensor,
-    threshold: Tensor | float | int | None = None,
+    structure: Structure,
     *,
-    check: bool = True,
+    threshold: Tensor | float | int | None = None,
     cutoff: float = 2.0,
 ) -> bool | NoReturn:
     """
-    Check if interatomic distances are large enough (no fusion of atoms).
+    Check that no two atoms are closer than ``threshold`` (no fusion of
+    atoms), periodic images included.
 
-    Dense, O(nat^2) all-pairs check via ``cdist``, for both a single,
-    unbatched structure and a padded batch. A neighbour-list-based O(nat)
-    fast path for large single structures is planned (see ``cutoff``) but
-    not yet wired in here; it lands together with ``tad_mctc.neighbor``.
+    A cell, a batch of cells, or a large molecule is checked through a
+    neighbour list (:func:`.build_neighborlist`): only pairs within
+    ``cutoff`` can be closer than ``threshold``, so this is O(nat) instead
+    of O(nat^2), and a cell's list holds each atom's periodic images, so a
+    contact across the cell boundary is caught too. The same holds for a
+    molecule, or a batch of molecules, whose all-pairs distance matrix
+    would exceed that of :data:`_COLDFUSION_DENSE_MAX_ATOMS` atoms. Anything
+    smaller compares all pairs directly instead.
+
+    Skipped inside ``torch.func.vmap``/``jacrev``, which do not allow
+    data-dependent control flow.
 
     Parameters
     ----------
-    numbers : Tensor
-        A 1D tensor containing atomic numbers or symbols.
-    positions : Tensor
-        A 2D tensor of shape (n_atoms, 3) containing atomic positions.
+    structure : Structure
+        The system(s) to check. ``numbers == 0`` marks padding, which is
+        never compared.
     threshold : Tensor | float | int | None, optional
-        Threshold for acceptable interatomic distances (Bohr). Defaults to
+        Smallest acceptable interatomic distance (Bohr). Defaults to
         `None`, which resolves to `_COLDFUSION_THRESHOLD` (`0.5`).
-    check : bool, optional
-        Run the check at all. Defaults to `True`. A known-good geometry
-        (e.g. a trusted reference structure at a scale where even the
-        dense check below is more compute than wanted) can skip it
-        entirely.
     cutoff : float, optional
-        Reserved for the planned O(nat) fast path (see the module
-        docstring); currently unused, since the check below is dense
-        regardless of ``positions.ndim``.
+        Real-space cutoff (Bohr) of the neighbour search that narrows down
+        the candidate pairs. Raised internally to ``threshold`` if
+        smaller, so no violation is ever missed. Defaults to ``2.0``, well
+        past the default ``threshold`` and below real bonding distances,
+        keeping the search sparse. Unused where all pairs are compared
+        directly.
 
     Returns
     -------
     bool
-        True of atoms are not too close.
+        ``True`` if no two atoms are too close.
 
     Raises
     ------
     StructureError
         Interatomic distances are too close.
     """
+    numbers, positions = structure.numbers, structure.positions
+
     # vmap does not allow data-dependent control flow
     if is_functorch_tensor(numbers) or is_functorch_tensor(positions):
-        return True
-
-    if not check:
         return True
 
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
@@ -144,6 +163,10 @@ def coldfusion_check(
         threshold = torch.tensor(_COLDFUSION_THRESHOLD, **dd)
     elif not isinstance(threshold, Tensor):
         threshold = torch.tensor(threshold, **dd)
+
+    if _coldfusion_uses_neighborlist(structure):
+        _coldfusion_check_sparse(structure, threshold, cutoff)
+        return True
 
     # Default (mm-based) `cdist` mode: faster, but loses precision on
     # nearby points whose coordinates are far from the origin (see the
@@ -159,14 +182,55 @@ def coldfusion_check(
     return True
 
 
+def _coldfusion_uses_neighborlist(structure: Structure) -> bool:
+    """
+    Whether :func:`coldfusion_check` searches ``structure`` with a
+    neighbour list: a cell or batch of cells, or molecules whose all-pairs
+    distance matrix has more than :data:`_COLDFUSION_DENSE_MAX_ATOMS` ``**
+    2`` entries. Lets a caller (the command line) know whether the check
+    will load the native extension.
+    """
+    if structure.lattice is not None:
+        return True
+    numbers = structure.numbers
+    dense_entries = numbers.numel() * numbers.shape[-1]
+    return dense_entries > _COLDFUSION_DENSE_MAX_ATOMS**2
+
+
+def _coldfusion_check_sparse(
+    structure: Structure, threshold: Tensor, cutoff: float
+) -> None | NoReturn:
+    """
+    The neighbour-list form of :func:`coldfusion_check`, for a single
+    structure or a batch, of cells or molecules.
+    """
+    effective_cutoff = max(cutoff, float(threshold))
+    nbl = build_neighborlist(structure, effective_cutoff)
+
+    # Padding atoms have no pairs (see `NeighborList`), so the masked
+    # slots are exactly the real pairs.
+    shared_lattice, system_lattices = split_lattice(structure.lattice)
+    distance_squared = pair_distance_squared(
+        nbl.idx_i[nbl.mask],
+        nbl.idx_j[nbl.mask],
+        nbl.shift[nbl.mask],
+        structure.positions.reshape(-1, 3),
+        shared_lattice=shared_lattice,
+        system_lattices=system_lattices,
+        atoms_per_system=structure.numbers.shape[-1],
+    )
+
+    if torch.any(distance_squared < threshold * threshold):
+        raise StructureError("Too close interatomic distances found")
+
+    return None
+
+
 def content_checks(
     numbers: Tensor,
     positions: Tensor,
     max_element: int = pse.MAX_ELEMENT,
     allow_batched: bool = True,
-    *,
-    check_coldfusion: bool = False,
-    coldfusion_cutoff: float = 2.0,
 ) -> bool | NoReturn:
     """
     Check the content of the numbers and positions tensors.
@@ -185,13 +249,6 @@ def content_checks(
         :data:`tad_mctc.data.pse.MAX_ELEMENT`.
     allow_batched : bool, optional
         Allow batched tensors. Defaults to ``True``.
-    check_coldfusion : bool, optional
-        Run :func:`coldfusion_check` at all. Defaults to ``False``: it is
-        an O(nat^2) all-pairs check, which can dominate read time for a
-        large structure (see :func:`tad_mctc.io.read.read_structure`'s
-        ``check_coldfusion``); opt in explicitly for an untrusted geometry.
-    coldfusion_cutoff : float, optional
-        Forwarded to :func:`coldfusion_check`'s `cutoff`. Defaults to `2.0`.
 
     Returns
     -------
@@ -215,13 +272,6 @@ def content_checks(
                 "Atomic number smaller than 1 found. This may indicate "
                 "residual padding. Remove before writing to file."
             )
-
-    coldfusion_check(
-        numbers,
-        positions,
-        check=check_coldfusion,
-        cutoff=coldfusion_cutoff,
-    )
 
     return True
 
@@ -337,7 +387,7 @@ def dimension_check(
         )
     if x.ndim > max_ndim:
         raise RuntimeError(
-            f"The tensor should not exceed '{max_ndim}' dimensions."
+            f"The tensor should not exceed {max_ndim} dimensions."
         )
 
     return True

@@ -186,10 +186,9 @@ def test_read_supercell() -> None:
 
 
 def test_read_supercell_nonzero_origin() -> None:
-    """Regression test for a former bug (fixed here, reported upstream to
-    mctc-lib) where the origin line was subtracted without first being
-    converted from Angstrom to bohr, unlike the coordinates and lattice
-    around it."""
+    """The origin line must be converted from Angstrom to bohr before it
+    is subtracted, like the coordinates and lattice around it. mctc-lib
+    skips that conversion, as of writing."""
     dd: DD = {"device": None, "dtype": torch.double}
 
     content = (

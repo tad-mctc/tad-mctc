@@ -40,7 +40,7 @@ warn_redundant_casts = true
 warn_unreachable = true
 warn_unused_ignores = true
 exclude = '''(?x)
-  ^src/tad_mctc/autograd
+  ^src/tad_mctc/autograd/gradcheck\.py$
   | ^src/tad_mctc/data/structures/
   | ^src/tad_mctc/typing/
   | ^src/tad_mctc/units/
@@ -48,22 +48,31 @@ exclude = '''(?x)
   | ^build/
   | ^dist/
   | ^setup.py$
+  | ^tools/refs/_build_fpm/
+  | ^tools/refs/_install_fpm/
+  | ^tools/refs/_build_meson/
+  | ^tools/refs/_install_meson/
+  | ^tools/refs/subprojects/
 '''
 
 [[tool.mypy.overrides]]
 module = "scipy.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "triton.*"
+ignore_missing_imports = true
+
 
 [tool.pyright]
 extraPaths = ["src"]
-include = ["src", "test"]
+include = ["src", "test", "tools"]
 exclude = [
   "**/__pycache__",
   "**/node_modules",
   "**/.venv*",
   "**/.*",
-  "src/tad_mctc/autograd",
+  "src/tad_mctc/autograd/gradcheck.py",
   "src/tad_mctc/data/structures",
   "src/tad_mctc/typing",
   "src/tad_mctc/units",
@@ -72,6 +81,11 @@ exclude = [
   "build",
   "dist",
   "setup.py",
+  "tools/refs/_build_fpm",
+  "tools/refs/_install_fpm",
+  "tools/refs/_build_meson",
+  "tools/refs/_install_meson",
+  "tools/refs/subprojects",
 ]
 
 
@@ -79,9 +93,7 @@ exclude = [
 plugins = ["covdefaults"]
 source = ["./src"]
 omit = [
-  "./src/tad_mctc/autograd/internals.py",
   "./src/tad_mctc/autograd/gradcheck.py",
-  "./src/tad_mctc/data/molecules.py",
   "./src/tad_mctc/data/structures/*",
   "./src/tad_mctc/typing/*",
   "./src/tad_mctc/units/*",

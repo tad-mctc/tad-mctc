@@ -32,10 +32,10 @@ returned as a bogus lattice vector.
 
 mctc-lib (as of writing) reads the periodic "origin" line (Angstrom, per
 the format spec) but never converts it to bohr before subtracting it
-from the already-converted positions -- a genuine bug (same unit-mismatch
-pattern as the former cjson fractional-coordinate bug), silent only
-because real ``.gen`` files almost always use a zero origin. Fixed here
-rather than ported as-is, and reported upstream.
+from the already-converted positions -- a genuine bug (the same
+unit-mismatch pattern as mctc-lib's cjson fractional coordinates), silent
+only because real ``.gen`` files almost always use a zero origin. This
+reader converts the origin.
 """
 
 from __future__ import annotations

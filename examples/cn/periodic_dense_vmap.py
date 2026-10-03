@@ -27,7 +27,7 @@ periodic = torch.tensor([True, True, True])
 # rebuilding the periodic-image table *inside* the trace hits
 # `torch.func`'s data-dependent-control-flow restriction. Build the table
 # once, outside the trace, at a cutoff that safely covers every lattice
-# the trace will see, and reuse it with `with_precomputed_shifts` instead.
+# the trace will see, and pass it as `pairs` instead.
 shifts = build_periodic_shifts(
     lattice, periodic, cutoff=mctc.ncoord.cn_d3.cutoff
 )
@@ -41,7 +41,7 @@ def cn_of_lattice(lat: torch.Tensor) -> torch.Tensor:
     structure = mctc.Structure(
         numbers=numbers, positions=positions, lattice=lat
     )
-    return mctc.ncoord.cn_d3.with_precomputed_shifts(structure, shifts=shifts)
+    return mctc.ncoord.cn_d3(structure, pairs=shifts)
 
 
 cn = torch.func.vmap(cn_of_lattice)(batch_lattice)

@@ -460,7 +460,7 @@ def test_periodic_shifts_rejects_malformed_shifts_shape() -> None:
     with pytest.raises(RuntimeError):
         PeriodicShifts(
             shifts=torch.zeros(3, dtype=torch.long, device=DEVICE),
-            periodic=periodic,
+            periodic_axes=periodic,
             cutoff=10.0,
         )
 
@@ -470,7 +470,7 @@ def test_periodic_shifts_rejects_non_long_shifts_dtype() -> None:
     with pytest.raises(RuntimeError):
         PeriodicShifts(
             shifts=torch.zeros(1, 3, dtype=torch.double, device=DEVICE),
-            periodic=periodic,
+            periodic_axes=periodic,
             cutoff=10.0,
         )
 
@@ -479,7 +479,7 @@ def test_periodic_shifts_rejects_malformed_periodic_shape() -> None:
     with pytest.raises(RuntimeError):
         PeriodicShifts(
             shifts=torch.zeros(1, 3, dtype=torch.long, device=DEVICE),
-            periodic=torch.tensor([True, True], device=DEVICE),
+            periodic_axes=torch.tensor([True, True], device=DEVICE),
             cutoff=10.0,
         )
 
@@ -488,7 +488,7 @@ def test_periodic_shifts_rejects_non_bool_periodic_dtype() -> None:
     with pytest.raises(RuntimeError):
         PeriodicShifts(
             shifts=torch.zeros(1, 3, dtype=torch.long, device=DEVICE),
-            periodic=torch.tensor([1, 1, 1], device=DEVICE),
+            periodic_axes=torch.tensor([1, 1, 1], device=DEVICE),
             cutoff=10.0,
         )
 
@@ -499,25 +499,25 @@ def test_periodic_shifts_replace_swaps_fields_and_revalidates() -> None:
     result, same as the constructor."""
     bundle = PeriodicShifts(
         shifts=torch.zeros(1, 3, dtype=torch.long, device=DEVICE),
-        periodic=torch.tensor([True, True, True], device=DEVICE),
+        periodic_axes=torch.tensor([True, True, True], device=DEVICE),
         cutoff=10.0,
     )
 
     new_periodic = torch.tensor([True, False, True], device=DEVICE)
-    replaced = bundle.replace(periodic=new_periodic)
+    replaced = bundle.replace(periodic_axes=new_periodic)
 
     assert replaced is not bundle
-    assert torch.equal(replaced.periodic, new_periodic)
+    assert torch.equal(replaced.periodic_axes, new_periodic)
     assert torch.equal(replaced.shifts, bundle.shifts)
     assert replaced.cutoff == bundle.cutoff
 
     with pytest.raises(RuntimeError):
-        bundle.replace(periodic=torch.tensor([True, True], device=DEVICE))
+        bundle.replace(periodic_axes=torch.tensor([True, True], device=DEVICE))
 
 
 def test_build_periodic_shifts_returns_matching_bundle() -> None:
-    """`build_periodic_shifts`'s returned `.shifts`/`.periodic`/`.cutoff`
-    match today's inputs/outputs exactly, just wrapped in a bundle."""
+    """`build_periodic_shifts`'s returned `.shifts`/`.periodic_axes`/`.cutoff`
+    match its inputs and the shifts it computes."""
     lattice = _SMALL_CUBIC.to(DEVICE)
     periodic = torch.tensor([True, True, True], device=DEVICE)
     cutoff = 10.0
@@ -525,7 +525,7 @@ def test_build_periodic_shifts_returns_matching_bundle() -> None:
     bundle = build_periodic_shifts(lattice, periodic, cutoff)
 
     assert isinstance(bundle, PeriodicShifts)
-    assert torch.equal(bundle.periodic, periodic)
+    assert torch.equal(bundle.periodic_axes, periodic)
     assert bundle.cutoff == cutoff
 
     _, _, pool_shift = build_ghost_pool(

@@ -91,6 +91,13 @@ class TableFunction(Protocol):
     """
     A per-element table (such as ``radii.COV_D3``), created on the given
     device and dtype.
+
+    The result must depend on ``device`` and ``dtype`` only: a
+    :class:`~tad_mctc.ncoord.CNModel` builds each table once per
+    device/dtype and reuses it for the rest of the process. To change the
+    values, pass a new table (or a tensor) via
+    :meth:`~tad_mctc.ncoord.CNModel.replace` instead of mutating state the
+    callable reads.
     """
 
     def __call__(

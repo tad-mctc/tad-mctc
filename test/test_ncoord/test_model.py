@@ -15,12 +15,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Tests specific to :class:`tad_mctc.ncoord.common.CNModel` itself: call-time
-validation, the CN cap's numerics, the padding-atom element-1 substitution,
-and derivatives with respect to the lattice for the dense periodic path.
+Tests of :class:`tad_mctc.ncoord.common.CNModel` that hold for every
+evaluation path: the presets, call-time validation, the CN cap's numerics,
+the per-element tables and their cache, and derivatives with respect to
+model parameters. The plain molecular `__call__` serves as the vehicle.
 
-Per-preset correctness against the mctc-lib Fortran references lives in
-`test_reference.py`.
+Tests specific to one path live in the quadrant modules
+(`test_dense_molecular.py`, `test_dense_periodic.py`,
+`test_sparse_molecular.py`, `test_sparse_periodic.py`, and `test_sparse.py`
+for both sparse geometries). Per-preset correctness against the mctc-lib
+Fortran references lives in `test_reference.py` and `test_grad/`.
 """
 
 from __future__ import annotations
@@ -42,9 +46,7 @@ from tad_mctc.ncoord.d4 import cn_d4, d4_en_weight
 from tad_mctc.ncoord.eeq import cn_eeq, cn_eeq_en
 from tad_mctc.ncoord.eeqbc import cn_eeqbc, cn_eeqbc_en
 from tad_mctc.ncoord.gfn2 import cn_gfn2
-from tad_mctc.neighbor.images import build_periodic_shifts
 
-from ..conftest import DEVICE
 from ..utils import (
     DYNAMO_SUPPORTED,
     DYNAMO_UNSUPPORTED_REASON,
@@ -70,188 +72,14 @@ def test_preset_fields_match_spec() -> None:
     assert cn_gfn2.cutoff == defaults.CUTOFF_GFN2
 
 
-def _condensed_positions(nat: int, dtype: torch.dtype) -> torch.Tensor:
-    generator = torch.Generator(device=DEVICE).manual_seed(0)
-    density = 0.01
-    box_edge = (nat / density) ** (1.0 / 3.0)
-    return (
-        torch.rand(nat, 3, generator=generator).to(dtype=dtype, device=DEVICE)
-        * box_edge
-    )
-
-
-# ---------------------------------------------------------------------------
-# Validation
-
-
-def test_with_precomputed_shifts_without_lattice_raises() -> None:
-    """A `Structure` with no `lattice` has nothing periodic to evaluate,
-    even when the caller already has a precomputed shift table -- the
-    translation math still needs `structure.lattice`."""
-    model = CNModel(count=erf_count, cutoff=5.0)
-    numbers = torch.tensor([1, 1])
-    positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-    structure = Structure(numbers=numbers, positions=positions)
-
-    dummy_lattice = 10.0 * torch.eye(3, dtype=torch.double)
-    shifts = build_periodic_shifts(
-        dummy_lattice, torch.ones(3, dtype=torch.bool), cutoff=model.cutoff
-    )
-
-    with pytest.raises(ValueError):
-        model.with_precomputed_shifts(structure, shifts=shifts)
-
-
-def test_call_batched_numbers_matches_single_system_loop() -> None:
-    """A leading batch dimension on `structure.numbers`/`structure.
-    positions` routes to the batched dense-periodic path (issue 04) and
-    matches calling `__call__` once per system in a Python loop."""
-    model = CNModel(count=erf_count, cutoff=5.0)
-    numbers = torch.tensor([[1, 1], [1, 1]])
-    positions = torch.tensor(
-        [
-            [[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]],
-            [[0.0, 0.0, 0.0], [0.0, 0.0, 1.1]],
-        ],
-        dtype=torch.double,
-    )
-    lattice = torch.stack([10.0 * torch.eye(3, dtype=torch.double)] * 2)
-    structure = Structure(numbers=numbers, positions=positions, lattice=lattice)
-
-    batched = model(structure)
-    looped = torch.stack(
-        [
-            model(Structure(numbers=n, positions=p, lattice=lat))
-            for n, p, lat in zip(numbers, positions, lattice)
-        ]
-    )
-
-    assert torch.allclose(batched, looped, atol=1e-11, rtol=0)
-
-
-@pytest.mark.parametrize(
-    "model",
-    [
-        CNModel(count=erf_count, cutoff=9.0),
-        # exercises the batched `pair_weight` branch
-        cn_d4.replace(cutoff=9.0),
-        # exercises batched `cut_coordination_number`
-        cn_eeq.replace(cutoff=9.0),
-    ],
-    ids=["plain", "pair_weight", "cn_max"],
-)
-def test_call_batched_heterogeneous_atoms_and_lattices(
-    model: CNModel,
-) -> None:
-    """A batch mixing **different atom counts** (padded) *and* **different
-    lattice sizes** (needing different ring counts) still gives correct
-    per-system results, cross-checked against the single-system `__call__`
-    for each system individually. The smaller/denser
-    cell needs strictly more image rings than the larger/sparser one at
-    this cutoff, so the shared table is sized to the more demanding
-    system; the less demanding system's extra shift entries are masked
-    out by the ordinary cutoff check rather than causing any error.
-    Parametrized over a `pair_weight` preset (`cn_d4`) and a `cn_max`
-    preset (`cn_eeq`) too, not just a bare `CNModel`: both branches are
-    otherwise only exercised by the single-system path."""
-    from tad_mctc.batch import pack
-
-    numbers_small = torch.tensor([14, 14])
-    positions_small = torch.tensor(
-        [[0.0, 0.0, 0.0], [1.5, 1.5, 1.5]], dtype=torch.double
-    )
-    lattice_small = 6.0 * torch.eye(3, dtype=torch.double)  # dense: more rings
-
-    numbers_large = torch.tensor([14, 14, 14])
-    positions_large = torch.tensor(
-        [[0.0, 0.0, 0.0], [3.0, 3.0, 3.0], [6.0, 0.0, 0.0]],
-        dtype=torch.double,
-    )
-    lattice_large = 20.0 * torch.eye(3, dtype=torch.double)  # sparse: fewer
-
-    numbers = pack([numbers_small, numbers_large])
-    positions = pack([positions_small, positions_large])
-    lattice = torch.stack([lattice_small, lattice_large])
-
-    structure = Structure(numbers=numbers, positions=positions, lattice=lattice)
-    batched = model(structure)
-
-    single_small = model(
-        Structure(
-            numbers=numbers_small,
-            positions=positions_small,
-            lattice=lattice_small,
-        )
-    )
-    single_large = model(
-        Structure(
-            numbers=numbers_large,
-            positions=positions_large,
-            lattice=lattice_large,
-        )
-    )
-
-    assert torch.allclose(
-        batched[0, : numbers_small.shape[0]], single_small, atol=1e-11, rtol=0
-    )
-    assert torch.allclose(
-        batched[1, : numbers_large.shape[0]], single_large, atol=1e-11, rtol=0
-    )
-    # Padding atoms contribute nothing.
-    assert torch.allclose(
-        batched[0, numbers_small.shape[0] :],
-        torch.zeros_like(batched[0, numbers_small.shape[0] :]),
-    )
-
-
-def test_call_batched_jacrev_wrt_positions_matches_finite_differences() -> None:
-    """`jacrev` with respect to `positions` on the batched dense-periodic
-    path matches a finite-difference Jacobian for a batch that actually
-    has a padding atom, so the atom-count/shift-count padding and masking
-    do not silently break autodiff at batch scale (the failure mode
-    `_cn_dense_per`'s own "mask before the square root" comment guards
-    against for the single-system path). The padded
-    slot in the smaller system lands at `[0, 0, 0]` -- `pack`'s zero
-    padding -- which coincides exactly with that system's own atom 0, the
-    same zero-distance situation the single-system comment warns about."""
-    from tad_mctc.batch import pack
-
-    model = CNModel(count=erf_count, cutoff=9.0)
-
-    numbers_small = torch.tensor([14, 14])
-    positions_small = torch.tensor(
-        [[0.0, 0.0, 0.0], [1.5, 1.5, 1.5]], dtype=torch.double
-    )
-    lattice_small = 6.0 * torch.eye(3, dtype=torch.double)
-
-    numbers_large = torch.tensor([14, 14, 14])
-    positions_large = torch.tensor(
-        [[0.0, 0.0, 0.0], [3.0, 3.0, 3.0], [6.0, 0.0, 0.0]],
-        dtype=torch.double,
-    )
-    lattice_large = 20.0 * torch.eye(3, dtype=torch.double)
-
-    numbers = pack([numbers_small, numbers_large])
-    positions = pack([positions_small, positions_large])
-    lattice = torch.stack([lattice_small, lattice_large])
-
-    def f(p: torch.Tensor) -> torch.Tensor:
-        structure = Structure(numbers=numbers, positions=p, lattice=lattice)
-        return model(structure)
-
-    assert jacrev_matches_finite_diff(f, positions)
-
-
 def test_non_scalar_cn_max_raises() -> None:
-    model = CNModel(
-        count=erf_count, cutoff=5.0, cn_max=torch.tensor([1.0, 2.0])
-    )
-    numbers = torch.tensor([1, 1])
-    positions = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-    structure = Structure(numbers=numbers, positions=positions)
+    """A per-atom cap is rejected when the model is built, not on each
+    call, and also for a variant made with `replace`."""
+    with pytest.raises(ValueError, match="cn_max"):
+        CNModel(count=erf_count, cutoff=5.0, cn_max=torch.tensor([1.0, 2.0]))
 
-    with pytest.raises(ValueError):
-        model(structure)
+    with pytest.raises(ValueError, match="cn_max"):
+        cn_eeq.replace(cn_max=torch.tensor([1.0, 2.0]))
 
 
 # ---------------------------------------------------------------------------
@@ -304,154 +132,6 @@ def test_cn_cap_checks_is_not_none_not_truthiness() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Padding atoms: element 1, not 0
-
-
-def test_padding_rcov_jacobian_is_finite_with_element_one() -> None:
-    """A batched, padded dense evaluation differentiated with respect to
-    the `rcov` table must give a finite Jacobian: padding atoms look up
-    element 1, whose radius is non-zero, so `r0**norm_exp` never sees a
-    zero base (see `CNModel`'s spec, padding-atom substitution)."""
-    from tad_mctc.batch import pack
-    from tad_mctc.data import radii
-
-    sih4 = get_structure("mb16_43", "SiH4")
-    mb = get_structure("mb16_43", "01")
-    numbers = pack([sih4.numbers, mb.numbers])
-    positions = pack([sih4.positions.double(), mb.positions.double()])
-    structure = Structure(numbers=numbers, positions=positions)
-
-    def cn_sum(table: torch.Tensor) -> torch.Tensor:
-        model = CNModel(count=erf_count, cutoff=25.0, rcov=table)
-        return model(structure).sum()
-
-    table = radii.COV_D3(dtype=torch.double)
-    jacobian = jacrev(cn_sum)(table)
-    assert torch.isfinite(jacobian).all()
-
-
-# ---------------------------------------------------------------------------
-# Lattice as a call-time argument: jacrev and vmap
-
-
-def test_dense_periodic_periodic_mask_leaves_slab_axis_unwrapped() -> None:
-    """The internal wrap must fold only the axes the structure's own
-    `periodic` marks, exactly like `wrap_to_central_cell` itself (see also
-    `test_precomputed_shifts.py`'s `test_periodic_cn_dense_matches_for_
-    unwrapped_positions`). For a slab (periodic in x/y, vacuum along z), an
-    atom moved by one whole lattice vector along z is a physically
-    different, more isolated system -- wrapping z anyway, as for a
-    structure whose mask marks all three axes periodic, would silently
-    fold it back and hide that."""
-    lattice = torch.diag(torch.tensor([6.0, 6.0, 40.0], dtype=torch.double))
-    periodic_slab = torch.tensor([True, True, False])
-    periodic_all = torch.tensor([True, True, True])
-
-    numbers = torch.tensor([14, 14])
-    positions = torch.tensor(
-        [[0.0, 0.0, 0.0], [1.5, 1.5, 2.0]], dtype=torch.double
-    )
-    displaced = positions.clone()
-    displaced[1, 2] += lattice[2, 2]
-
-    def slab(pos: torch.Tensor, periodic: torch.Tensor) -> Structure:
-        return Structure(
-            numbers=numbers, positions=pos, lattice=lattice, periodic=periodic
-        )
-
-    # The structure's mask, not the table's, decides which axes are
-    # periodic, so one table built for all three axes serves both masks.
-    shifts = build_periodic_shifts(lattice, periodic_all, cutoff=cn_d3.cutoff)
-
-    baseline = cn_d3.with_precomputed_shifts(
-        slab(positions, periodic_slab), shifts=shifts
-    )
-    correct_slab = cn_d3.with_precomputed_shifts(
-        slab(displaced, periodic_slab), shifts=shifts
-    )
-    wrong_all_periodic = cn_d3.with_precomputed_shifts(
-        slab(displaced, periodic_all), shifts=shifts
-    )
-
-    # Moving atom 1 a full 40 Bohr along the vacuum axis is a real
-    # physical change once z is correctly left unwrapped.
-    assert not torch.allclose(baseline, correct_slab)
-    # Treating z as periodic anyway silently folds the displacement away.
-    assert torch.allclose(baseline, wrong_all_periodic, atol=1e-11, rtol=0)
-
-
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
-def test_dense_periodic_compiles_fullgraph() -> None:
-    """The dense periodic path traces under `torch.compile(fullgraph=True)`
-    in both `positions` and `lattice`: no data-dependent shape or control
-    flow reaches consumption, since `shifts` is built ahead of the call."""
-    sample = get_structure("other", "periodic_cubic")
-    assert sample.lattice is not None and sample.periodic is not None
-    numbers = sample.numbers
-    positions = sample.positions.double()
-    lattice = sample.lattice.double()
-    periodic = sample.periodic
-
-    shifts = build_periodic_shifts(lattice, periodic, cutoff=cn_d3.cutoff)
-
-    def f(p: torch.Tensor, lat: torch.Tensor) -> torch.Tensor:
-        structure = Structure(numbers=numbers, positions=p, lattice=lat)
-        return cn_d3.with_precomputed_shifts(structure, shifts=shifts)
-
-    torch._dynamo.reset()  # pylint: disable=protected-access
-    compiled_value = run_compiled_or_skip(f, positions, lattice)
-
-    assert torch.allclose(compiled_value, f(positions, lattice))
-
-
-def test_dense_periodic_jacrev_wrt_lattice_matches_finite_differences() -> None:
-    """`jacrev` with respect to `lattice` matches a finite-difference
-    Jacobian for the dense periodic path (`with_precomputed_shifts`)."""
-    sample = get_structure("other", "periodic_cubic")
-    assert sample.lattice is not None and sample.periodic is not None
-    numbers = sample.numbers
-    positions = sample.positions.double()
-    lattice = sample.lattice.double()
-    periodic = sample.periodic
-
-    model = CNModel(count=erf_count, cutoff=25.0)
-    shifts = build_periodic_shifts(lattice, periodic, cutoff=model.cutoff)
-
-    def f(lat: torch.Tensor) -> torch.Tensor:
-        structure = Structure(numbers=numbers, positions=positions, lattice=lat)
-        return model.with_precomputed_shifts(structure, shifts=shifts)
-
-    assert jacrev_matches_finite_diff(f, lattice)
-
-
-def test_vmap_over_lattices_dense_periodic_with_one_shared_shifts() -> None:
-    """`vmap` over a batch of single-system `Structure`s with a varying
-    `lattice` and one shared `shifts` table, for the dense periodic
-    path, matches a plain Python loop -- `vmap` over several
-    single-system `Structure`s, not issue 04's leading-batch-dimension
-    path (kept distinct, per this feature's spec). The table is built at
-    the smallest lattice in the batch, which needs the most image rings
-    for a given cutoff, so it safely covers the larger, scaled-up
-    lattices too."""
-    sample = get_structure("other", "periodic_cubic")
-    assert sample.lattice is not None and sample.periodic is not None
-    numbers = sample.numbers
-    positions = sample.positions.double()
-    lattice = sample.lattice.double()
-    periodic = sample.periodic
-
-    model = CNModel(count=erf_count, cutoff=25.0)
-
-    batch = torch.stack([lattice * scale for scale in (1.0, 1.01, 1.02)])
-    shifts = build_periodic_shifts(
-        batch[0], periodic, cutoff=model.cutoff
-    )  # scale >= 1.0 only shrinks the required ring count
-
-    def f(lat: torch.Tensor) -> torch.Tensor:
-        structure = Structure(numbers=numbers, positions=positions, lattice=lat)
-        return model.with_precomputed_shifts(structure, shifts=shifts)
-
-    assert vmap_matches_loop(f, batch)
 
 
 def test_dispatch_without_pair_weight_skips_en() -> None:
@@ -812,5 +492,5 @@ def test_cut_coordination_number_compiles_fullgraph_with_tensor_cn_max() -> (
     cn_max = torch.tensor(8.0, dtype=torch.double)
 
     torch._dynamo.reset()  # pylint: disable=protected-access
-    compiled_value = run_compiled_or_skip(cut_coordination_number, cn, cn_max)
+    compiled_value = compile_fullgraph(cut_coordination_number)(cn, cn_max)
     assert torch.allclose(compiled_value, cut_coordination_number(cn, cn_max))

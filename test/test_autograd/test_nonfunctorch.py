@@ -39,15 +39,6 @@ def _linear(A: Tensor, x: Tensor) -> Tensor:
     return A @ x
 
 
-def _quadratic(A: Tensor, x: Tensor) -> Tensor:
-    """
-    A simple quadratic function for testing.
-    f(x) = x^T A x, where A is a constant matrix.
-    The Hessian of this function is 2A.
-    """
-    return x @ A @ x
-
-
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
 @pytest.mark.parametrize("create_graph", [True, False, None])
 def test_jacobian(dtype: torch.dtype, create_graph: bool | None) -> None:

@@ -1,4 +1,13 @@
 # SPDX-Identifier: CC0-1.0
+"""
+The plain, single-structure EEQ-CN calculation every other `examples/cn/*.py`
+builds on. For gradients, `vmap` and `torch.compile(fullgraph=True)` on top
+of the call below, see `examples/cn/molecular_dense_gradient.py`,
+`examples/cn/molecular_dense_vmap.py`, and
+`examples/cn/molecular_dense_compile.py`; for dense-vs-sparse and HPC-scale
+scaling, see `examples/scaling/`.
+"""
+
 import torch
 
 import tad_mctc as mctc

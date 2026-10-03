@@ -32,9 +32,8 @@ second time via the lattice, which is already in bohr. Confirmed against
 real periodic cjson data (rutile TiO2) to be a genuine bug, not a
 deliberate convention: it stretches every periodic bond by a factor of
 ``AA2AU`` (~1.8897). Fixed here rather than ported as-is -- diverging
-from mctc-lib's current output for the fractional-coordinate case -- and
-reported upstream; see the reader's tests for the worked-out regression
-case.
+from mctc-lib's current output for the fractional-coordinate case; see the reader's
+tests for the worked-out regression case.
 """
 
 from __future__ import annotations
