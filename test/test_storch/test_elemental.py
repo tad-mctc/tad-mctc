@@ -442,6 +442,11 @@ def test_reciprocal(dtype: torch.dtype) -> None:
     assert (torch.isnan(out) == False).all()
 
 
+# `torch.pow` with a scalar and with a tensor exponent can differ in the last
+# bit (different kernels, e.g. on macOS), so parity checks use a tolerance.
+RTOL = {torch.float32: 1e-6, torch.float64: 1e-14}
+
+
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("exponent", [-3, -2, -1, 0, 1, 2, 3])
 def test_pow_tensor_whole_exponent_matches_int_exponent(
@@ -453,7 +458,7 @@ def test_pow_tensor_whole_exponent_matches_int_exponent(
     expected = storch.safe_pow(x, exponent)
     out = storch.safe_pow(x, torch.tensor(float(exponent), **dd))
 
-    assert torch.equal(out, expected)
+    assert torch.allclose(out, expected, rtol=RTOL[dtype], atol=0)
     assert not torch.isnan(out).any()
 
 
@@ -478,7 +483,7 @@ def test_pow_tensor_whole_exponent_gradient_matches_int_exponent(
     p = torch.tensor(float(exponent), **dd)
     (g_tensor,) = torch.autograd.grad(storch.safe_pow(x2, p).sum(), x2)
 
-    assert torch.equal(g_tensor, g_scalar)
+    assert torch.allclose(g_tensor, g_scalar, rtol=1e-14, atol=0)
     assert not torch.isnan(g_tensor).any()
 
 
@@ -526,7 +531,7 @@ def test_pow_mixed_exponent_tensor(xlist: list[float]) -> None:
     # each column equals the result for that exponent alone
     for i, e in enumerate(exponents):
         single = storch.safe_pow(x[:, 0], torch.tensor(e, **dd))
-        assert torch.equal(out[:, i], single)
+        assert torch.allclose(out[:, i], single, rtol=1e-14, atol=0)
 
 
 @pytest.mark.parametrize("bad", [0, 0.0, -1e-6, float("nan")])
