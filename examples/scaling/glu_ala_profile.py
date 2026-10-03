@@ -28,7 +28,8 @@ import argparse
 import contextlib
 import statistics
 import time
-from typing import Callable, Generator, TypeVar
+from collections.abc import Callable, Generator
+from typing import TypeVar
 
 import torch
 from torch.profiler import ProfilerActivity, profile, record_function

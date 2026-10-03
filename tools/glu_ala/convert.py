@@ -52,8 +52,8 @@ from __future__ import annotations
 import argparse
 import io
 import zipfile
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 import numpy as np
 import numpy.typing as npt

@@ -7,7 +7,7 @@ so the analytical result is verified against an independent method rather
 than merely printed.
 """
 
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 

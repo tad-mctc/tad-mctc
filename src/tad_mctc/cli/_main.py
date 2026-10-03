@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-from typing import Generator
+from collections.abc import Generator
 
 import torch
 

@@ -22,7 +22,7 @@ resulting candidate-triple index tensors.
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 import pytest
 import torch

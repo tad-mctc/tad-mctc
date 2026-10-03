@@ -20,7 +20,7 @@ atoms), see `examples/scaling/glu_ala.py`.
 
 import argparse
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 

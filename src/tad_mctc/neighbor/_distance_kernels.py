@@ -80,7 +80,8 @@ False
 
 from __future__ import annotations
 
-from typing import Callable, Literal, NamedTuple
+from collections.abc import Callable
+from typing import Literal, NamedTuple
 
 import torch
 

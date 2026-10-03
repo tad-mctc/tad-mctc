@@ -71,7 +71,8 @@ the same split :mod:`.list` draws between building and consuming a
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Iterator, NamedTuple
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 

@@ -180,7 +180,8 @@ import shutil
 import subprocess
 import time
 import warnings
-from typing import Any, Generator, Literal, NamedTuple
+from collections.abc import Generator
+from typing import Any, Literal, NamedTuple
 
 import torch
 

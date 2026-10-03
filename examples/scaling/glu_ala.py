@@ -65,8 +65,9 @@ import argparse
 import tarfile
 import time
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 import torch
 

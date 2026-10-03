@@ -36,9 +36,10 @@ masking are shared (:func:`_masked_pair_counts`).
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Literal, NamedTuple, Protocol
+from typing import Any, Literal, NamedTuple, Protocol
 
 import torch
 import torch.utils.checkpoint

@@ -52,20 +52,26 @@ def _systems(dtype: torch.dtype) -> list[Structure]:
         for i in range(2)
     ]
     # The test only means something if the molecules really differ.
-    assert int((systems[0].numbers != 0).sum()) != int((systems[1].numbers != 0).sum())
+    assert int((systems[0].numbers != 0).sum()) != int(
+        (systems[1].numbers != 0).sum()
+    )
     return systems
 
 
 def _lists(
     model: CNModel, systems: list[Structure], capacity: int | None = None
 ) -> list[NeighborList]:
-    nbls = [build_neighborlist(s, model.cutoff, capacity=capacity) for s in systems]
+    nbls = [
+        build_neighborlist(s, model.cutoff, capacity=capacity) for s in systems
+    ]
     if capacity is not None:
         return nbls
     # Auto-sized lists differ in length (a multiple of 4096 per system), but
     # `vmap` needs one: rebuild every list at the largest capacity.
     largest = max(nbl.idx_i.shape[0] for nbl in nbls)
-    return [build_neighborlist(s, model.cutoff, capacity=largest) for s in systems]
+    return [
+        build_neighborlist(s, model.cutoff, capacity=largest) for s in systems
+    ]
 
 
 def _mapped_cn(model: CNModel, systems: list[Structure]):
@@ -107,7 +113,9 @@ def _mapped_cn(model: CNModel, systems: list[Structure]):
 
 
 @pytest.mark.parametrize("variant_name", list(VARIANTS))
-@pytest.mark.parametrize("dtype,atol", [(torch.double, 1e-12), (torch.float, 1e-5)])
+@pytest.mark.parametrize(
+    "dtype,atol", [(torch.double, 1e-12), (torch.float, 1e-5)]
+)
 def test_vmap_over_systems_values(
     variant_name: str, dtype: torch.dtype, atol: float
 ) -> None:
@@ -283,6 +291,8 @@ def test_vmap_over_cells_gradients(variant_name: str) -> None:
         def single(pos: Tensor, lat: Tensor) -> Tensor:
             return model(cell.replace(positions=pos, lattice=lat), nbl).sum()
 
-        e_pos, e_lat = grad(single, argnums=(0, 1))(cell.positions, cell.lattice)
+        e_pos, e_lat = grad(single, argnums=(0, 1))(
+            cell.positions, cell.lattice
+        )
         assert torch.allclose(d_pos[i], e_pos, atol=1e-10, rtol=0)
         assert torch.allclose(d_lat[i], e_lat, atol=1e-10, rtol=0)
