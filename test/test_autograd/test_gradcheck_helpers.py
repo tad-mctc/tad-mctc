@@ -215,8 +215,9 @@ def test_no_vmap_fallback_raises_without_batching_rule() -> None:
         with pytest.raises(RuntimeError, match="vmap fallback"):
             torch.func.vmap(torch.histc)(x)
 
-    # vmap works again afterwards
-    out = torch.func.vmap(torch.histc)(x)
+    # vmap works again afterwards (and warns about the slow fallback)
+    with pytest.warns(UserWarning, match="batching rule"):
+        out = torch.func.vmap(torch.histc)(x)
     assert out.shape == (4, 100)
 
 

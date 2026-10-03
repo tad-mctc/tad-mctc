@@ -224,6 +224,9 @@ def test_forward_matches_reverse(model: CNModel, path: str) -> None:
 # -- compile --------------------------------------------------------------
 
 
+@pytest.mark.filterwarnings(
+    "ignore:remat_using_tags_for_fwd_loss_bwd_graph:UserWarning"
+)
 @pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 @pytest.mark.parametrize("path", PATHS)
 @pytest.mark.parametrize("model", PRESETS)
