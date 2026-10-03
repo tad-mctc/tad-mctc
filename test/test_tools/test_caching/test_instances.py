@@ -20,7 +20,7 @@ Test caching.
 
 from __future__ import annotations
 
-from typing import Any, Type, Union, cast
+from typing import Any, Union, cast
 
 import pytest
 
