@@ -468,3 +468,47 @@ def test_eighb_general_grad_batch(scheme: Literal["chol", "lowd"]) -> None:
         (a2, b2, numpy_to_tensor(sizes, **dd)),
         fast_mode=False,
     ), f"Non-degenerate batch test failed on {scheme}"
+
+
+def test_eig_sort_out_auxiliary() -> None:
+    """Auxiliary eigenvalues (one) are zeroed and moved to the end."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    w = torch.tensor([[1.0, 2.0, 3.0], [2.0, 3.0, 4.0]], **dd)
+    v = torch.eye(3, **dd).expand(2, 3, 3).clone()
+
+    w_out, v_out = storch.linalg._eig_sort_out(w, v, ghost=False)
+
+    # only the first system has an auxiliary eigenvalue
+    w_ref = torch.tensor([[2.0, 3.0, 0.0], [2.0, 3.0, 4.0]], **dd)
+    v_ref = v.clone()
+    v_ref[0] = v[0][:, [1, 2, 0]]
+
+    torch.testing.assert_close(w_out, w_ref)
+    torch.testing.assert_close(v_out, v_ref)
+
+
+def test_eighb_no_sort_out() -> None:
+    """Without `sort_out`, the eigenvalues are returned as computed."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    a = _symrng((10, 10), dd)
+    w_ref = torch.linalg.eigvalsh(a)
+
+    w, _ = storch.linalg.eighb(a, sort_out=False, aux=False)
+    torch.testing.assert_close(w, w_ref)
+
+
+def test_eighb_forward_mode_tensor_factor() -> None:
+    """Forward mode with the broadening factor given as a tensor."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    a = _symrng((5, 5), dd)
+    factor = torch.tensor(1e-12, **dd)
+
+    def f(x: Tensor) -> Tensor:
+        return storch.linalg.eighb(x, factor=factor, aux=False)[0]
+
+    fwd = torch.func.jacfwd(f)(a)
+    rev = torch.func.jacrev(f)(a)
+    torch.testing.assert_close(fwd, rev, atol=1e-8, rtol=1e-8)

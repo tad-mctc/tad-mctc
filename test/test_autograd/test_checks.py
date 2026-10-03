@@ -176,3 +176,19 @@ def test_true_under_compile(check: Callable[[torch.Tensor], bool]) -> None:
     x = torch.zeros(3)
     assert torch.equal(compile_fullgraph(f)(x), torch.ones(3))
     assert torch.equal(f(x), torch.zeros(3))
+
+
+@pytest.mark.parametrize(
+    "check",
+    [
+        checks.is_gradtracking,
+        checks.is_vmapped,
+        checks.is_functorch_tensor,
+    ],
+)
+def test_checks_true_while_compiling(
+    monkeypatch: pytest.MonkeyPatch, check: Callable[[torch.Tensor], bool]
+) -> None:
+    """While tracing, every check is `True` without touching functorch."""
+    monkeypatch.setattr(checks, "is_compiling", lambda: True)
+    assert check(torch.zeros(3)) is True

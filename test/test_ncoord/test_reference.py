@@ -36,8 +36,25 @@ from ._variants import VARIANTS
 from .samples import BATCH_PAIRS, pair_id, refs
 
 
+ATOL_DOUBLE = 1e-11
+"""Double-precision tolerance for every sample but `CUTOFF_SOURCE`."""
+
+CUTOFF_SOURCE = ("other", "periodic_one_atom")
+"""A 5 Bohr cubic cell with the default 25 Bohr cutoff: 30 images sit at
+exactly the cutoff, each adding ~2.5e-10 to the CN, and `distance <= cutoff`
+flips on a last-bit difference. CI saw this sample off by 5e-10 once
+(py313, torch 2.6.0 and 2.7.1) and could not be reproduced locally."""
+
+ATOL_CUTOFF_SOURCE = 1e-8
+"""Covers a few images flipping (30 x 2.5e-10 = 7.5e-9 at most)."""
+
+
 def _assert_close(
-    ref: Tensor, cn: Tensor, dtype: torch.dtype, abs_tol: float | None
+    ref: Tensor,
+    cn: Tensor,
+    dtype: torch.dtype,
+    abs_tol: float | None,
+    atol: float = ATOL_DOUBLE,
 ) -> None:
     """
     In double precision, every sample agrees with Fortran to ~1e-14, so
@@ -55,7 +72,7 @@ def _assert_close(
         # abs/rel deviation and the offending index instead of a bare
         # `False`, which is what a rare, tolerance-boundary mismatch
         # needs to be diagnosed rather than re-guessed at.
-        torch.testing.assert_close(cn, ref, atol=1e-11, rtol=0)
+        torch.testing.assert_close(cn, ref, atol=atol, rtol=0)
     elif abs_tol is None:
         assert pytest.approx(ref.cpu()) == cn.cpu()
     else:
@@ -81,7 +98,8 @@ def test_single(
     ref = _ref(source, variant.ref_key, dd)
 
     cn = variant.call(structure)
-    _assert_close(ref, cn, dtype, variant.abs_tol)
+    atol = ATOL_CUTOFF_SOURCE if source == CUTOFF_SOURCE else ATOL_DOUBLE
+    _assert_close(ref, cn, dtype, variant.abs_tol, atol)
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])
@@ -99,7 +117,8 @@ def test_batch(
     ref = pack([_ref(source, variant.ref_key, dd) for source in pair])
 
     cn = variant.call(structure)
-    _assert_close(ref, cn, dtype, variant.abs_tol)
+    atol = ATOL_CUTOFF_SOURCE if CUTOFF_SOURCE in pair else ATOL_DOUBLE
+    _assert_close(ref, cn, dtype, variant.abs_tol, atol)
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])

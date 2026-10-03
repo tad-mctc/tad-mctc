@@ -31,7 +31,6 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-import numpy as np
 import torch
 
 from ..convert import symmetrize
@@ -492,10 +491,10 @@ def _eig_sort_out(
     )
 
     # argsort fixes the batch order and stops eigen-values accidentally being
-    # mixed between different systems. As PyTorch's argsort is not stable, i.e.
-    # it dose not respect any order already present in the data, numpy's argsort
-    # must be used for now.
-    sorter = np.argsort(indices[0].cpu(), kind="stable")
+    # mixed between different systems. The sort must be stable, i.e. respect
+    # any order already present in the data. Unlike numpy's, torch's stable
+    # sort also works on tensors wrapped by `torch.func` transforms.
+    sorter = torch.argsort(indices[0], stable=True)
 
     # Apply sorter to indices; use a tuple to make 1D & 2D cases compatible
     sorted_indices = tuple(indices[..., sorter])

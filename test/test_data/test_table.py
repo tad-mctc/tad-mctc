@@ -23,8 +23,10 @@ from __future__ import annotations
 import functools
 import gc
 
+import pytest
 import torch
 
+import tad_mctc.data.table as table_module
 from tad_mctc.data import radii
 from tad_mctc.data.table import _TABLE_CACHE, resolve_table
 
@@ -155,3 +157,24 @@ def test_not_weakly_referenceable_is_not_cached() -> None:
     resolve_table(table, like)
 
     assert table.calls == 2
+
+
+def test_compiling_bypasses_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """While tracing, the table is built on every call and not cached."""
+    calls = 0
+
+    def table(
+        *, device: torch.device | None = None, dtype: torch.dtype
+    ) -> torch.Tensor:
+        nonlocal calls
+        calls += 1
+        return torch.arange(10, device=device, dtype=dtype)
+
+    monkeypatch.setattr(table_module, "is_compiling", lambda: True)
+
+    like = torch.zeros(3, dtype=torch.double)
+    resolve_table(table, like)
+    resolve_table(table, like)
+
+    assert calls == 2
+    assert table not in _TABLE_CACHE

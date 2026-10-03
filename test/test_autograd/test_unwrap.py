@@ -20,9 +20,11 @@ Test unwrapping of function-transformed tensors.
 
 from __future__ import annotations
 
+import pytest
 import torch
 from torch.func import jacrev, vmap
 
+import tad_mctc.autograd.unwrap as unwrap
 from tad_mctc.autograd import unwrap_gradtracking
 
 ft = torch._C._functorch  # pylint: disable=protected-access
@@ -63,3 +65,11 @@ def test_stops_at_vmap() -> None:
 
     assert not ft.is_gradtrackingtensor(seen[0])
     assert ft.is_batchedtensor(seen[0])
+
+
+def test_unchanged_while_compiling(monkeypatch: pytest.MonkeyPatch) -> None:
+    """While tracing, the tensor is returned as is."""
+    monkeypatch.setattr(unwrap, "is_compiling", lambda: True)
+
+    x = torch.ones(3)
+    assert unwrap_gradtracking(x) is x
