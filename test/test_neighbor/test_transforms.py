@@ -27,6 +27,7 @@ outside is covered by `test_ncoord/test_transforms.py`.
 from __future__ import annotations
 
 from collections.abc import Generator
+from typing import Any
 
 import pytest
 import torch
@@ -39,7 +40,12 @@ from tad_mctc.neighbor.list import NeighborList, build_neighborlist
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
-from ..utils import DYNAMO_SUPPORTED, DYNAMO_UNSUPPORTED_REASON, load_structure
+from ..utils import (
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    jacrev,
+    load_structure,
+)
 
 DD_DOUBLE: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -54,7 +60,7 @@ def _no_layer_left_behind() -> Generator[None]:
     any test, whether the build or the transform raised or not, none is
     left on the stack."""
     yield
-    assert torch._C._functorch.peek_interpreter_stack() is None
+    assert getattr(torch._C, "_functorch").peek_interpreter_stack() is None
 
 
 def _molecule() -> Structure:
@@ -88,7 +94,7 @@ def _check_list_built_inside_jacrev(structure: Structure) -> None:
         )
         return positions.sum()
 
-    torch.func.jacrev(f)(structure.positions)
+    jacrev(f)(structure.positions)
 
     assert len(seen) == 1
     _assert_same_list(seen[0], expected)
@@ -109,8 +115,8 @@ def _check_gradient_with_list_built_inside_jacrev(
         built = build_neighborlist(target, CUTOFF)
         return cn_d3(target, pairs=built).sum()
 
-    ref = torch.func.jacrev(outside)(structure.positions)
-    out = torch.func.jacrev(inside)(structure.positions)
+    ref = jacrev(outside)(structure.positions)
+    out = jacrev(inside)(structure.positions)
 
     assert torch.isfinite(out).all()
     assert out.abs().sum() > 0
@@ -150,7 +156,7 @@ def test_list_built_inside_jacrev_wrt_lattice() -> None:
         )
         return lattice.sum()
 
-    torch.func.jacrev(f)(structure.lattice)
+    jacrev(f)(structure.lattice)
 
     assert len(seen) == 1
     _assert_same_list(seen[0], expected)
@@ -168,7 +174,7 @@ def test_list_built_inside_nested_jacrev() -> None:
         )
         return (positions**2).sum()
 
-    torch.func.jacrev(torch.func.jacrev(f))(structure.positions)
+    jacrev(jacrev(f))(structure.positions)
 
     assert len(seen) == 1
     _assert_same_list(seen[0], expected)
@@ -216,7 +222,7 @@ def test_list_built_inside_vmap_of_jacrev_raises() -> None:
 
     stacked = torch.stack([structure.positions, structure.positions])
     with pytest.raises(RuntimeError, match=VMAP_MESSAGE):
-        torch.func.vmap(torch.func.jacrev(f))(stacked)
+        torch.func.vmap(jacrev(f))(stacked)
 
 
 def test_list_built_inside_jacrev_of_vmap_raises() -> None:
@@ -231,7 +237,7 @@ def test_list_built_inside_jacrev_of_vmap_raises() -> None:
         return torch.func.vmap(f)(positions).sum()
 
     with pytest.raises(RuntimeError, match=VMAP_MESSAGE):
-        torch.func.jacrev(batched)(stacked)
+        jacrev(batched)(stacked)
 
 
 ########################################################################
@@ -270,7 +276,7 @@ def test_list_built_inside_fullgraph_compile_raises() -> None:
             structure.replace(positions=positions), CUTOFF
         ).idx_i
 
-    with pytest.raises(torch._dynamo.exc.Unsupported):
+    with pytest.raises(getattr(torch._dynamo, "exc").Unsupported):
         torch.compile(f, fullgraph=True)(structure.positions)
 
 
@@ -309,7 +315,7 @@ def test_list_built_inside_jacrev_of_compiled_function() -> None:
         assert torch.equal(built.idx_i, expected.idx_i)
         return (positions**2).sum()
 
-    out = torch.func.jacrev(torch.compile(f))(structure.positions)
+    out = jacrev(torch.compile(f))(structure.positions)
     assert torch.allclose(out, 2 * structure.positions)
 
 
@@ -359,7 +365,8 @@ def test_list_built_inside_jvp() -> None:
         return (positions**2).sum()
 
     positions = structure.positions
-    _, tangent = torch.func.jvp(f, (positions,), (torch.ones_like(positions),))
+    jvp: Any = torch.func.jvp
+    _, tangent = jvp(f, (positions,), (torch.ones_like(positions),))
 
     assert torch.allclose(tangent, 2 * positions.sum())
 
@@ -380,7 +387,7 @@ def _check_only_integers_cross_the_boundary(structure: Structure) -> None:
         )
         return positions.sum()
 
-    torch.func.jacrev(f)(structure.positions)
+    jacrev(f)(structure.positions)
 
     built = seen[0]
     assert built.idx_i.dtype == torch.long
@@ -394,7 +401,9 @@ def _check_only_integers_cross_the_boundary(structure: Structure) -> None:
         tensor = getattr(built, name)
         if tensor is not None:
             assert not tensor.is_floating_point()
-            assert not torch._C._functorch.is_functorch_wrapped_tensor(tensor)
+            assert not getattr(
+                torch._C, "_functorch"
+            ).is_functorch_wrapped_tensor(tensor)
 
 
 def test_only_integers_cross_the_boundary_molecule() -> None:
@@ -416,7 +425,7 @@ def test_list_does_not_alias_the_periodic_axes_it_was_built_from() -> None:
         )
         return positions.sum()
 
-    torch.func.jacrev(f)(structure.positions)
+    jacrev(f)(structure.positions)
 
     axes = seen[0].periodic_axes
     assert axes is not None
@@ -463,7 +472,7 @@ def test_gradient_wrt_lattice_matches_finite_differences_cell() -> None:
     # the CN is a step (see `test_ncoord/test_transforms.py`)
     lattice = 1.013 * structure.lattice
 
-    jac = torch.func.jacrev(f)(lattice)
+    jac = jacrev(f)(lattice)
     assert jac.abs().sum() > 0
     assert jacrev_matches_finite_diff(f, lattice)
 
@@ -489,12 +498,12 @@ def test_layers_come_back_after_a_failed_build(
         return positions.sum()
 
     with pytest.raises(ValueError, match="search failed"):
-        torch.func.jacrev(torch.func.jacrev(f))(structure.positions)
-    assert torch._C._functorch.peek_interpreter_stack() is None
+        jacrev(jacrev(f))(structure.positions)
+    assert getattr(torch._C, "_functorch").peek_interpreter_stack() is None
 
     monkeypatch.undo()
 
-    out = torch.func.jacrev(lambda p: (p**2).sum())(structure.positions)
+    out = jacrev(lambda p: (p**2).sum())(structure.positions)
     assert torch.allclose(out, 2 * structure.positions)
 
 
@@ -504,7 +513,9 @@ def test_vmap_error_leaves_the_stack_alone() -> None:
     depth: list[int] = []
 
     def f(positions: Tensor) -> Tensor:
-        depth.append(torch._C._functorch.peek_interpreter_stack().level())
+        depth.append(
+            getattr(torch._C, "_functorch").peek_interpreter_stack().level()
+        )
         build_neighborlist(structure.replace(positions=positions), CUTOFF)
         return positions.sum()
 
@@ -524,4 +535,4 @@ def test_private_functorch_symbols_exist() -> None:
         "pop_dynamic_layer_stack",
         "push_dynamic_layer_stack",
     ):
-        assert callable(getattr(torch._C._functorch, name))
+        assert callable(getattr(getattr(torch._C, "_functorch"), name))

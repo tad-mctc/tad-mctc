@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import pytest
 import torch
-from torch.func import jacrev
 
 from tad_mctc.batch import pack
 from tad_mctc.data import radii
@@ -41,6 +40,7 @@ from tad_mctc.ncoord.count import erf_count, exp_count, gfn2_count
 from tad_mctc.typing import CountingFunction
 
 from ..conftest import DEVICE
+from ..utils import jacrev
 
 ########################################################################
 # Accuracy

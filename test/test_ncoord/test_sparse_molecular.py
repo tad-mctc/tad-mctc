@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import pytest
 import torch
-from torch.func import jacrev, vmap
+from torch.func import vmap
 
 from tad_mctc.autograd import dgradcheck, dgradgradcheck
 from tad_mctc.data.structures import get_structure
@@ -52,7 +52,7 @@ from tad_mctc.neighbor.list import build_neighborlist
 from tad_mctc.typing import DD, Callable, Tensor
 
 from ..conftest import DEVICE
-from ..utils import hydrogens
+from ..utils import hydrogens, jacrev
 
 ########################################################################
 # A cutoff that truncates
@@ -234,7 +234,9 @@ def f_dense(positions: torch.Tensor) -> torch.Tensor:
     return (cn * WEIGHT).sum()
 
 
-def f_sparse(positions: torch.Tensor, mode: str = "graph") -> torch.Tensor:
+def f_sparse(
+    positions: torch.Tensor, mode: NeighborListMode = "graph"
+) -> torch.Tensor:
     structure = STRUCTURE.replace(positions=positions)
     cn = MODEL(structure, pairs=NBL, mode=mode)
     return (cn * WEIGHT).sum()

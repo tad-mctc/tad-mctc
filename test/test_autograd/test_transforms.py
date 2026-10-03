@@ -45,7 +45,7 @@ import itertools
 
 import pytest
 import torch
-from torch.func import jacfwd, jacrev, vmap
+from torch.func import vmap
 
 from tad_mctc.batch import psort
 from tad_mctc.batch.mask import zero_masked_pairs
@@ -89,6 +89,8 @@ from ..conftest import DEVICE
 from ..utils import (
     DYNAMO_SUPPORTED,
     DYNAMO_UNSUPPORTED_REASON,
+    jacfwd,
+    jacrev,
     run_compiled_or_skip,
 )
 

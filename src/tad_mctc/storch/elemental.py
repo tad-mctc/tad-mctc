@@ -128,43 +128,61 @@ def safe_pow(
     eps: Tensor | float | int | None = None,
 ) -> Tensor:
     """
-    Takes the power of each element in input with exponent and returns a tensor with the result.
+    Power ``x ** exponent`` that stays finite, with finite gradients, where
+    ``torch.pow`` would give NaN or infinity.
 
-    This is a safer version of ``torch.pow`` (``out = x ** exponent``), which avoids:
+    The result equals ``torch.pow(x, exponent)`` except at these points:
 
-    1. NaN/imaginary output when ``x < 0`` and exponent has a fractional part
-        In this case, the function returns the signed (negative) magnitude of the complex number.
+    - ``x == 0`` with a negative exponent, or a positive fractional
+      exponent: the base is replaced by ``eps`` for the power (a negative
+      exponent gives ``eps ** exponent``); for a positive fractional
+      exponent the output is then set to exactly 0.
+    - ``x < 0`` with a fractional exponent: the base is replaced by
+      ``eps``, so the output is the constant ``eps ** exponent`` (not the
+      signed magnitude ``-|x| ** exponent``).
 
-    2. NaN/infinite gradient at ``x = 0`` when exponent has a fractional part
-        In this case, the positions of 0 are added by ``epsilon``,
-        so the gradient is back-propagated as if ``x = epsilon``.
+    Negative bases with a whole-number exponent (also as a tensor) are
+    exact, e.g. ``(-2) ** 3 == -8``.
 
-    However, this function doesn't deal with float overflow, such as 1e10000.
+    At every replaced position the base is chosen with ``torch.where``,
+    so the gradient with respect to ``x`` there is 0 (it flows to ``eps``
+    instead). Only exact zeros and negative values are guarded: tiny
+    positive inputs still give huge or overflowing gradients. Overflow of
+    the result is not handled either, e.g. ``0 ** -6`` is ``inf`` in
+    float32 because ``eps ** -6`` exceeds the float32 range.
 
     Parameters
     ----------
-    x : torch.Tensor or float
-        The input base value.
-
-    exponent : torch.Tensor or float
-        The exponent value.
-
-        (At least one of ``x`` and ``exponent`` must be a torch.Tensor)
-
-    epsilon : float
-        A small floating point value to avoid infinite gradient. Default: 1e-6
+    x : Tensor
+        The base. Must be a tensor (its dtype and device are used).
+    exponent : Tensor | float | int
+        The exponent. A tensor exponent is handled without data-dependent
+        branching, so it works under ``torch.compile(fullgraph=True)``.
+    eps : Tensor | float | int | None, optional
+        Replacement value, which must be larger than 0 (a zero, negative or
+        NaN value raises ``ValueError``; a tensor is only checked in eager
+        mode). Defaults to ``torch.finfo(x.dtype).eps`` (about 1.2e-7 for
+        float32 and 2.2e-16 for float64).
 
     Returns
     -------
-    out : torch.Tensor
+    Tensor
         The output tensor.
+
+    Raises
+    ------
+    ValueError
+        If ``eps`` is not larger than 0 or ``exponent`` has an unsupported
+        type.
+    TypeError
+        If ``eps`` has an unsupported type.
     """
     if eps is None:
         eps = get_eps(x)
     elif isinstance(eps, (float, int)):
         # A Python number is a constant to Dynamo, so this check also runs
         # under `torch.compile`.
-        if eps == 0:
+        if not eps > 0:
             raise ValueError(
                 "Value for clamping must be larger than 0.0, but "
                 f"{eps} was given."
@@ -172,19 +190,21 @@ def safe_pow(
         eps = torch.tensor(eps, device=x.device, dtype=x.dtype)
     elif isinstance(eps, Tensor):
         eps = eps.to(device=x.device, dtype=x.dtype)
+        # `(eps > 0).all()` reads a tensor's value, which is data-dependent
+        # control flow that `torch.compile(fullgraph=True)` (Dynamo)
+        # rejects. Skip the domain check of a `Tensor` eps while compiling,
+        # same as `safe_sqrt`; eager mode still validates. Only a
+        # user-supplied `eps` is checked, so the default path never syncs
+        # with the device. Negating `> 0` also rejects NaN.
+        if not is_compiling() and not (eps > 0).all():
+            raise ValueError(
+                "Value for clamping must be larger than 0.0, but "
+                f"{eps} was given."
+            )
     else:
         raise TypeError(
             "Value for clamping must be None (default), Tensor, float, or int, "
             f"but {type(eps)} was given."
-        )
-
-    # `(eps == 0).any()` reads a tensor's value, which is data-dependent
-    # control flow that `torch.compile(fullgraph=True)` (Dynamo) rejects.
-    # Skip the domain check of a `Tensor` eps while compiling, same as
-    # `safe_sqrt`; eager mode still validates.
-    if not is_compiling() and (eps == 0).any():
-        raise ValueError(
-            f"Value for clamping must be larger than 0.0, but {eps} was given."
         )
 
     def _int(x: Tensor, exponent: int) -> Tensor:
@@ -197,10 +217,13 @@ def safe_pow(
         return torch.pow(x, exponent)
 
     def _float(x: Tensor, exponent: float | Tensor) -> Tensor:
-        # float positive exponents fail for x < 0
+        # float positive exponents fail for x < 0, and their higher
+        # derivatives are infinite at x = 0 (e.g. `x**1.5`): evaluate the
+        # power at a safe base there and put the exact value 0 back, so the
+        # derivatives at the masked point stay finite.
         if exponent > 0:
-            x = torch.where(x < 0, eps, x)
-            return torch.pow(x, exponent)
+            safe = torch.where(x <= 0, eps, x)
+            return torch.where(x == 0, 0.0, torch.pow(safe, exponent))
 
         # float negative exponents fail for x <= 0
         x = torch.where(x <= 0, eps, x)
@@ -217,28 +240,34 @@ def safe_pow(
         return _float(x, exponent)
 
     if isinstance(exponent, Tensor):
-        # Branching on this predicate with an `if` would read a tensor's
-        # value at trace time (data-dependent control flow, rejected by
-        # `torch.compile(fullgraph=True)`). Unlike the `eps == 0`
-        # check above, this is not a validation guard that can simply be
-        # skipped while compiling: the two sides disagree at `x == 0` (fast
-        # path leaves `0 ** positive_exponent == 0` untouched, slow path
-        # would substitute `eps` for that `0` first). So the predicate is
-        # kept -- as a tensor, not a Python `bool` -- and used to select the
-        # *base* fed into a single `torch.pow` call instead of choosing
-        # between two separate `torch.pow` calls. `torch.where` returns `x`
-        # unchanged when the fast path applies (bit-identical to
-        # `torch.pow(x, exponent)`) and the eps-clamped values otherwise
-        # (bit-identical to `torch.pow` on the clamped base), so eager and
-        # compiled results agree exactly. Selecting between the
-        # two `torch.pow` *results* instead of the base would evaluate both,
-        # and the discarded one is NaN for `x < 0` with a fractional
-        # exponent, which would poison gradients through `torch.where`'s
-        # backward (`0 * NaN = NaN`).
-        fast_path_applies = (exponent > 0).all() & (x >= 0).all()
-        x_clamped = torch.where(x <= 0, eps, x)
-        x_safe = torch.where(fast_path_applies, x, x_clamped)
-        return torch.pow(x_safe, exponent)
+        # The sign of a tensor exponent cannot be branched on with an `if`:
+        # that would read a tensor's value at trace time (data-dependent
+        # control flow, rejected by `torch.compile(fullgraph=True)`). So
+        # every case is selected with `torch.where` on the *base* fed into
+        # a single `torch.pow` call: selecting between two `torch.pow`
+        # *results* instead would evaluate both, and the discarded one is
+        # NaN for `x < 0` with a fractional exponent, which would poison
+        # gradients through `torch.where`'s backward (`0 * NaN = NaN`).
+        #
+        # Whole-number exponents are well defined for negative bases, so
+        # they use `|x|` and restore the sign for odd exponents; this keeps
+        # `safe_pow(x, 2)` and `safe_pow(x, torch.tensor(2.0))` equal. Other
+        # negative bases are replaced by `eps`, as are zeros where `0 **
+        # exponent` is singular. Positive whole-number exponents are smooth
+        # at 0 (like `_int`), so `x == 0` is left alone for them; positive
+        # fractional exponents get their exact value 0 put back afterwards.
+        is_whole = exponent == torch.round(exponent)
+        is_odd = is_whole & (torch.remainder(exponent, 2) == 1)
+        smooth = is_whole & (exponent > 0)
+        negative = x < 0
+
+        magnitude = torch.where(negative & is_whole, -x, x)
+        singular = ((x == 0) & ~smooth) | (negative & ~is_whole)
+        power = torch.pow(torch.where(singular, eps, magnitude), exponent)
+
+        is_zero = (x == 0) & (exponent > 0) & ~smooth
+        power = torch.where(is_zero, 0.0, power)
+        return torch.where(negative & is_odd, -power, power)
 
     raise ValueError(
         "Value for exponent must be integer, float, or Tensor, but "

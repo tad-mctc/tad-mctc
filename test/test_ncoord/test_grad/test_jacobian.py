@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import pytest
 import torch
-from torch.func import jacrev, vmap
+from torch.func import vmap
 
 from tad_mctc.autograd import numgrad
 from tad_mctc.convert import tensor_to_numpy
@@ -35,7 +35,7 @@ from tad_mctc.io.structure import Structure
 from tad_mctc.typing import DD, Tensor
 
 from ...conftest import DEVICE
-from ...utils import load_batch, load_structure
+from ...utils import jacrev, load_batch, load_structure
 from .._paths import Bind, bind_dense, bind_precomputed, bind_sparse
 from .._variants import VARIANTS
 from ..samples import (

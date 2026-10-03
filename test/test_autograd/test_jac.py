@@ -20,11 +20,11 @@ Test hessian.
 
 import pytest
 import torch
-from torch.func import jacrev
 
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
+from ..utils import jacrev
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])

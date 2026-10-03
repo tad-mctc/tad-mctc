@@ -27,7 +27,7 @@ from torch.func import jacrev, vmap
 import tad_mctc.autograd.unwrap as unwrap
 from tad_mctc.autograd import unwrap_gradtracking
 
-ft = torch._C._functorch  # pylint: disable=protected-access
+ft = getattr(torch._C, "_functorch")  # pylint: disable=protected-access
 
 
 def test_plain_tensor_unchanged() -> None:

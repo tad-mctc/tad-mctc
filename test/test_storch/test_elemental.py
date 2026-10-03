@@ -440,3 +440,162 @@ def test_reciprocal(dtype: torch.dtype) -> None:
 
     out = storch.safe_reciprocal(x, eps=torch.tensor(torch.finfo(dtype).eps))
     assert (torch.isnan(out) == False).all()
+
+
+# `torch.pow` with a scalar and with a tensor exponent can differ in the last
+# bit (different kernels, e.g. on macOS), so parity checks use a tolerance.
+RTOL = {torch.float32: 1e-6, torch.float64: 1e-14}
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("exponent", [-3, -2, -1, 0, 1, 2, 3])
+def test_pow_tensor_whole_exponent_matches_int_exponent(
+    dtype: torch.dtype, exponent: int
+) -> None:
+    dd: DD = {"device": DEVICE, "dtype": dtype}
+    x = torch.tensor([-2.0, -0.5, 0.0, 0.5, 2.0], **dd)
+
+    expected = storch.safe_pow(x, exponent)
+    out = storch.safe_pow(x, torch.tensor(float(exponent), **dd))
+
+    assert torch.allclose(out, expected, rtol=RTOL[dtype], atol=0)
+    assert not torch.isnan(out).any()
+
+
+def test_pow_tensor_exponent_negative_base_whole() -> None:
+    x = torch.tensor([-2.0], dtype=torch.float64)
+
+    out = storch.safe_pow(x, torch.tensor(-1.0, dtype=torch.float64))
+    assert torch.allclose(out, torch.tensor([-0.5], dtype=torch.float64))
+
+
+@pytest.mark.parametrize("exponent", [-3, -2, -1, 0, 1, 2, 3])
+@pytest.mark.parametrize("xval", [-2.0, 0.0, 2.0])
+def test_pow_tensor_whole_exponent_gradient_matches_int_exponent(
+    exponent: int, xval: float
+) -> None:
+    dd: DD = {"device": DEVICE, "dtype": torch.float64}
+
+    x1 = torch.tensor([xval], requires_grad=True, **dd)
+    (g_scalar,) = torch.autograd.grad(storch.safe_pow(x1, exponent).sum(), x1)
+
+    x2 = torch.tensor([xval], requires_grad=True, **dd)
+    p = torch.tensor(float(exponent), **dd)
+    (g_tensor,) = torch.autograd.grad(storch.safe_pow(x2, p).sum(), x2)
+
+    assert torch.allclose(g_tensor, g_scalar, rtol=1e-14, atol=0)
+    assert not torch.isnan(g_tensor).any()
+
+
+def test_pow_tensor_exponent_one_has_unit_gradient_at_zero() -> None:
+    dd: DD = {"device": DEVICE, "dtype": torch.float64}
+    x = torch.tensor([0.0], requires_grad=True, **dd)
+
+    (grad,) = torch.autograd.grad(
+        storch.safe_pow(x, torch.tensor(1.0, **dd)).sum(), x
+    )
+    assert torch.equal(grad, torch.ones_like(grad))
+
+
+def test_pow_tensor_exponent_gradcheck_negative_base() -> None:
+    dd: DD = {"device": DEVICE, "dtype": torch.float64}
+    x = torch.tensor([-2.0, -1.5], requires_grad=True, **dd)
+    p = torch.tensor([3.0, 2.0], **dd)
+
+    assert torch.autograd.gradcheck(storch.safe_pow, (x, p))
+
+    # Finite differences cannot check the gradient with respect to the
+    # exponent: a negative base is only defined for whole exponents, which
+    # a perturbed exponent is not. Compare with the analytic value
+    # d/dp (sign * |x|**p) = sign * |x|**p * log|x| instead.
+    p = torch.tensor([3.0, 2.0], requires_grad=True, **dd)
+    x = torch.tensor([-2.0, -1.5], **dd)
+    (grad,) = torch.autograd.grad(storch.safe_pow(x, p).sum(), p)
+
+    sign = torch.tensor([-1.0, 1.0], **dd)
+    expected = sign * x.abs() ** p.detach() * x.abs().log()
+    assert torch.allclose(grad, expected)
+
+
+@pytest.mark.parametrize("xlist", [[-2.0], [-0.5, 0.0, 0.5], [2.0, 3.0]])
+def test_pow_mixed_exponent_tensor(xlist: list[float]) -> None:
+    dd: DD = {"device": DEVICE, "dtype": torch.float64}
+    x = torch.tensor(xlist, **dd).unsqueeze(-1)
+    exponents = [-3.0, -0.5, 0.0, 1.0, 1.5, 2.0]
+    p = torch.tensor(exponents, **dd)
+
+    out = storch.safe_pow(x, p)
+    assert out.shape == (len(xlist), len(exponents))
+    assert not torch.isnan(out).any()
+
+    # each column equals the result for that exponent alone
+    for i, e in enumerate(exponents):
+        single = storch.safe_pow(x[:, 0], torch.tensor(e, **dd))
+        assert torch.allclose(out[:, i], single, rtol=1e-14, atol=0)
+
+
+@pytest.mark.parametrize("bad", [0, 0.0, -1e-6, float("nan")])
+def test_pow_rejects_nonpositive_or_nan_eps_number(bad: float) -> None:
+    x = torch.tensor([1.0, 2.0])
+    with pytest.raises(ValueError, match="larger than 0"):
+        storch.safe_pow(x, 2, eps=bad)
+
+
+@pytest.mark.parametrize("bad", [0.0, -1e-6, float("nan")])
+def test_pow_rejects_nonpositive_or_nan_eps_tensor(bad: float) -> None:
+    x = torch.tensor([1.0, 2.0])
+    with pytest.raises(ValueError, match="larger than 0"):
+        storch.safe_pow(x, 0.5, eps=torch.tensor([1e-6, bad]))
+
+
+@pytest.mark.parametrize("exponent", [-0.5, 0.5, 1.5])
+@pytest.mark.parametrize("xval", [-2.0, 0.0, 2.0])
+def test_pow_scalar_and_tensor_fractional_exponent_agree(
+    exponent: float, xval: float
+) -> None:
+    dd: DD = {"device": DEVICE, "dtype": torch.float64}
+
+    x1 = torch.tensor([xval], requires_grad=True, **dd)
+    out_scalar = storch.safe_pow(x1, exponent)
+    (g_scalar,) = torch.autograd.grad(out_scalar.sum(), x1)
+
+    x2 = torch.tensor([xval], requires_grad=True, **dd)
+    out_tensor = storch.safe_pow(x2, torch.tensor(exponent, **dd))
+    (g_tensor,) = torch.autograd.grad(out_tensor.sum(), x2)
+
+    # `torch.pow` with a scalar and with a tensor exponent can differ in the
+    # last bit (different kernels), so compare with a tight tolerance
+    assert torch.allclose(out_tensor, out_scalar, rtol=1e-14, atol=0)
+    assert torch.allclose(g_tensor, g_scalar, rtol=1e-14, atol=0)
+    assert not torch.isnan(g_tensor).any()
+
+
+def test_pow_zero_base_positive_fractional_exponent_is_zero() -> None:
+    dd: DD = {"device": DEVICE, "dtype": torch.float64}
+    x = torch.zeros(1, **dd)
+
+    assert storch.safe_pow(x, 0.5).item() == 0.0
+    assert storch.safe_pow(x, torch.tensor(0.5, **dd)).item() == 0.0
+
+
+def test_pow_default_eps_is_not_validated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default `eps` (and a number) must not read tensor values, which
+    would synchronize with the device on every call."""
+    calls: list[int] = []
+    original = torch.Tensor.all
+
+    def spy(self: torch.Tensor, *args, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append(1)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(torch.Tensor, "all", spy)
+
+    x = torch.tensor([1.0, 2.0])
+    storch.safe_pow(x, 0.5)
+    storch.safe_pow(x, 0.5, eps=1e-6)
+    assert calls == []
+
+    storch.safe_pow(x, 0.5, eps=torch.tensor(1e-6))
+    assert calls == [1]

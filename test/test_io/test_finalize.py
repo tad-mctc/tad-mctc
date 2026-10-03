@@ -110,7 +110,7 @@ def test_format_reader_rejects_coldfusion_options(
     filepath = _write_fused(tmp_path, "xyz")
 
     with pytest.raises(TypeError, match=option):
-        read.read_xyz(filepath, **{option: True})
+        read.read_xyz(filepath, **{option: True})  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("name,ftype", FIXTURES)

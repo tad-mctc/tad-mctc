@@ -36,7 +36,7 @@ def test_is_gradtracking_true(monkeypatch: pytest.MonkeyPatch) -> None:
     """Should return True when torch._C._functorch.is_gradtrackingtensor is True."""
     dummy = object()
     monkeypatch.setattr(
-        torch._C._functorch,
+        getattr(torch._C, "_functorch"),
         "is_gradtrackingtensor",
         lambda x: True,
     )
@@ -47,7 +47,7 @@ def test_is_gradtracking_false(monkeypatch: pytest.MonkeyPatch) -> None:
     """Should return False when torch._C._functorch.is_gradtrackingtensor is False."""
     dummy = object()
     monkeypatch.setattr(
-        torch._C._functorch,
+        getattr(torch._C, "_functorch"),
         "is_gradtrackingtensor",
         lambda x: False,
     )
@@ -75,7 +75,7 @@ def test_gradtracking_tensor_via_grad() -> None:
         return x * x
 
     t = torch.tensor(4.0, requires_grad=True)
-    _ = torch.func.jacrev(f)(t)  # pyright: ignore[reportPrivateImportUsage]
+    _ = torch.func.jacrev(f)(t)
 
 
 def test_batched_tensor_via_vmap() -> None:
@@ -88,7 +88,7 @@ def test_batched_tensor_via_vmap() -> None:
         return x * x
 
     t = torch.randn((2, 4), requires_grad=True)
-    _ = torch.func.vmap(f)(t)  # pyright: ignore[reportPrivateImportUsage]
+    _ = torch.func.vmap(f)(t)
 
 
 def test_grad_and_batched_tensor() -> None:
@@ -102,8 +102,8 @@ def test_grad_and_batched_tensor() -> None:
         return x**3
 
     t = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
-    grad_fn = torch.func.grad(f)  # pyright: ignore[reportPrivateImportUsage]
-    _ = torch.func.vmap(grad_fn)(t)  # pyright: ignore[reportPrivateImportUsage]
+    grad_fn = torch.func.grad(f)
+    _ = torch.func.vmap(grad_fn)(t)
 
 
 @pytest.mark.parametrize(
@@ -133,8 +133,8 @@ def test_vmapped_vs_functorch_under_transforms(
 
     numbers = torch.tensor([[1, 1], [6, 1]])
     positions = torch.rand(2, 2, 3, dtype=torch.double)
-    jac = torch.func.jacrev  # pyright: ignore[reportPrivateImportUsage]
-    vmap = torch.func.vmap  # pyright: ignore[reportPrivateImportUsage]
+    jac = torch.func.jacrev
+    vmap = torch.func.vmap
 
     if transform == "eager":
         f(numbers[0], positions[0])

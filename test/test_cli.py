@@ -335,7 +335,7 @@ def test_system_info_leaves_out_charge_and_uhf_if_unset(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     numbers = torch.tensor([2])
-    structure = Structure(numbers, torch.zeros(1, 3))
+    structure = Structure(numbers=numbers, positions=torch.zeros(1, 3))
 
     print_system_info("he.xyz", structure)
     out = capsys.readouterr().out
@@ -349,8 +349,8 @@ def test_system_info_lists_charge_and_uhf_of_every_frame(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     structure = Structure(
-        torch.tensor([[2, 0], [1, 1]]),
-        torch.zeros(2, 2, 3),
+        numbers=torch.tensor([[2, 0], [1, 1]]),
+        positions=torch.zeros(2, 2, 3),
         charge=torch.tensor([0.0, 1.0]),
         uhf=torch.tensor([0.0, 2.0]),
     )
@@ -438,6 +438,18 @@ def test_timings_wait_for_queued_cuda_kernels(
     _timing._synchronize_cuda()
 
     assert calls == ["sync"]
+
+
+def test_timings_skip_synchronize_without_cuda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: False)
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda: calls.append("sync"))
+
+    _timing._synchronize_cuda()
+
+    assert calls == []
 
 
 def test_cuda_neighbour_list_does_not_report_the_native_extension(

@@ -155,7 +155,7 @@ def test_build_neighborlist_distance_kernel_unknown_name_raises() -> None:
     positions = torch.rand(10, 3, dtype=torch.float64, device="cpu")
     with pytest.raises(ValueError, match="not a known kernel"):
         build_neighborlist(
-            hydrogens(positions), cutoff=3.0, distance_kernel="nonexistent"
+            hydrogens(positions), cutoff=3.0, distance_kernel="nonexistent"  # type: ignore[arg-type]
         )
 
 
@@ -269,3 +269,22 @@ def test_baddbmm_error_does_not_grow_with_coordinates(
     near = exact <= (1.2 * cutoff) ** 2
     error = (computed - exact).abs()[near]
     assert float(error.max()) <= 16 * eps * cutoff**2
+
+
+def test_triton_import_failure_disables_triton(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib
+    import sys
+
+    from tad_mctc.neighbor import _distance_kernels
+
+    # a `None` entry makes `import triton` raise ImportError
+    monkeypatch.setitem(sys.modules, "triton", None)
+    monkeypatch.setitem(sys.modules, "triton.language", None)
+    try:
+        reloaded = importlib.reload(_distance_kernels)
+        assert reloaded.TRITON_AVAILABLE is False
+    finally:
+        monkeypatch.undo()
+        importlib.reload(_distance_kernels)

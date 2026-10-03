@@ -79,7 +79,7 @@ def test_unknown_mode_raises() -> None:
     nbl = build_neighborlist(structure, model.cutoff)
 
     with pytest.raises(ValueError, match="mode"):
-        model(structure, pairs=nbl, mode="not-a-mode")
+        model(structure, pairs=nbl, mode="not-a-mode")  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("source", ["none", "shifts"])

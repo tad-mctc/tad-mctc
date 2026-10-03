@@ -112,9 +112,10 @@ def tensor_to_numpy(x: Tensor, dtype: DTypeLike | None = None) -> NDArray[Any]:
 
     # pylint: disable=protected-access
     # see: https://github.com/pytorch/pytorch/issues/91810
-    if torch._C._functorch.is_gradtrackingtensor(x):
-        while torch._C._functorch.is_functorch_wrapped_tensor(x) is True:
-            x = torch._C._functorch.get_unwrapped(x)
+    ft = torch._C._functorch  # pyright: ignore[reportAttributeAccessIssue]
+    if ft.is_gradtrackingtensor(x):
+        while ft.is_functorch_wrapped_tensor(x) is True:
+            x = ft.get_unwrapped(x)
 
         storage_bytes = bytes(
             x.untyped_storage()

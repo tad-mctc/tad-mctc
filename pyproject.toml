@@ -87,6 +87,7 @@ exclude = [
   "tools/refs/_install_meson",
   "tools/refs/subprojects",
 ]
+reportPrivateImportUsage = false
 
 
 [tool.coverage.run]

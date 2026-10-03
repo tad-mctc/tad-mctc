@@ -59,7 +59,8 @@ def is_gradtracking(x: Tensor) -> bool:
     """
     if is_compiling():
         return True
-    return torch._C._functorch.is_gradtrackingtensor(x)
+    ft = torch._C._functorch  # pyright: ignore[reportAttributeAccessIssue]
+    return ft.is_gradtrackingtensor(x)
 
 
 def is_vmapped(x: Tensor) -> bool:
