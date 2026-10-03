@@ -35,6 +35,8 @@ from tad_mctc.neighbor.list import NeighborList, build_neighborlist
 from tad_mctc.tools import is_compile_supported
 from tad_mctc.tree import combine, leaf_paths
 
+from ..utils import compile_fullgraph
+
 # -- Structure ------------------------------------------------------------
 
 
@@ -277,7 +279,7 @@ def test_cnmodel_replace_inside_compile() -> None:
     def fn(s: Structure) -> torch.Tensor:
         return cn_d3.replace(cutoff=10.0)(s)
 
-    compiled = torch.compile(fn, fullgraph=True)
+    compiled = compile_fullgraph(fn)
     assert torch.allclose(compiled(structure), fn(structure))
 
 

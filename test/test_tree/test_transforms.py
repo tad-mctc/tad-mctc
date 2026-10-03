@@ -32,6 +32,7 @@ from tad_mctc._version import __tversion__
 from tad_mctc.tools import is_compile_supported
 from tad_mctc.tree import combine, partition, stack
 
+from ..utils import compile_fullgraph
 from .samples import Sub
 
 COMPILE = pytest.mark.skipif(
@@ -149,7 +150,7 @@ def test_to_inside_compile() -> None:
         return _energy(node.to(dtype=torch.float32))
 
     node = _sub()
-    compiled = torch.compile(fn, fullgraph=True)
+    compiled = compile_fullgraph(fn)
     assert torch.allclose(compiled(node), fn(node))
 
 
@@ -159,7 +160,7 @@ def test_construction_inside_compile() -> None:
         return _energy(Sub(numbers=n, positions=pos))
 
     node = _sub()
-    compiled = torch.compile(fn, fullgraph=True)
+    compiled = compile_fullgraph(fn)
     assert torch.allclose(
         compiled(node.numbers, node.positions), fn(node.numbers, node.positions)
     )
@@ -184,5 +185,5 @@ def test_replace_inside_compile() -> None:
         return _energy(node.replace(cutoff=10.0))
 
     node = _sub()
-    compiled = torch.compile(fn, fullgraph=True)
+    compiled = compile_fullgraph(fn)
     assert torch.allclose(compiled(node), fn(node))
