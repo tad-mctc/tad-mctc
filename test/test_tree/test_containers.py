@@ -291,3 +291,35 @@ def test_stacked_molecular_list_to_meta_keeps_batch_shape() -> None:
 
     assert new.shift.shape == (2, *nbl.shift.shape)
     assert new.shift.stride()[:-1] == (0, 0)
+
+
+def test_neighborlist_validate_periodic_mismatch() -> None:
+    with pytest.raises(ValueError, match="periodic"):
+        _periodic_list().replace(build_lattice=None)
+
+
+def test_neighborlist_validate_numbers_shape_mismatch() -> None:
+    nbl = _molecular_list()
+    with pytest.raises(ValueError, match="numbers_shape"):
+        nbl.replace(numbers_shape=(nbl.numbers_shape[0] + 1,))
+
+
+def test_neighborlist_validate_index_dtype() -> None:
+    nbl = _molecular_list()
+    for name in ("idx_i", "idx_j"):
+        with pytest.raises(ValueError, match=name):
+            nbl.replace(**{name: getattr(nbl, name).to(torch.int32)})
+
+
+def test_neighborlist_validate_mask_dtype() -> None:
+    nbl = _molecular_list()
+    with pytest.raises(ValueError, match="mask"):
+        nbl.replace(mask=nbl.mask.to(torch.uint8))
+
+
+def test_neighborlist_molecular_to_same_device_keeps_shift() -> None:
+    nbl = _molecular_list()
+    new = nbl.to(device=nbl.shift.device)
+
+    assert new.shift.stride() == (0, 1)
+    assert new.shift.device == nbl.shift.device

@@ -29,7 +29,7 @@ import pytest
 import torch
 from torch.utils import _pytree as pytree
 
-from tad_mctc.tree import Node, NodeLayoutError, child
+from tad_mctc.tree import Node, NodeLayoutError, child, context
 
 from .samples import Base, Holder, Override, Plain, Sub, _double
 
@@ -306,3 +306,121 @@ def test_replace_recomputes_structure() -> None:
 
     new = obj.replace(rcov=torch.zeros(3, dtype=torch.float64))
     assert len(pytree.tree_leaves(new)) == 3
+
+
+# -- Edge cases of containers, dtype/device lookup and layout checks -------
+
+
+class _Empty(Node):
+    x: torch.Tensor | None = child(default=None)
+
+
+class _IntOnly(Node):
+    numbers: torch.Tensor = child()
+
+
+def test_nested_container_child() -> None:
+    t = torch.rand(2, dtype=torch.float64)
+    holder = Holder(system=_sub(), extra={"a": [t, (t,)]})  # type: ignore[arg-type]
+
+    leaves, spec = pytree.tree_flatten(holder)
+    assert pytree.tree_unflatten(leaves, spec).extra["a"][0] is t
+
+
+def test_context_holding_container_of_tensor_raises() -> None:
+    class _Ctx(Node):
+        meta: object = context(default=None)
+
+    with pytest.raises(TypeError, match="context"):
+        _Ctx(meta={"a": torch.zeros(1)})
+
+
+def test_is_classvar_without_string_annotations() -> None:
+    from typing import ClassVar
+
+    from tad_mctc.tree.node import _is_classvar
+
+    assert _is_classvar(ClassVar[int])
+    assert _is_classvar(ClassVar)
+    assert not _is_classvar(int)
+
+
+def test_dtype_device_without_tensors() -> None:
+    holder = Holder(system=_Empty())
+    with pytest.raises(AttributeError, match="dtype"):
+        _ = holder.dtype
+    with pytest.raises(AttributeError, match="device"):
+        _ = holder.device
+
+    int_holder = Holder(system=_IntOnly(numbers=torch.tensor([1])))
+    with pytest.raises(AttributeError, match="dtype"):
+        _ = int_holder.dtype
+    assert int_holder.device == torch.device("cpu")
+
+
+def test_conversion_of_containers() -> None:
+    from collections import namedtuple
+
+    Pair = namedtuple("Pair", ["a", "b"])  # noqa: PYI024
+    t = torch.rand(2, dtype=torch.float64)
+
+    same = Holder(system=_sub(), extra={"a": t})
+    assert same.to(dtype=torch.float64).extra["a"] is t
+
+    converted = same.to(dtype=torch.float32)
+    assert isinstance(converted.extra, dict)
+    assert converted.extra["a"].dtype == torch.float32
+
+    as_list = Holder(system=_sub(), extra=[t])  # type: ignore[arg-type]
+    new_list = as_list.to(dtype=torch.float32)
+    assert isinstance(new_list.extra, list)
+    assert new_list.extra[0].dtype == torch.float32
+
+    pair = Holder(system=_sub(), extra=Pair(t, t))  # type: ignore[arg-type]
+    new = pair.to(dtype=torch.float32)
+    assert isinstance(new.extra, Pair)
+    assert new.extra.b.dtype == torch.float32
+
+
+def test_normalize_unknown_field_raises() -> None:
+    class _Bad(Node):
+        x: torch.Tensor = child()
+
+        def _normalize(self) -> dict[str, object]:
+            return {"nope": 1}
+
+    with pytest.raises(NodeLayoutError, match="nope"):
+        _Bad(x=torch.zeros(1))
+
+
+def test_layout_error_init_var_annotation() -> None:
+    with pytest.raises(NodeLayoutError, match="not fields"):
+
+        class _A(Base):
+            y: dataclasses.InitVar[int]
+
+
+def test_init_finish_runs_only_for_the_exact_class() -> None:
+    plain = object.__new__(Plain)
+    # a parent's generated `__init__` on a subclass instance must not
+    # finish it: the subclass's own `__init__` does
+    Sub.__init__(plain, numbers=torch.tensor([1]), positions=torch.zeros(1, 3))
+
+    assert not hasattr(plain, "_node_leaf_fields")
+    assert plain.label == "x"
+
+
+def test_value_checks_are_skipped_while_compiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tad_mctc.tree import node as node_module
+
+    monkeypatch.setattr(node_module, "is_compiling", lambda: True)
+
+    # mixed float dtypes are rejected by the value checks, which compiling skips
+    obj = Sub(
+        numbers=torch.tensor([1]),
+        positions=torch.zeros(1, 3, dtype=torch.float64),
+        charge=torch.zeros(1, dtype=torch.float32),
+    )
+    assert obj.charge is not None

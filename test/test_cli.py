@@ -440,6 +440,18 @@ def test_timings_wait_for_queued_cuda_kernels(
     assert calls == ["sync"]
 
 
+def test_timings_skip_synchronize_without_cuda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: False)
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda: calls.append("sync"))
+
+    _timing._synchronize_cuda()
+
+    assert calls == []
+
+
 def test_cuda_neighbour_list_does_not_report_the_native_extension(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
