@@ -34,7 +34,7 @@ import torch
 from torch.func import jacrev, vmap
 
 from tad_mctc._version import __tversion__
-from tad_mctc.autograd import jacrev_matches_finite_diff, vmap_matches_loop
+from tad_mctc.autograd import jacrev_matches_finite_diff
 from tad_mctc.data import radii
 from tad_mctc.data.structures import get_structure
 from tad_mctc.io.structure import Structure
@@ -194,8 +194,6 @@ def test_table_cache_is_shared_across_replace() -> None:
     """The cache lives at function level, not on the `CNModel` instance, so
     `.replace()` copies (the documented way to get a different variant)
     share it rather than each rebuilding their own table."""
-    from tad_mctc.data import radii
-
     calls: list[tuple[torch.device | None, torch.dtype]] = []
 
     def spy_table(
@@ -367,8 +365,6 @@ def test_table_cache_cold_under_compiled_jacrev(warm: bool) -> None:
 
 
 def test_tensor_table_matches_table_function() -> None:
-    from tad_mctc.data import radii
-
     sample = get_structure("mb16_43", "01")
     numbers = sample.numbers
     positions = sample.positions.double()
