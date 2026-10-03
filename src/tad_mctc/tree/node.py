@@ -192,19 +192,25 @@ def _container_only_arrays(value: Any) -> bool:
     for item in _container_items(value):
         if isinstance(item, (Tensor, Node)):
             continue
+
         if _is_container(item) and _container_only_arrays(item):
             continue
+
         return False
+
     return True
 
 
 def _holds_array(value: Any) -> bool:
     if isinstance(value, (Tensor, Node)):
         return True
+
     if isinstance(value, (list, tuple, set, frozenset)):
         return any(_holds_array(v) for v in value)
+
     if isinstance(value, dict):
         return any(_holds_array(v) for v in value.values())
+
     return False
 
 
@@ -219,6 +225,7 @@ def _is_classvar(annotation: Any) -> bool:
             "ClassVar",
             "typing.ClassVar",
         )
+
     return typing.get_origin(annotation) is ClassVar or annotation is ClassVar
 
 
@@ -241,8 +248,8 @@ class Node:
         for forbidden in ("__init__", "__post_init__", "__setattr__"):
             if forbidden in cls.__dict__:
                 raise NodeLayoutError(
-                    f"{cls.__qualname__} defines `{forbidden}`. Node subclasses "
-                    "must not; use `_normalize`, `_validate` or a classmethod "
+                    f"{cls.__qualname__} defines `{forbidden}`. Node subclasses"
+                    " must not; use `_normalize`, `_validate` or a classmethod "
                     "constructor instead."
                 )
         dataclasses.dataclass(frozen=True, eq=False, kw_only=True, repr=False)(
@@ -302,8 +309,10 @@ class Node:
             new = self._convert_child(name, old, device, dtype)
             if new is not old:
                 changes[name] = new
+
         if not changes:
             return self
+
         return _copy_with(self, changes)
 
     def type(self, dtype: torch.dtype) -> Self:
@@ -358,11 +367,13 @@ class Node:
         for t in _own_tensors(self):
             if t.is_floating_point():
                 return t.dtype
+
         for node in _child_nodes(self):
             try:
                 return node.dtype
             except AttributeError:
                 continue
+
         raise AttributeError(
             f"{type(self).__name__} holds no floating-point tensor, so it has "
             "no dtype."
@@ -380,11 +391,13 @@ class Node:
         """
         for t in _own_tensors(self):
             return t.device
+
         for node in _child_nodes(self):
             try:
                 return node.device
             except AttributeError:
                 continue
+
         raise AttributeError(
             f"{type(self).__name__} holds no tensor, so it has no device."
         )
@@ -398,6 +411,7 @@ class Node:
         parts = []
         for f in dataclasses.fields(self):
             parts.append(f"{f.name}={_short_repr(getattr(self, f.name))}")
+
         return f"{type(self).__name__}({', '.join(parts)})"
 
 
@@ -410,6 +424,7 @@ def _short_repr(value: Any) -> str:
             f"Tensor(shape={tuple(value.shape)}, dtype={value.dtype}, "
             f"device={value.device})"
         )
+
     return repr(value)
 
 
@@ -427,6 +442,7 @@ def _own_tensors(node: Node) -> list[Tensor]:
     out: list[Tensor] = []
     for name in node._child_names:
         _collect(getattr(node, name), Tensor, out)
+
     return out
 
 
@@ -434,6 +450,7 @@ def _child_nodes(node: Node) -> list[Node]:
     out: list[Node] = []
     for name in node._child_names:
         _collect(getattr(node, name), Node, out)
+
     return out
 
 
@@ -445,8 +462,10 @@ def _convert_value(
             dtype if (dtype is not None and value.is_floating_point()) else None
         )
         return value.to(device=device, dtype=target)
+
     if isinstance(value, Node):
         return value.to(device=device, dtype=dtype)
+
     if _is_container(value):
         items = _container_items(value)
         new_items = [_convert_value(v, device, dtype) for v in items]
@@ -456,7 +475,9 @@ def _convert_value(
             return dict(zip(value.keys(), new_items))
         if isinstance(value, tuple) and hasattr(value, "_fields"):
             return type(value)(*new_items)
+
         return type(value)(new_items)
+
     return value
 
 
@@ -465,6 +486,7 @@ def _copy_with(node: Node, changes: dict[str, Any]) -> Any:
     for f in dataclasses.fields(node):
         value = changes.get(f.name, getattr(node, f.name))
         object.__setattr__(new, f.name, value)
+
     object.__setattr__(new, _LAYOUT, getattr(node, _LAYOUT))
     return new
 
@@ -482,6 +504,7 @@ def _set_layout(cls: type[Node]) -> None:
                 f"{cls.__qualname__}.{f.name}: field names must not start "
                 "with two underscores."
             )
+
         kind = f.metadata.get(_KIND)
         if kind == _CHILD:
             children.append(f.name)
@@ -494,6 +517,7 @@ def _set_layout(cls: type[Node]) -> None:
                 f"{cls.__qualname__}.{f.name}: declare the field with "
                 "`child()` or `context()`."
             )
+
     field_names = {f.name for f in fields}
     annotated: set[str] = set()
     for klass in cls.__mro__:
@@ -502,11 +526,13 @@ def _set_layout(cls: type[Node]) -> None:
         for name, annotation in inspect.get_annotations(klass).items():
             if not _is_classvar(annotation):
                 annotated.add(name)
+
     missing = sorted(annotated - field_names)
     if missing:
         raise NodeLayoutError(
             f"{cls.__qualname__}: annotated names {missing} are not fields."
         )
+
     cls._child_names = tuple(children)
     cls._context_names = tuple(contexts)
     cls._keep_dtype_names = frozenset(keep)
@@ -533,9 +559,12 @@ def _finish_init(node: Node) -> None:
                 f"{type(node).__qualname__}._normalize returned unknown "
                 f"field '{name}'."
             )
+
         object.__setattr__(node, name, value)
+
     if not is_compiling():
         _check_values(node)
+
     object.__setattr__(node, _LAYOUT, _leaf_fields_from_values(node))
     node._validate()
 
@@ -549,7 +578,9 @@ def _check_values(node: Node) -> None:
                 f"{cls_name}.{name} is a context field but holds a tensor or "
                 "Node; declare it with `child()`."
             )
+
         _require_hashable(cls_name, name, value)
+
     for name in node._child_names:
         value = getattr(node, name)
         if _is_container(value):
@@ -565,18 +596,21 @@ def _check_values(node: Node) -> None:
     for name in node._child_names:
         if name not in node._keep_dtype_names:
             _collect(getattr(node, name), Tensor, tensors)
+
     floating = {t.dtype for t in tensors if t.is_floating_point()}
     if len(floating) > 1:
         raise TypeError(
             f"{cls_name}: floating-point tensors have different dtypes "
             f"{sorted(str(d) for d in floating)}."
         )
+
     devices = {t.device for t in _own_tensors(node)}
     for sub in _child_nodes(node):
         try:
             devices.add(sub.device)
         except AttributeError:
-            pass
+            pass  # object without a device: nothing to compare
+
     if len(devices) > 1:
         raise RuntimeError(
             f"{cls_name}: tensors are on different devices "

@@ -67,21 +67,21 @@ def test_construction() -> None:
 def test_layout_error_undeclared_field() -> None:
     with pytest.raises(NodeLayoutError):
 
-        class A(Node):
+        class _A(Node):
             x: int = 1
 
 
 def test_layout_error_annotation_without_field() -> None:
     with pytest.raises(NodeLayoutError):
 
-        class A(Base):
+        class _A(Base):
             y: int
 
 
 def test_layout_error_init() -> None:
     with pytest.raises(NodeLayoutError):
 
-        class A(Base):
+        class _A(Base):
             def __init__(self) -> None:
                 pass
 
@@ -89,7 +89,7 @@ def test_layout_error_init() -> None:
 def test_layout_error_post_init() -> None:
     with pytest.raises(NodeLayoutError):
 
-        class A(Base):
+        class _A(Base):
             def __post_init__(self) -> None:
                 pass
 
@@ -97,7 +97,7 @@ def test_layout_error_post_init() -> None:
 def test_layout_error_reserved_name() -> None:
     with pytest.raises(NodeLayoutError):
 
-        class A(Node):
+        class _A(Node):
             dtype: int = child()  # type: ignore[assignment]
 
 
@@ -269,7 +269,7 @@ def test_repr() -> None:
 
 def test_identity_semantics() -> None:
     obj = _sub()
-    assert obj == obj
+    assert obj.__eq__(obj)
     other = obj.replace()
     assert not (obj == other)
     assert isinstance(hash(obj), int)
