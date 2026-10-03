@@ -1933,12 +1933,6 @@ def _pop_transform_layers() -> Generator[None]:
             "list outside the transform."
         )
 
-    from torch._C._functorch import (  # pyright: ignore[reportMissingImports]
-        peek_interpreter_stack,
-        pop_dynamic_layer_stack,
-        push_dynamic_layer_stack,
-    )
-
     popped = []
     try:
         while peek_interpreter_stack() is not None:
