@@ -34,14 +34,22 @@ __all__ = ["cdist"]
 
 def euclidean_dist_quadratic_expansion(x: Tensor, y: Tensor) -> Tensor:
     """
-    Computation of euclidean distance matrix via quadratic expansion (sum of
-    squared differences or L2-norm of differences).
+    Computation of euclidean distance matrix via quadratic expansion,
+    ``|x|^2 + |y|^2 - 2 x.y``.
 
-    While this is significantly faster than the "direct expansion" or
-    "broadcast" approach, it only works for euclidean (p=2) distances.
-    Additionally, it has issues with numerical stability (the diagonal slightly
-    deviates from zero for ``x=y``). The numerical stability should not pose
-    problems, since we must remove zeros anyway for batched calculations.
+    Only for euclidean (p=2) distances, and not the default of
+    :func:`cdist`: the expansion cancels terms of size ``|x|^2``, so its
+    rounding error grows with the distance of the points from the origin,
+    not with the distances themselves. In float32, for points in a 30 Bohr
+    box, a 2 Bohr distance comes out with a relative error of about
+    ``1e-3``; shifted 1000 Bohr from the origin, close points collapse
+    entirely. A distance of a point to itself is the square root of a
+    rounding residual, between ``sqrt(eps)`` and a few times
+    ``sqrt(eps * |x|^2)``, depending on the device.
+
+    It is faster than :func:`cdist_direct_expansion` for large inputs on
+    CPU (about 2x at 5000 points), and it needs half the memory, since it
+    never forms the ``(..., n, m, 3)`` differences.
 
     For more information, see \
     `this Jupyter notebook <https://github.com/eth-cscs/PythonHPC/blob/master/\
@@ -82,10 +90,11 @@ def euclidean_dist_quadratic_expansion(x: Tensor, y: Tensor) -> Tensor:
 
 def cdist_direct_expansion(x: Tensor, y: Tensor, p: int = 2) -> Tensor:
     """
-    Computation of cartesian distance matrix.
+    Computation of cartesian distance matrix from direct differences.
 
-    Contrary to `euclidean_dist_quadratic_expansion`, this function allows
-    arbitrary powers but is considerably slower.
+    Exact to rounding for every pair, wherever the points are. The distance
+    of a point to itself is ``eps ** (1 / p)``: the sum is clamped to
+    ``eps`` so that the gradient stays finite.
 
     Parameters
     ----------
@@ -101,21 +110,19 @@ def cdist_direct_expansion(x: Tensor, y: Tensor, p: int = 2) -> Tensor:
     Tensor
         Pair-wise distance matrix.
     """
-    eps = torch.tensor(
-        torch.finfo(x.dtype).eps,
-        device=x.device,
-        dtype=x.dtype,
-    )
+    eps = torch.finfo(x.dtype).eps
 
     # unsqueeze different dimension to create matrix
-    diff = torch.abs(x.unsqueeze(-2) - y.unsqueeze(-3))
+    diff = x.unsqueeze(-2) - y.unsqueeze(-3)
 
-    # einsum is nearly twice as fast!
+    # `sqrt` rather than `pow(..., 0.5)`: a cheaper backward.
     if p == 2:
-        distances = einsum("...ijk,...ijk->...ij", diff, diff)
-    else:
-        distances = torch.sum(torch.pow(diff, p), -1)
+        return torch.sqrt(torch.clamp((diff * diff).sum(-1), min=eps))
 
+    # An even power needs no absolute value.
+    if p % 2 != 0:
+        diff = torch.abs(diff)
+    distances = torch.sum(torch.pow(diff, p), -1)
     return torch.pow(torch.clamp(distances, min=eps), 1.0 / p)
 
 
@@ -129,6 +136,12 @@ def cdist(x: Tensor, y: Tensor | None = None, p: int = 2) -> Tensor:
     Additionally, ``torch.cdist`` does not return zero for distances between
     same vectors (see `here
     <https://github.com/pytorch/pytorch/issues/57690>`__).
+
+    The distances come from direct differences
+    (:func:`cdist_direct_expansion`), exact to rounding wherever the points
+    are. The distance of a vector to itself is ``eps ** (1 / p)``, the same
+    on every device. :func:`euclidean_dist_quadratic_expansion` is faster for
+    large inputs on CPU, at the accuracy cost described there.
 
     Parameters
     ----------
@@ -147,9 +160,5 @@ def cdist(x: Tensor, y: Tensor | None = None, p: int = 2) -> Tensor:
     """
     if y is None:
         y = x
-
-    # faster
-    if p == 2:
-        return euclidean_dist_quadratic_expansion(x, y)
 
     return cdist_direct_expansion(x, y, p=p)

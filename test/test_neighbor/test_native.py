@@ -493,10 +493,10 @@ def test_undersized_capacity_truncation_matches() -> None:
     )
 
     native_nbl = _pad_to_capacity(
-        native_i, native_j, nat, cutoff, 0.0, small_capacity, positions, dd
+        [native_i], [native_j], nat, cutoff, 0.0, small_capacity, positions, dd
     )
     python_nbl = _pad_to_capacity(
-        python_i, python_j, nat, cutoff, 0.0, small_capacity, positions, dd
+        [python_i], [python_j], nat, cutoff, 0.0, small_capacity, positions, dd
     )
     assert native_nbl.overflow
     assert python_nbl.overflow
@@ -583,51 +583,6 @@ def test_padded_output_without_candidates() -> None:
 
     assert n_found == 0
     assert idx_i.shape[0] == idx_j.shape[0] == 0
-
-
-@pytest.mark.native
-def test_baddbmm_matches_broadcast_at_large_coordinates() -> None:
-    """`_baddbmm_distance_squared` computes ``|a|^2 + |b|^2 - 2 a.b``,
-    which cancels catastrophically once ``|a|``/``|b|`` are large
-    relative to the cutoff -- two ~1500 A positions differing by ~13 A
-    in float32 leaves only a few significant digits for that difference.
-    That is why `_atom_pairs_within_thresholds` shifts each tile pair by
-    its own first atom before computing any distance (see the comment
-    at that shift in `list.py`): it bounds ``|a|``/``|b|`` by the tile
-    diameter plus `cutoff` regardless of where in the structure the pair
-    sits, so `"baddbmm"` should agree with `"broadcast"` (direct
-    subtraction, unaffected either way) exactly, even at this coordinate
-    magnitude.
-
-    This guards that per-tile-pair shift. A single global mean-subtraction
-    is not enough: it leaves a large residual gap here (measured on a real
-    1.7M-atom chain: 202.3M of 220.5M pairs against a true 187.8M),
-    because a global mean does not bound any individual tile pair's
-    coordinates when the structure is elongated rather than centred at its
-    own mean."""
-    torch.manual_seed(4)
-    # Offset far from the origin, like one axis of a real, extended
-    # structure (a ~213k-atom structure spans ~1500 A) -- small random
-    # positions near the origin do not trigger
-    # the cancellation and would make this test pass for the wrong
-    # reason.
-    offset = torch.tensor([1500.0, 0.0, 0.0], device="cpu")
-    positions = offset + torch.randn(500, 3, device="cpu") * 20.0
-    cutoff = 25.0
-
-    tiles = Tiles(positions, tile=32)
-    tile_a, tile_b = tile_pairs(tiles, cutoff)
-
-    ((broadcast_i, broadcast_j, _),) = _atom_pairs_within_thresholds(
-        tiles, tile_a, tile_b, positions, (cutoff,), distance_kernel="broadcast"
-    )
-    ((baddbmm_i, baddbmm_j, _),) = _atom_pairs_within_thresholds(
-        tiles, tile_a, tile_b, positions, (cutoff,), distance_kernel="baddbmm"
-    )
-
-    assert broadcast_i.shape[0] > 0, "test needs a system with real pairs"
-    assert torch.equal(broadcast_i, baddbmm_i)
-    assert torch.equal(broadcast_j, baddbmm_j)
 
 
 @pytest.mark.native

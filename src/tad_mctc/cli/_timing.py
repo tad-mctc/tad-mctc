@@ -94,8 +94,7 @@ class Timings:
             f"  {label:<{_LABEL_WIDTH}} ... done "
             f"({duration:>{_DURATION_WIDTH}})"
         )
-        pad = max(0, len(running) - len(done))
-        print(f"\r{done}{' ' * pad}")
+        print(f"\r{done}")
 
     def report(self) -> None:
         """Print the recorded steps as an aligned table, with a total row."""

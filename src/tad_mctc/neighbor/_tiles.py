@@ -95,7 +95,6 @@ class Tiles:
 
     __slots__ = [
         "tile",
-        "nat",
         "width",
         "n_axis",
         "strides",
@@ -136,7 +135,6 @@ class Tiles:
         """
         nat = positions.shape[0]
         self.tile = tile
-        self.nat = nat
 
         if nat == 0:
             self._build_empty(positions, tile)
@@ -227,7 +225,7 @@ class Tiles:
         self.ncells = ncells
 
         # Step 3: assign atoms to bins. The raw cell coordinate is clamped
-        # into the grid; with `width` now matching `n_axis` exactly (one
+        # into the grid; with `width` matching `n_axis` exactly (one
         # bin width per axis over the whole extent), the clamp only ever
         # catches genuine floating-point edge cases (a position exactly at
         # `hi_box`), never atoms that are actually many bins away.
@@ -307,29 +305,68 @@ class Tiles:
         self.tile_cc = positions.new_zeros((0, 3), dtype=torch.long)
 
 
-def _stencil_offsets(span: Tensor) -> Tensor:
+def _ragged_runs(lengths: Tensor) -> tuple[Tensor, Tensor]:
     """
-    Integer bin offsets covering a box of half-widths ``span`` per axis.
+    Number the entries of consecutive runs, run ``r`` being
+    ``lengths[r]`` entries long.
 
     Parameters
     ----------
-    span : Tensor
-        Per-axis half-width of the stencil, shape ``(3,)``.
+    lengths : Tensor
+        ``(n_runs,)``, non-negative integer run lengths.
+
+    Returns
+    -------
+    tuple[Tensor, Tensor]
+        ``owner`` and ``position_in_run``, both ``(lengths.sum(),)``: the
+        run of each entry, and its position within that run.
+    """
+    owner = torch.repeat_interleave(lengths)
+    run_start = torch.cumsum(lengths, dim=0) - lengths
+    position_in_run = (
+        torch.arange(owner.shape[0], device=lengths.device) - run_start[owner]
+    )
+    return owner, position_in_run
+
+
+def _is_forward(shifts: Tensor) -> Tensor:
+    """
+    Whether each integer image shift, shape ``(n, 3)``, is the zero shift
+    or points *forward*: its first non-zero component is positive.
+
+    For every non-zero shift ``n``, exactly one of ``n`` and ``-n`` is
+    forward. :func:`.list._ghost_pool` relies on this to find every bond once,
+    and :func:`tile_pairs` to find every tile pair once.
+    """
+    x, y, z = shifts.unbind(-1)
+    forward_x = x > 0
+    forward_y = (x == 0) & (y > 0)
+    forward_z_or_zero = (x == 0) & (y == 0) & (z >= 0)
+    return forward_x | forward_y | forward_z_or_zero
+
+
+def _integer_box(half_widths: Tensor) -> Tensor:
+    """
+    Every integer offset from ``-half_widths`` to ``half_widths`` per axis,
+    in row-major order (the first axis varies slowest).
+
+    Parameters
+    ----------
+    half_widths : Tensor
+        ``(3,)``, non-negative integers.
 
     Returns
     -------
     Tensor
-        Offsets, shape ``(prod(2 * span + 1), 3)``.
+        Offsets, shape ``(prod(2 * half_widths + 1), 3)``.
     """
-    axis_ranges = []
-    for axis in range(3):
-        half_width = int(span[axis].item())
-        axis_ranges.append(
-            torch.arange(-half_width, half_width + 1, device=span.device)
-        )
-
-    grids = torch.meshgrid(*axis_ranges, indexing="ij")
-    return torch.stack(grids, dim=-1).reshape(-1, 3)
+    # `int()` per element, not `tolist()`: the widths can be a tensor
+    # wrapped by `torch.func`, whose `tolist()` fails.
+    axis_ranges = [
+        torch.arange(-int(width), int(width) + 1, device=half_widths.device)
+        for width in half_widths
+    ]
+    return torch.cartesian_prod(*axis_ranges)
 
 
 def tile_pairs(
@@ -384,7 +421,16 @@ def tile_pairs(
     # Cartesian (non-modular) binning they are simply empty, so this clamp
     # only avoids wasted stencil steps, it is not needed for correctness.
     span = torch.clamp(tiles.n_axis - 1, max=raw_span)
-    offsets = _stencil_offsets(span)
+    offsets = _integer_box(span)
+    if anchors is None:
+        # Tile ids grow with the row-major bin id, so the tiles of a bin at a
+        # forward offset (see `_is_forward`) all have larger ids than those
+        # of the bin it is reached from, and those at a backward offset all
+        # have smaller ones. With every tile enumerated, a pair across a
+        # backward offset is also reached forward from its other tile, and
+        # `a <= b` below would drop it. So only the forward half of the
+        # stencil is searched; `a <= b` still halves the zero offset.
+        offsets = offsets[_is_forward(offsets)]
 
     n_axis, strides = tiles.n_axis, tiles.strides
     ncells = tiles.ncells
@@ -419,17 +465,7 @@ def tile_pairs(
         torch.zeros_like(neighbor_id),
     )
 
-    flat_counts = neighbor_count.reshape(-1)
-    total_candidates = int(flat_counts.sum().item())
-    owning_slot = torch.repeat_interleave(
-        torch.arange(flat_counts.numel(), device=flat_counts.device),
-        flat_counts,
-    )
-    slot_offset = torch.cumsum(flat_counts, dim=0) - flat_counts
-    position_within_slot = (
-        torch.arange(total_candidates, device=flat_counts.device)
-        - slot_offset[owning_slot]
-    )
+    owning_slot, position_within_slot = _ragged_runs(neighbor_count.reshape(-1))
 
     a = owning_slot // offsets.shape[0]
     if first_tiles is not None:

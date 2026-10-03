@@ -32,7 +32,6 @@ from tad_mctc.io.structure import Structure, pack_structures
 from tad_mctc.neighbor.images import (
     PeriodicShifts,
     build_periodic_shifts,
-    build_shared_periodic_shifts,
 )
 from tad_mctc.neighbor.list import NeighborList, build_neighborlist
 from tad_mctc.typing import DD
@@ -172,7 +171,7 @@ def test_shared_shifts_for_a_batch_pass() -> None:
     batch = pack_structures([bulk, compressed])
     assert batch.lattice is not None and batch.periodic is not None
 
-    shifts = build_shared_periodic_shifts(batch.lattice, batch.periodic, CUTOFF)
+    shifts = build_periodic_shifts(batch.lattice, batch.periodic, CUTOFF)
     shifts.check_compatible(batch, CUTOFF)
 
 

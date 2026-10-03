@@ -38,7 +38,7 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Literal, NamedTuple
+from typing import Any, Callable, Literal, NamedTuple, Protocol
 
 import torch
 import torch.utils.checkpoint
@@ -53,7 +53,6 @@ from ..neighbor import pair_distance_squared, split_lattice
 from ..neighbor.images import (
     PeriodicShifts,
     build_periodic_shifts,
-    build_shared_periodic_shifts,
     wrap_to_central_cell,
 )
 from ..neighbor.list import NeighborList
@@ -62,6 +61,7 @@ from ..typing import CountingFunction, PairWeightFunction, TableFunction, Tensor
 from . import defaults
 
 __all__ = [
+    "CNFunc",
     "CNModel",
     "NeighborListMode",
     "cut_coordination_number",
@@ -100,7 +100,6 @@ NeighborListMode = Literal["graph", "recompute"]
 # dtype. Re-measure on other hardware before changing them.
 _CHUNK_SIZE_CPU = 131_072
 _CHUNK_SIZE_GPU = 1_048_576
-
 
 
 def _chunk_size(like: Tensor) -> int:
@@ -148,6 +147,25 @@ def _validate_mode(
             "`mode='recompute'` chunks the pair loop of a neighbour list; "
             "pass a `NeighborList` as `pairs`."
         )
+
+
+class CNFunc(Protocol):
+    """
+    Type annotation for a coordination-number function: the call signature
+    every :class:`CNModel` preset (``cn_d3``, ``cn_d4``, ...) satisfies.
+    """
+
+    def __call__(
+        self,
+        structure: Structure,
+        pairs: PeriodicShifts | NeighborList | None = None,
+        *,
+        mode: NeighborListMode = "graph",
+    ) -> Tensor:
+        """
+        Calculate the coordination number of each atom in the system.
+        """
+        ...
 
 
 @dataclass(frozen=True, eq=False)
@@ -233,8 +251,7 @@ class CNModel:
           ``jacrev`` over ``structure.lattice`` or ``torch.compile``.
         - :class:`~tad_mctc.neighbor.images.PeriodicShifts`: all pairs, over
           periodic shifts built ahead of time by
-          :func:`~tad_mctc.neighbor.images.build_periodic_shifts` (for a
-          batch, :func:`~tad_mctc.neighbor.images.build_shared_periodic_shifts`).
+          :func:`~tad_mctc.neighbor.images.build_periodic_shifts`.
           Nothing data-dependent remains, so this works under ``vmap``,
           ``jacrev`` and ``torch.compile(fullgraph=True)``, also over
           ``structure.lattice``. A system that needs fewer image rings than
@@ -476,39 +493,20 @@ def _periodic_images(
     # `shifts` only covers a cutoff sphere anchored at the primary cell
     # (see `build_periodic_shifts`), so it is only valid once every atom
     # lies inside that cell, the invariant mctc-lib's own
-    # `wrap_to_central_cell` establishes. The fold runs under `no_grad()`
-    # and returns the integer whole-cell offset of each atom. Adding that
-    # offset back onto the caller's `positions`, instead of using the
-    # wrapped positions, keeps the result differentiable in the original
-    # `positions` and `lattice`. `periodic.unsqueeze(-2)` gives the mask an
-    # explicit atom axis, so a batched `(..., 3)` mask cannot align with the
-    # atom axis when a batch size equals `nat`.
-    _, cell_shift = wrap_to_central_cell(
+    # `wrap_to_central_cell` establishes. The wrapped positions are the
+    # caller's `positions` plus whole-cell offsets, so they stay
+    # differentiable in `positions` and `lattice`. `periodic.unsqueeze(-2)`
+    # gives the mask an explicit atom axis, so a batched `(..., 3)` mask
+    # cannot align with the atom axis when a batch size equals `nat`.
+    folded_positions, _ = wrap_to_central_cell(
         positions, lattice, periodic.unsqueeze(-2)
     )  # (..., nat, 3)
-    folded_positions = positions + cell_shift.to(positions.dtype) @ lattice
 
     # (..., n_shift, 3): `shifts` broadcasts over the batch of `lattice`.
     translations = shifts.to(positions.dtype) @ lattice
 
     valid = _periodic_valid_pairs(numbers, shifts, periodic)
     return _Images(folded_positions, translations, valid)
-
-
-def _build_periodic_shifts(
-    structure: Structure, cutoff: float
-) -> PeriodicShifts:
-    """
-    Build the periodic shifts of a cell at ``cutoff``, with one shift table
-    shared by the whole batch if there is one. Not differentiable: the table is an integer
-    tensor whose shape depends on the lattice values.
-    """
-    assert structure.lattice is not None and structure.periodic is not None
-
-    is_batch = structure.numbers.ndim > 1
-    build = build_shared_periodic_shifts if is_batch else build_periodic_shifts
-    with torch.no_grad():
-        return build(structure.lattice, structure.periodic, cutoff=cutoff)
 
 
 def _dense_images(
@@ -521,11 +519,12 @@ def _dense_images(
     if structure.lattice is None:
         return _molecular_images(structure.numbers, structure.positions)
 
-    if shifts is None:
-        shifts = _build_periodic_shifts(structure, cutoff)
-
     # `Structure` fills in a mask whenever it has a lattice.
     assert structure.periodic is not None
+    if shifts is None:
+        shifts = build_periodic_shifts(
+            structure.lattice, structure.periodic, cutoff
+        )
     return _periodic_images(
         structure.numbers,
         structure.positions,
@@ -907,8 +906,16 @@ def sum_over_neighborlist(
                 chunk_i, chunk_j, chunk_mask, chunk_shift
             )
 
-        counts = counts.index_add(0, chunk_i, to_i)
-        counts = counts.index_add(0, chunk_j, to_j)
+        # Out of place, `index_add` copies all of `counts` per call, which
+        # for a large system costs more than the pair kernel itself. In
+        # place is not possible on a tensor inside `torch.func`.
+        operands = (counts, chunk_i, chunk_j, to_i, to_j)
+        if any(is_functorch_tensor(t) for t in operands):
+            counts = counts.index_add(0, chunk_i, to_i)
+            counts = counts.index_add(0, chunk_j, to_j)
+        else:
+            counts.index_add_(0, chunk_i, to_i)
+            counts.index_add_(0, chunk_j, to_j)
 
     return counts[:total_atoms]
 

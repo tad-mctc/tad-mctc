@@ -29,10 +29,9 @@ Every tensor-in/tensor-out function below is checked, in its own test, for
 Not covered because the *shape* of the output depends on input *values*, so
 neither ``vmap`` nor ``fullgraph`` can represent them. Use the alternative:
 
-- ``neighbor.images.count_image_rings_*``, ``build_periodic_shifts``,
-  ``build_ghost_pool``: build the table once, eagerly, with
-  ``build_shared_periodic_shifts`` and pass it to a
-  ``CNModel`` as ``pairs``.
+- ``neighbor.images.count_image_rings_*``, ``build_periodic_shifts``:
+  build the table once, eagerly, with ``build_periodic_shifts`` and pass it
+  to a ``CNModel`` as ``pairs``.
 - ``batch.pack``/``unpack``/``deflate``, ``properties.sum_formula``,
   ``io.*``, ``convert.*_to_*`` string/NumPy converters: host-side
   bookkeeping, not tensor math.
@@ -63,7 +62,7 @@ from tad_mctc.ncoord import (
 )
 from tad_mctc.ncoord.count import erf_count, exp_count, gfn2_count
 from tad_mctc.neighbor.images import (
-    build_shared_periodic_shifts,
+    build_periodic_shifts,
     wrap_to_central_cell,
 )
 from tad_mctc.properties import (
@@ -896,7 +895,7 @@ PERIODIC = torch.tensor([True, True, True], device=DEVICE)
 
 def test_cn_d3_periodic_precomputed_transforms() -> None:
     p, lat = _positions(), _lattice()
-    shifts = build_shared_periodic_shifts(lat, PERIODIC, 40.0)
+    shifts = build_periodic_shifts(lat, PERIODIC, 40.0)
 
     def f(x: Tensor, l: Tensor) -> Tensor:
         s = Structure(
@@ -912,7 +911,7 @@ def test_cn_d3_periodic_precomputed_transforms() -> None:
 @pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_cn_d3_periodic_precomputed_compile() -> None:
     p, lat = _positions(), _lattice()
-    shifts = build_shared_periodic_shifts(lat, PERIODIC, 40.0)
+    shifts = build_periodic_shifts(lat, PERIODIC, 40.0)
 
     def f(x: Tensor, l: Tensor) -> Tensor:
         s = Structure(

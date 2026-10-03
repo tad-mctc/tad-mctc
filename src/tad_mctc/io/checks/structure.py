@@ -207,13 +207,12 @@ def _coldfusion_check_sparse(
     effective_cutoff = max(cutoff, float(threshold))
     nbl = build_neighborlist(structure, effective_cutoff)
 
-    # Padding atoms have no pairs (see `NeighborList`), so the masked
-    # slots are exactly the real pairs.
+    idx_i, idx_j, shift = nbl.real_entries()
     shared_lattice, system_lattices = split_lattice(structure.lattice)
     distance_squared = pair_distance_squared(
-        nbl.idx_i[nbl.mask],
-        nbl.idx_j[nbl.mask],
-        nbl.shift[nbl.mask],
+        idx_i,
+        idx_j,
+        shift,
         structure.positions.reshape(-1, 3),
         shared_lattice=shared_lattice,
         system_lattices=system_lattices,

@@ -113,6 +113,33 @@ def test_format_reader_rejects_coldfusion_options(
         read.read_xyz(filepath, **{option: True})
 
 
+@pytest.mark.parametrize("name,ftype", FIXTURES)
+def test_read_rejects_unknown_reader_option(
+    name: str, ftype: str | None
+) -> None:
+    """A misspelled option is rejected by every reader, instead of being
+    ignored because the positions do not clash with the padding."""
+    with pytest.raises(TypeError, match="padding_valu"):
+        read.read(FILES / name, ftype=ftype, padding_valu=0.0)
+
+
+@pytest.mark.parametrize("name,ftype", FIXTURES)
+def test_read_accepts_every_reader_option(name: str, ftype: str | None) -> None:
+    """The reader options pass, also when the padding check never
+    reads them."""
+    structure = read.read(
+        FILES / name,
+        ftype=ftype,
+        padding_value=0.0,
+        raise_padding_exception=False,
+        raise_padding_warning=False,
+        shift_for_last=False,
+        shift_value=1.0,
+        batch_agnostic=False,
+    )
+    assert structure.numbers.ndim == 1
+
+
 def test_checks_run_without_asserts(tmp_path: Path) -> None:
     """The checks raise instead of asserting, so `python -O` keeps them."""
     filepath = _write_fused(tmp_path, "xyz")

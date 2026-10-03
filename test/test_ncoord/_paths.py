@@ -48,10 +48,7 @@ from __future__ import annotations
 
 from tad_mctc.io.structure import Structure
 from tad_mctc.ncoord.common import CNModel
-from tad_mctc.neighbor.images import (
-    build_periodic_shifts,
-    build_shared_periodic_shifts,
-)
+from tad_mctc.neighbor.images import build_periodic_shifts
 from tad_mctc.neighbor.list import build_neighborlist
 from tad_mctc.typing import Callable, Tensor
 
@@ -84,24 +81,10 @@ def bind_dense(model: CNModel, structure: Structure) -> Evaluation:
 
 
 def bind_precomputed(model: CNModel, structure: Structure) -> Evaluation:
-    """All pairs over periodic shifts built for the single cell
-    `structure`."""
+    """All pairs over periodic shifts built for the cell `structure`, or
+    shared by its batch of cells, sized for the most demanding system."""
     assert structure.lattice is not None and structure.periodic is not None
     shifts = build_periodic_shifts(
-        structure.lattice, structure.periodic, cutoff=model.cutoff
-    )
-
-    def evaluate(target: Structure) -> Tensor:
-        return model(target, pairs=shifts)
-
-    return evaluate
-
-
-def bind_precomputed_batch(model: CNModel, structure: Structure) -> Evaluation:
-    """All pairs over periodic shifts shared by the batch of cells
-    `structure`, sized for its most demanding system."""
-    assert structure.lattice is not None and structure.periodic is not None
-    shifts = build_shared_periodic_shifts(
         structure.lattice, structure.periodic, cutoff=model.cutoff
     )
 

@@ -28,17 +28,22 @@ import torch
 
 from tad_mctc.neighbor._distance_kernels import (
     DistanceKernel,
+    _baddbmm_distance_squared,
+    _broadcast_distance_squared,
     pair_distance_squared,
     select_kernel,
     split_lattice,
 )
-from tad_mctc.neighbor.list import build_neighborlist
+from tad_mctc.neighbor._tiles import Tiles, tile_pairs
+from tad_mctc.neighbor.list import (
+    _atom_pairs_within_thresholds,
+    build_neighborlist,
+)
 from tad_mctc.typing import Tensor
 
 from ..utils import hydrogens
 
 _CPU = torch.device("cpu")
-_FLOAT64 = torch.float64
 
 
 def _unused_compute(positions_a: Tensor, positions_b: Tensor) -> Tensor:
@@ -47,25 +52,17 @@ def _unused_compute(positions_a: Tensor, positions_b: Tensor) -> Tensor:
     raise NotImplementedError
 
 
-_always = DistanceKernel(
-    "always", lambda device, dtype, tile_width: True, _unused_compute
-)
-_never = DistanceKernel(
-    "never", lambda device, dtype, tile_width: False, _unused_compute
-)
+_always = DistanceKernel("always", lambda device: True, _unused_compute)
+_never = DistanceKernel("never", lambda device: False, _unused_compute)
 
 
 def test_select_kernel_picks_first_applicable_in_priority_order() -> None:
     """A kernel earlier in the list wins over a later, also-applicable
     one -- list order is the priority order, not just a filter."""
-    first = DistanceKernel(
-        "first", lambda device, dtype, tile_width: True, _unused_compute
-    )
-    second = DistanceKernel(
-        "second", lambda device, dtype, tile_width: True, _unused_compute
-    )
+    first = DistanceKernel("first", lambda device: True, _unused_compute)
+    second = DistanceKernel("second", lambda device: True, _unused_compute)
 
-    chosen = select_kernel(_CPU, _FLOAT64, 32, kernels=[first, second])
+    chosen = select_kernel(_CPU, kernels=[first, second])
 
     assert chosen.name == "first"
 
@@ -73,7 +70,7 @@ def test_select_kernel_picks_first_applicable_in_priority_order() -> None:
 def test_select_kernel_skips_inapplicable_kernels() -> None:
     """A kernel earlier in the list but not applicable is skipped, not
     just deprioritised."""
-    chosen = select_kernel(_CPU, _FLOAT64, 32, kernels=[_never, _always])
+    chosen = select_kernel(_CPU, kernels=[_never, _always])
 
     assert chosen.name == "always"
 
@@ -83,22 +80,16 @@ def test_select_kernel_raises_if_none_applicable() -> None:
     inapplicable, `select_kernel` must say so, not return something
     anyway."""
     with pytest.raises(RuntimeError, match="no distance kernel is applicable"):
-        select_kernel(_CPU, _FLOAT64, 32, kernels=[_never])
+        select_kernel(_CPU, kernels=[_never])
 
 
 def test_select_kernel_force_overrides_priority_order() -> None:
     """`force` picks the named kernel even when an earlier, also-
     applicable one would otherwise win."""
-    first = DistanceKernel(
-        "first", lambda device, dtype, tile_width: True, _unused_compute
-    )
-    second = DistanceKernel(
-        "second", lambda device, dtype, tile_width: True, _unused_compute
-    )
+    first = DistanceKernel("first", lambda device: True, _unused_compute)
+    second = DistanceKernel("second", lambda device: True, _unused_compute)
 
-    chosen = select_kernel(
-        _CPU, _FLOAT64, 32, force="second", kernels=[first, second]
-    )
+    chosen = select_kernel(_CPU, force="second", kernels=[first, second])
 
     assert chosen.name == "second"
 
@@ -107,29 +98,21 @@ def test_select_kernel_force_unknown_name_raises() -> None:
     """Forcing a name that isn't in the candidate list must raise, not
     fall through to automatic selection."""
     with pytest.raises(ValueError, match="not a known kernel"):
-        select_kernel(
-            _CPU, _FLOAT64, 32, force="nonexistent", kernels=[_always]
-        )
+        select_kernel(_CPU, force="nonexistent", kernels=[_always])
 
 
 def test_select_kernel_force_inapplicable_kernel_raises() -> None:
     """Forcing a kernel that exists but reports itself inapplicable for
-    this device/dtype/tile_width must raise, not silently substitute a
+    this device must raise, not silently substitute a
     different kernel."""
     with pytest.raises(ValueError, match="is not applicable"):
-        select_kernel(
-            _CPU, _FLOAT64, 32, force="never", kernels=[_never, _always]
-        )
+        select_kernel(_CPU, force="never", kernels=[_never, _always])
 
 
 def test_default_registry_picks_baddbmm_on_cpu() -> None:
     """The real, production registry: `baddbmm` is CPU's automatic
-    choice, regardless of dtype or tile width (see the module docstring
-    for why no tile-width floor was added for the one measured
-    exception)."""
-    for dtype in (torch.float32, torch.float64):
-        for tile_width in (2, 8, 32):
-            assert select_kernel(_CPU, dtype, tile_width).name == "baddbmm"
+    choice."""
+    assert select_kernel(_CPU).name == "baddbmm"
 
 
 def test_default_registry_force_triton_on_cpu_raises() -> None:
@@ -137,7 +120,7 @@ def test_default_registry_force_triton_on_cpu_raises() -> None:
     applicable off CUDA, independent of whether the optional `triton`
     dependency happens to be installed."""
     with pytest.raises(ValueError, match="is not applicable"):
-        select_kernel(_CPU, _FLOAT64, 32, force="triton")
+        select_kernel(_CPU, force="triton")
 
 
 def test_build_neighborlist_distance_kernel_forces_broadcast() -> None:
@@ -208,3 +191,81 @@ def test_pair_distance_squared_is_public() -> None:
     import tad_mctc.neighbor as neighbor
 
     assert neighbor.pair_distance_squared is pair_distance_squared
+
+
+def test_baddbmm_matches_broadcast_at_large_coordinates() -> None:
+    """`_baddbmm_distance_squared` computes ``|a|^2 + |b|^2 - 2 a.b``,
+    which cancels catastrophically once ``|a|``/``|b|`` are large
+    relative to the cutoff -- two ~1500 A positions differing by ~13 A
+    in float32 leaves only a few significant digits for that difference.
+    That is why the kernel measures each tile pair from its own first atom
+    before computing any distance: it bounds ``|a|``/``|b|`` by the tile
+    diameter plus `cutoff` regardless of where in the structure the pair
+    sits, so `"baddbmm"` should agree with `"broadcast"` (direct
+    subtraction, unaffected either way) exactly, even at this coordinate
+    magnitude.
+
+    This guards that per-tile-pair shift. A single global mean-subtraction
+    is not enough: it leaves a large residual gap here (measured on a real
+    1.7M-atom chain: 202.3M of 220.5M pairs against a true 187.8M),
+    because a global mean does not bound any individual tile pair's
+    coordinates when the structure is elongated rather than centred at its
+    own mean.
+
+    `"baddbmm"` is the CPU path whenever the native extension is missing,
+    so this test must not depend on that extension."""
+    torch.manual_seed(4)
+    # Offset far from the origin, like one axis of a real, extended
+    # structure (a ~213k-atom structure spans ~1500 A) -- small random
+    # positions near the origin do not trigger
+    # the cancellation and would make this test pass for the wrong
+    # reason.
+    offset = torch.tensor([1500.0, 0.0, 0.0], device="cpu")
+    positions = offset + torch.randn(500, 3, device="cpu") * 20.0
+    cutoff = 25.0
+
+    tiles = Tiles(positions, tile=32)
+    tile_a, tile_b = tile_pairs(tiles, cutoff)
+
+    ((broadcast_i, broadcast_j, _),) = _atom_pairs_within_thresholds(
+        tiles, tile_a, tile_b, positions, (cutoff,), distance_kernel="broadcast"
+    )
+    ((baddbmm_i, baddbmm_j, _),) = _atom_pairs_within_thresholds(
+        tiles, tile_a, tile_b, positions, (cutoff,), distance_kernel="baddbmm"
+    )
+
+    assert broadcast_i.shape[0] > 0, "test needs a system with real pairs"
+    assert torch.equal(broadcast_i, baddbmm_i)
+    assert torch.equal(broadcast_j, baddbmm_j)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("offset", [0.0, 1e4, 1e5])
+def test_baddbmm_error_does_not_grow_with_coordinates(
+    dtype: torch.dtype, offset: float
+) -> None:
+    """The squared distances of `"baddbmm"` stay within a few `eps *
+    cutoff^2` of the exact ones, wherever the atoms sit. Measured on
+    random cells at offsets up to 1e5 Bohr, the error is at most 6 `eps *
+    cutoff^2` in either dtype; without the per-tile-pair shift it would
+    grow with `offset^2`."""
+    torch.manual_seed(5)
+    cutoff = 25.0
+    eps = torch.finfo(dtype).eps
+    exact_positions = torch.rand(600, 3, dtype=torch.float64) * 35.0 + offset
+    positions = exact_positions.to(dtype)
+
+    tiles = Tiles(positions, tile=32)
+    tile_a, tile_b = tile_pairs(tiles, cutoff)
+    positions_a = positions[tiles.index[tile_a]]
+    positions_b = positions[tiles.index[tile_b]]
+
+    # The exact squared distances of the same, rounded coordinates.
+    exact = _broadcast_distance_squared(
+        positions_a.double(), positions_b.double()
+    )
+    computed = _baddbmm_distance_squared(positions_a, positions_b).double()
+
+    near = exact <= (1.2 * cutoff) ** 2
+    error = (computed - exact).abs()[near]
+    assert float(error.max()) <= 16 * eps * cutoff**2

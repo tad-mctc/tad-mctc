@@ -331,6 +331,37 @@ def test_tile_pairs_with_anchors_are_the_pairs_with_an_anchor_tile(
     assert bool((got_a <= got_b).all())
 
 
+@pytest.mark.parametrize(
+    "box",
+    [
+        (40.0, 40.0, 40.0),
+        (60.0, 60.0, 0.0),
+        (5.0, 5.0, 120.0),
+        (90.0, 3.0, 30.0),
+    ],
+    ids=["cube", "flat-slab", "rod", "anisotropic"],
+)
+def test_tile_pairs_forward_stencil_finds_every_tile_pair(
+    box: tuple[float, float, float],
+) -> None:
+    """Without `anchors`, only the forward half of the bin stencil is
+    searched. It finds the same tile pairs as the full stencil, which
+    `anchors` marking every tile searches."""
+    torch.manual_seed(6)
+    extent = torch.tensor(box, device=DEVICE)
+    positions = torch.rand(400, 3, device=DEVICE) * extent
+    tiles = Tiles(positions, tile=8)
+    every_tile = torch.ones(tiles.ntile, dtype=torch.bool, device=DEVICE)
+
+    half_a, half_b = tile_pairs(tiles, 7.0)
+    full_a, full_b = tile_pairs(tiles, 7.0, anchors=every_tile)
+
+    half = list(zip(half_a.tolist(), half_b.tolist()))
+    full = set(zip(full_a.tolist(), full_b.tolist()))
+    assert len(half) == len(set(half)), "a tile pair was returned twice"
+    assert set(half) == full
+
+
 @pytest.mark.cuda
 def test_tiles_and_tile_pairs_stay_on_input_device() -> None:
     """`Tiles` and `tile_pairs` must place every tensor they build on

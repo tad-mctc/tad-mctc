@@ -76,7 +76,8 @@ from typing import TYPE_CHECKING, Iterator, NamedTuple
 import torch
 
 from ..typing import Tensor
-from ._distance_kernels import split_lattice
+from ._distance_kernels import _image_translation, split_lattice
+from ._tiles import _is_forward, _ragged_runs
 from .list import NeighborList, _molecular_shift
 
 if TYPE_CHECKING:
@@ -163,14 +164,11 @@ def _translated(
     """
     if cell is None:
         return positions
-    displacement = shift.to(positions.dtype)
-    if cell.ndim == 2:
-        return positions + displacement @ cell
-    return positions + torch.einsum("nc,ncd->nd", displacement, cell)
+    return positions + _image_translation(shift, cell)
 
 
 def _oriented_csr(
-    nat: int, idx_i: Tensor, idx_j: Tensor, shift: Tensor
+    nat: int, idx_i: Tensor, idx_j: Tensor, shift: Tensor | None
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     """
     Oriented CSR adjacency from real (unpadded) pairs. Shared by both the
@@ -187,8 +185,9 @@ def _oriented_csr(
     Every pair of a centre's upward neighbours is then one candidate
     triple, and every triple -- an unordered set of three points up to a
     common lattice translation -- has exactly one smallest point, so it is
-    a candidate of exactly one centre, once. For a molecular list the
-    shifts are zero and the order reduces to the atom index.
+    a candidate of exactly one centre, once. For a molecular list,
+    ``shift=None``, the shifts are zero and the order reduces to the atom
+    index.
 
     Returns
     -------
@@ -198,23 +197,24 @@ def _oriented_csr(
         degree[a]]``, at the image ``neighbour_shift[...]`` relative to
         ``a``.
     """
-    shift = shift.to(torch.long)
-
-    # Lexicographic `shift > 0`, for the `i == j` self-image entries.
-    positive = (
-        (shift[:, 0] > 0)
-        | ((shift[:, 0] == 0) & (shift[:, 1] > 0))
-        | ((shift[:, 0] == 0) & (shift[:, 1] == 0) & (shift[:, 2] > 0))
-    )
-    upward = (idx_j > idx_i) | ((idx_j == idx_i) & positive)
+    if shift is None:
+        upward = idx_j > idx_i
+    else:
+        # An `i == j` entry always has a non-zero shift, for which
+        # `_is_forward` is the lexicographic `shift > 0`.
+        shift = shift.to(torch.long)
+        upward = (idx_j > idx_i) | ((idx_j == idx_i) & _is_forward(shift))
 
     src = torch.where(upward, idx_i, idx_j)
     dst = torch.where(upward, idx_j, idx_i)
-    dst_shift = torch.where(upward.unsqueeze(-1), shift, -shift)
 
     src_sorted, order = torch.sort(src, stable=True)
     neighbours = dst[order]
-    neighbour_shift = dst_shift[order]
+    if shift is None:
+        neighbour_shift = _molecular_shift(neighbours.shape[0], src.device)
+    else:
+        dst_shift = torch.where(upward.unsqueeze(-1), shift, -shift)
+        neighbour_shift = dst_shift[order]
 
     degree = torch.bincount(src_sorted, minlength=nat)
     offset = torch.cat([degree.new_zeros(1), torch.cumsum(degree, dim=0)])[:nat]
@@ -250,11 +250,7 @@ def _triangle_rows(degree: Tensor) -> tuple[Tensor, Tensor]:
     rows_per_centre = (degree - 1).clamp_min(0)
     first_row = torch.cumsum(rows_per_centre, dim=0) - rows_per_centre
 
-    row_centre = torch.repeat_interleave(rows_per_centre)
-    row_in_centre = (
-        torch.arange(row_centre.shape[0], device=degree.device)
-        - first_row[row_centre]
-    )
+    row_centre, row_in_centre = _ragged_runs(rows_per_centre)
     row_length = rows_per_centre[row_centre] - row_in_centre
 
     row_offset = torch.cat(
@@ -358,11 +354,10 @@ def _iter_triple_chunks_loop(
     """
     device = real_i.device
     offset, neighbours, neighbour_shift, degree = _oriented_csr(
-        nat, real_i, real_j, real_shift
+        nat, real_i, real_j, None if lattice is None else real_shift
     )
     shared_lattice, system_lattices = split_lattice(lattice)
     cutoff_squared = cutoff * cutoff
-    threshold = float("inf") if chunk_size is None else chunk_size
 
     left_parts: list[Tensor] = []
     centre_parts: list[Tensor] = []
@@ -390,12 +385,16 @@ def _iter_triple_chunks_loop(
         buffered = 0
         return TripleChunk(left, centre, right, left_shift, right_shift)
 
+    # Read once, rather than one `.item()` per atom.
+    degree_of = degree.tolist()
+    offset_of = offset.tolist()
+
     for centre_atom in range(nat):
-        centre_degree = int(degree[centre_atom].item())
+        centre_degree = degree_of[centre_atom]
         if centre_degree < 2:
             continue
 
-        start = int(offset[centre_atom].item())
+        start = offset_of[centre_atom]
         block = neighbours[start : start + centre_degree]
         block_shift = neighbour_shift[start : start + centre_degree]
         cell = (
@@ -418,10 +417,6 @@ def _iter_triple_chunks_loop(
             if chunk_size is None:
                 step = n_local - sub_start
             else:
-                # `chunk_size` (not `threshold`, which is the float `inf`
-                # sentinel in the `chunk_size is None` branch above) is
-                # the right operand here -- this branch only ever runs
-                # when `chunk_size` is an int.
                 remaining = chunk_size - buffered
                 step = min(max(remaining, 1), n_local - sub_start)
             sub_stop = sub_start + step
@@ -475,7 +470,7 @@ def _iter_triple_chunks_loop(
                 right_shift_parts.append(right_shift[keep])
                 buffered += left.shape[0]
 
-            if buffered >= threshold:
+            if chunk_size is not None and buffered >= chunk_size:
                 yield flush()
 
             sub_start = sub_stop
@@ -535,7 +530,7 @@ class TripleIndex:
         self.periodic = periodic
         self.atoms_per_system = atoms_per_system
         self.offset, self.neighbours, self.neighbour_shift, degree = (
-            _oriented_csr(nat, real_i, real_j, real_shift)
+            _oriented_csr(nat, real_i, real_j, real_shift if periodic else None)
         )
 
         # Number of candidate triples contributed by each centre atom, and
@@ -774,25 +769,16 @@ def triples_from_neighborlist(
     # Flattened, the positions line up with a batched list's atom indices.
     positions = structure.positions.reshape(-1, 3)
     nat = positions.shape[0]
-    real_i = nbl.idx_i[nbl.mask]
-    real_j = nbl.idx_j[nbl.mask]
-    real_shift = nbl.shift[nbl.mask]
+    real_i, real_j, real_shift = nbl.real_entries()
     lattice = structure.lattice if nbl.periodic else None
     atoms_per_system = structure.positions.shape[-2]
 
-    if positions.device.type == "cpu":
-        return _iter_triple_chunks_loop(
-            nat,
-            real_i,
-            real_j,
-            real_shift,
-            positions,
-            lattice,
-            atoms_per_system,
-            cutoff,
-            chunk_size,
-        )
-    return _iter_triple_chunks_vectorized(
+    iterate = (
+        _iter_triple_chunks_loop
+        if positions.device.type == "cpu"
+        else _iter_triple_chunks_vectorized
+    )
+    return iterate(
         nat,
         real_i,
         real_j,

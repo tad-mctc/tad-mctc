@@ -42,7 +42,6 @@ from tad_mctc.ncoord.common import CNModel
 from tad_mctc.ncoord.count import erf_count
 from tad_mctc.neighbor.images import (
     build_periodic_shifts,
-    build_shared_periodic_shifts,
 )
 from tad_mctc.typing import DD, Tensor
 
@@ -345,7 +344,7 @@ def test_vmap_matches_single_for_mixed_periodicity(
     batch = _bulk_and_lower_dim(dd, periodic)
     assert batch.lattice is not None and batch.periodic is not None
 
-    shifts = build_shared_periodic_shifts(
+    shifts = build_periodic_shifts(
         batch.lattice, batch.periodic, cutoff=cn_d3.cutoff
     )
 

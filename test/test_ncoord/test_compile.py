@@ -47,7 +47,6 @@ from ._paths import (
     Bind,
     bind_dense,
     bind_precomputed,
-    bind_precomputed_batch,
     bind_sparse,
 )
 from .samples import bulk_and_slab
@@ -111,7 +110,7 @@ def test_compiles_fullgraph(bind: Bind, source: tuple[str, str]) -> None:
 @pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 @pytest.mark.parametrize(
     "bind",
-    [bind_precomputed_batch, bind_sparse],
+    [bind_precomputed, bind_sparse],
     ids=["precomputed", "sparse"],
 )
 def test_compiles_fullgraph_bulk_and_slab(bind: Bind) -> None:

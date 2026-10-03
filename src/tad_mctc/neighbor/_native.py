@@ -16,11 +16,10 @@
 # limitations under the License.
 """
 Neighbour search: optional native CPU acceleration
-====================================================
+==================================================
 
-An OpenMP-parallel C++ implementation
-(:file:`_native_pairs.cpp`) of the per-candidate "filter down to exact
-atom pairs" step inside
+An OpenMP-parallel C++ implementation (:file:`_native_pairs.cpp`) of the
+per-candidate "filter down to exact atom pairs" step inside
 :func:`tad_mctc.neighbor.list._atom_pairs_within_thresholds`, opt-in and
 compiled lazily.
 
@@ -51,12 +50,12 @@ that true for anyone who never triggers it: by default, the C++ source is compil
 compiler, no OpenMP support, a build-toolchain quirk, whatever -- is
 caught in :func:`_load` and simply turns native support off;
 :func:`tad_mctc.neighbor.list._atom_pairs_within_thresholds` falls back to
-the pure-Python path it always had. The same path handles positions
-of a dtype the kernel is not compiled for (see :data:`SUPPORTED_DTYPES`).
-Installing or importing ``tad_mctc`` never requires a compiler. Set the ``TAD_MCTC_DISABLE_NATIVE`` environment
-variable (any non-empty value) to force that fallback even when the
-extension would otherwise load, e.g. to reproduce a result independent of
-whether native support happened to be available.
+the pure-Python path. The same path handles positions of a dtype the kernel
+is not compiled for (see :data:`SUPPORTED_DTYPES`). Installing or importing
+``tad_mctc`` never requires a compiler. Set the ``TAD_MCTC_DISABLE_NATIVE``
+environment variable (any non-empty value) to force that fallback even when
+the extension would otherwise load, e.g. to reproduce a result independent
+of whether native support happened to be available.
 
 That JIT compile happens once per environment, not once per process: the
 first real invocation after a fresh install, a wiped cache, or a new
@@ -374,12 +373,12 @@ def _load_with_info() -> tuple[Any | None, BuildInfo]:
     compiled_now = os.path.getmtime(module.__file__) >= started
     info = BuildInfo(
         "jit",
-        module.__file__,
-        compiled_now,
-        ninja,
-        cflags,
-        precompiled_error,
-        compiler,
+        library=module.__file__,
+        compiled_now=compiled_now,
+        ninja=ninja,
+        cflags=cflags,
+        error=precompiled_error,
+        compiler=compiler,
     )
     return module, info
 

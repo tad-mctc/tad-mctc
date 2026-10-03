@@ -89,19 +89,22 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol
 
 import torch
 
+from ..autograd.checks import is_functorch_tensor, is_vmapped
+from ..autograd.unwrap import unwrap_gradtracking
+from ..batch import real_atoms
 from ..typing import DD, Self, Tensor, TensorLike
 from . import _distance_kernels, _native
 from ._distance_kernels import DistanceKernelName
-from ._tiles import Tiles, tile_pairs
+from ._tiles import Tiles, _integer_box, _is_forward, _ragged_runs, tile_pairs
 from .images import (
-    _can_read_values,
+    _image_rings,
     _validate_lattice_periodic,
-    build_shared_periodic_shifts,
-    count_image_rings_mctclib,
     wrap_to_central_cell,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from ..io.structure import Structure
 
 __all__ = [
@@ -309,9 +312,6 @@ class NeighborList(TensorLike):
         NeighborList
             A copy on the requested device and dtype.
         """
-        if device is None and dtype is None:
-            return self
-
         target_device = device if device is not None else self.device
         target_dtype = dtype if dtype is not None else self.dtype
         if self.device == target_device and self.dtype == target_dtype:
@@ -447,7 +447,7 @@ class NeighborList(TensorLike):
         # periodic list always records its axes.
         periodic = structure.periodic
         assert periodic is not None and self.periodic_axes is not None
-        if not _can_read_values(periodic):
+        if is_functorch_tensor(periodic):
             return
 
         list_axes = self.periodic_axes.to(periodic.device)
@@ -522,6 +522,31 @@ class NeighborList(TensorLike):
 
         drift = displacement.norm(dim=-1).max()
         return (drift > self.skin / 2) | lattice_changed
+
+    def real_entries(self) -> tuple[Tensor, Tensor, Tensor]:
+        """
+        The real (unpadded) entries of the list.
+
+        Data-dependent in size, so for construction-side code only, not
+        for a ``vmap``-ed or compiled consumer.
+
+        Returns
+        -------
+        tuple[Tensor, Tensor, Tensor]
+            ``idx_i`` and ``idx_j``, both ``(n_real,)``, and ``shift``,
+            ``(n_real, 3)``. A molecular list's shift is again a zero-stride
+            view of one zero row.
+        """
+        # One `nonzero` shared by every gather, instead of one per masked
+        # index.
+        real = self.mask.nonzero().squeeze(-1)
+        idx_i = self.idx_i.index_select(0, real)
+        idx_j = self.idx_j.index_select(0, real)
+        if self.periodic:
+            shift = self.shift.index_select(0, real)
+        else:
+            shift = _molecular_shift(real.shape[0], self.device)
+        return idx_i, idx_j, shift
 
 
 # Dtype of `idx_i`/`idx_j`. It must stay `torch.long`: the backward pass
@@ -655,7 +680,7 @@ def _separate_systems(
     ``positions``. They grow with the number of systems, and the tile
     screen compares them directly: in float32, a batch of 20000 systems
     reaches coordinates of about 4e7 Bohr, spaced 4 Bohr apart, and a
-    real pair whose ends round apart past the cutoff was dropped.
+    real pair whose ends round apart past the cutoff would be dropped.
 
     This shift's entire correctness argument rests on one invariant that
     it cannot enforce by itself: once :class:`.Tiles` bins the shifted
@@ -872,7 +897,7 @@ def _atom_pairs_within_thresholds(
     distance_kernel : DistanceKernelName | None, optional
         Force a specific :class:`._distance_kernels.DistanceKernel` by
         name (``"triton"``, ``"baddbmm"``, ``"broadcast"``) instead of
-        the automatic, device/dtype/tile_width-based choice. ``None``
+        the automatic, device-based choice. ``None``
         (default) is the automatic choice; see
         :func:`._distance_kernels.select_kernel`. Only consulted when the
         Python implementation actually runs; see ``pair_filter`` for how
@@ -969,14 +994,9 @@ def _atom_pairs_within_thresholds(
     # Which way to compute a chunk's exact squared distances is a solved,
     # separately-measured question -- see `._distance_kernels`'s module
     # docstring for the measurements behind each kernel's own
-    # applicability check. Picked
-    # once here, outside the chunk loop, since device/dtype/tile_width
-    # never change across chunks within one call.
+    # applicability check. Picked once here, outside the chunk loop.
     kernel = _distance_kernels.select_kernel(
-        reference_positions.device,
-        reference_positions.dtype,
-        tile_width,
-        force=distance_kernel,
+        reference_positions.device, force=distance_kernel
     )
 
     # The distances are compared in the positions' dtype, against each
@@ -1019,9 +1039,7 @@ def _atom_pairs_within_thresholds(
         # since the two atom sets are disjoint and each unordered tile
         # pair is enumerated exactly once by `tile_pairs`.
         same_tile = (chunk_a == chunk_b).view(-1, 1, 1)
-        keep_shape = torch.where(
-            same_tile, strict_upper_triangle, torch.ones_like(both_real[0])
-        )
+        keep_shape = ~same_tile | strict_upper_triangle
         candidate = both_real & keep_shape
         if anchor_atoms is not None:
             has_anchor = anchor_atoms[atoms_a].unsqueeze(2) | anchor_atoms[
@@ -1044,21 +1062,6 @@ def _atom_pairs_within_thresholds(
         )
 
     return results
-
-
-def _is_forward(shifts: Tensor) -> Tensor:
-    """
-    Whether each integer image shift, shape ``(n, 3)``, is the zero shift
-    or points *forward*: its first non-zero component is positive.
-
-    For every non-zero shift ``n``, exactly one of ``n`` and ``-n`` is
-    forward. :func:`_ghost_pool` relies on this to find every bond once.
-    """
-    x, y, z = shifts.unbind(-1)
-    forward_x = x > 0
-    forward_y = (x == 0) & (y > 0)
-    forward_z_or_zero = (x == 0) & (y == 0) & (z >= 0)
-    return forward_x | forward_y | forward_z_or_zero
 
 
 def _ghost_pairs_to_atom_pairs(
@@ -1097,15 +1100,20 @@ def _ghost_pairs_to_atom_pairs(
         ``idx_i`` and ``idx_j``, both ``(n_pair,)``, and ``shift``,
         ``(n_pair, 3)``, in the dtype of the ghosts' ``shift``.
     """
-    i_is_primary = is_primary[ghost_i]
+    # `index_select` rather than advanced indexing: its CPU gather is
+    # about twice as fast on these pair-sized index tensors.
+    i_is_primary = is_primary.index_select(0, ghost_i)
     anchor = torch.where(i_is_primary, ghost_i, ghost_j)
     other = torch.where(i_is_primary, ghost_j, ghost_i)
-    return owner[anchor], owner[other], shift[other] - shift[anchor]
+    idx_i = owner.index_select(0, anchor)
+    idx_j = owner.index_select(0, other)
+    pair_shift = shift.index_select(0, other) - shift.index_select(0, anchor)
+    return idx_i, idx_j, pair_shift
 
 
 def _pad_to_capacity(
-    idx_i_raw: Tensor,
-    idx_j_raw: Tensor,
+    fragments_i: list[Tensor],
+    fragments_j: list[Tensor],
     nat: int,
     cutoff: float,
     skin: float,
@@ -1117,12 +1125,15 @@ def _pad_to_capacity(
     periodic_axes: Tensor | None = None,
 ) -> NeighborList:
     """
-    Pad raw, exact pairs out to a fixed capacity, with padded slots
-    routed to the phantom atom ``nat``. See :func:`_neighbor_list` for the
-    other parameters.
+    Pad raw, exact pairs, given as fragments (see :func:`_join_pairs`), out
+    to a fixed capacity, with padded slots routed to the phantom atom
+    ``nat``. See :func:`_neighbor_list` for the other parameters.
     """
     pairs = _join_pairs(
-        [idx_i_raw], [idx_j_raw], _Padding(capacity, nat), idx_i_raw.device
+        fragments_i,
+        fragments_j,
+        _Padding(capacity, nat),
+        build_positions.device,
     )
     return _neighbor_list(
         pairs,
@@ -1150,7 +1161,8 @@ def _neighbor_list(
     A :class:`NeighborList` from pairs already padded to their capacity.
 
     ``shift_raw`` is the periodic image shift per found pair, shape
-    ``(n_found, 3)``; ``None`` (the molecular case) gives all-zero shifts.
+    ``(n_found, 3)``, or already padded with zero shifts to ``(capacity,
+    3)``; ``None`` (the molecular case) gives all-zero shifts.
     ``lattice``, when given, is stored only as a detached build-time
     snapshot for :meth:`NeighborList.stale`; consumers receive it as a
     call-time argument instead (``tad_mctc.ncoord.common``).
@@ -1198,6 +1210,10 @@ def _neighbor_list(
 
     if shift_raw is None:
         shift = _molecular_shift(capacity, pairs.idx_i.device)
+    elif shift_raw.shape[0] == capacity and shift_raw.dtype == _SHIFT_DTYPE:
+        # Already padded with zero shifts (or exactly full), in its final
+        # dtype.
+        shift = shift_raw
     else:
         shift = torch.zeros(
             capacity, 3, dtype=_SHIFT_DTYPE, device=pairs.idx_i.device
@@ -1243,13 +1259,7 @@ def _tiles_of_separated_systems(
         The largest cutoff of the search, including skin.
     tile : int
         Maximum number of atoms per tile.
-
-    Raises
-    ------
-    ValueError
-        ``search_cutoff`` is zero.
     """
-    _check_batched_search_radius(search_cutoff)
     separated_positions, gap = _separate_systems(
         positions, system, search_cutoff
     )
@@ -1330,9 +1340,9 @@ def _ghost_shift_in_original_coordinates(
         ``(n_ghost, 3)``, integer shifts.
     """
     shift = ghost_shift + cell_shift[owner]
-    half_of_int16 = torch.iinfo(torch.int16).max // 2
-    if shift.numel() == 0 or int(shift.abs().max()) <= half_of_int16:
-        return shift.to(torch.int16)
+    half_of_range = torch.iinfo(_SHIFT_DTYPE).max // 2
+    if shift.numel() == 0 or int(shift.abs().max()) <= half_of_range:
+        return shift.to(_SHIFT_DTYPE)
     return shift
 
 
@@ -1365,7 +1375,7 @@ def _split_cells_by_pair_budget(
     list[tuple[int, int]]
         ``(first, stop)`` system index ranges covering the batch.
     """
-    n_real = (numbers != 0).sum(-1).to(lattices.dtype)
+    n_real = real_atoms(numbers).sum(-1).to(lattices.dtype)
     volume = torch.linalg.det(lattices).abs()
     sphere = 4.0 / 3.0 * math.pi * cutoff**3
     estimated_pairs = (n_real**2 * sphere / volume / 2).tolist()
@@ -1400,7 +1410,7 @@ def _ghost_pool(
     neighbours, ``+n`` and ``-n`` (see :class:`.NeighborList`).
 
     The shift table is shared, sized for the most demanding lattice
-    (:func:`.build_shared_periodic_shifts`), but every cell only gets the
+    (:func:`.build_periodic_shifts`), but every cell only gets the
     shifts within its own image rings. Without that, one small cell in a
     batch of large ones would give every cell its many rings. An open
     axis has no rings, so a cell with a short placeholder vector there
@@ -1429,11 +1439,9 @@ def _ghost_pool(
     """
     nat = is_real.shape[-1]
 
-    shifts = build_shared_periodic_shifts(lattices, periodics, cutoff).shifts
+    rings = _image_rings(lattices, periodics, cutoff)  # (n_systems, 3)
+    shifts = _integer_box(rings.amax(0))
     shifts = shifts[_is_forward(shifts)]
-
-    rings = count_image_rings_mctclib(lattices, periodics, cutoff)
-    rings = torch.maximum(rings, periodics.long())  # (n_systems, 3)
     within_rings = (shifts.abs()[None] <= rings[:, None, :]).all(-1)
 
     # Only the ghosts that exist are built, from their indices, in the
@@ -1447,13 +1455,9 @@ def _ghost_pool(
     shifts_per_system = within_rings.sum(-1)
     first_shift = torch.cumsum(shifts_per_system, 0) - shifts_per_system
 
-    shifts_per_atom = shifts_per_system[atom_system]
-    system = atom_system.repeat_interleave(shifts_per_atom)
-    atom = real_atom.repeat_interleave(shifts_per_atom)
-    run_start = torch.cumsum(shifts_per_atom, 0) - shifts_per_atom
-    position_in_run = torch.arange(
-        system.numel(), device=system.device
-    ) - run_start.repeat_interleave(shifts_per_atom)
+    ghost_atom, position_in_run = _ragged_runs(shifts_per_system[atom_system])
+    system = atom_system[ghost_atom]
+    atom = real_atom[ghost_atom]
     shift_index = own_shift[first_shift[system] + position_in_run]
 
     translations = shifts.to(wrapped_positions.dtype) @ lattices
@@ -1534,11 +1538,11 @@ def _search_cells(
     tile: int,
     distance_kernel: DistanceKernelName | None,
     stage: _StageHook,
-) -> list[tuple[Tensor, Tensor, Tensor]]:
+    padding: _Padding | None = None,
+) -> list[tuple[_Pairs, Tensor]]:
     """
-    The pairs ``(idx_i, idx_j, shift)`` within each threshold, for one
-    cell or several independent ones, from one ghost pool and one tile
-    search.
+    The pairs within each threshold and their image shifts, for one cell
+    or several independent ones, from one ghost pool and one tile search.
 
     Parameters
     ----------
@@ -1557,12 +1561,17 @@ def _search_cells(
         See :func:`build_neighborlists`.
     stage : _StageHook
         Wraps each step of the search, see :func:`_build_neighborlists`.
+    padding : _Padding | None, optional
+        When given, the pairs and shifts of every list are returned
+        already padded to its capacity, a padded slot holding
+        ``padding.value`` twice and a zero shift. ``None`` (default)
+        returns them unpadded.
 
     Returns
     -------
-    list[tuple[Tensor, Tensor, Tensor]]
-        Per threshold, ``idx_i``, ``idx_j`` and ``shift`` of every pair,
-        with atoms numbered ``b * nat + i`` like :class:`.NeighborList`.
+    list[tuple[_Pairs, Tensor]]
+        Per threshold, the pairs, with atoms numbered ``b * nat + i`` like
+        :class:`.NeighborList`, and the ``(n, 3)`` image shift of each.
     """
     n_systems, nat = is_real.shape
     search_cutoff = max(thresholds)
@@ -1601,6 +1610,13 @@ def _search_cells(
             anchors=_tiles_holding_primary(tiles, is_primary),
         )
 
+    # The ghost pairs are padded with a phantom ghost one past the pool.
+    # Mapped to the phantom atom with a zero shift below, its padded slots
+    # come out as those of the final list, which is so written only once.
+    n_ghost = ghost_positions.shape[0]
+    ghost_padding = (
+        None if padding is None else _Padding(padding.capacity, n_ghost)
+    )
     with stage("pair filter"):
         per_threshold_ghost_pairs = _atom_pairs_within_thresholds(
             tiles,
@@ -1610,24 +1626,33 @@ def _search_cells(
             thresholds,
             distance_kernel=distance_kernel,
             anchor_atoms=is_primary,
+            padding=ghost_padding,
         )
 
     with stage("ghost shifts"):
         shift_from_original = _ghost_shift_in_original_coordinates(
             ghost_shift, owner, cell_shift
         )
+        if padding is not None:
+            owner = torch.cat([owner, owner.new_full((1,), padding.value)])
+            shift_from_original = torch.cat(
+                [shift_from_original, shift_from_original.new_zeros(1, 3)]
+            )
+            is_primary = torch.cat([is_primary, is_primary.new_ones(1)])
 
     with stage("ghost pairs to atoms"):
-        return [
-            _ghost_pairs_to_atom_pairs(
+        per_threshold_pairs = []
+        for ghost_pairs in per_threshold_ghost_pairs:
+            idx_i, idx_j, shift = _ghost_pairs_to_atom_pairs(
                 ghost_pairs.idx_i,
                 ghost_pairs.idx_j,
                 owner,
                 shift_from_original,
                 is_primary,
             )
-            for ghost_pairs in per_threshold_ghost_pairs
-        ]
+            pairs = _Pairs(idx_i, idx_j, ghost_pairs.n_found)
+            per_threshold_pairs.append((pairs, shift))
+        return per_threshold_pairs
 
 
 def _check_search_arguments(
@@ -1681,7 +1706,7 @@ def _build_single_neighborlists(
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
 
     # Padding atoms (`numbers == 0`) must not get pairs, as in a batch.
-    is_real = structure.numbers != 0
+    is_real = real_atoms(structure.numbers)
 
     if structure.lattice is None:
         if bool(is_real.all()):
@@ -1716,8 +1741,8 @@ def _build_single_neighborlists(
         with stage("pad to capacity"):
             return tuple(
                 _pad_to_capacity(
-                    real_atom_index[pairs.idx_i],
-                    real_atom_index[pairs.idx_j],
+                    [real_atom_index[pairs.idx_i]],
+                    [real_atom_index[pairs.idx_j]],
                     nat,
                     cutoff,
                     skin,
@@ -1744,25 +1769,21 @@ def _build_single_neighborlists(
         tile=tile,
         distance_kernel=distance_kernel,
         stage=stage,
+        padding=_Padding(capacity, nat),
     )
-    with stage("pad to capacity"):
+    with stage("finalize"):
         return tuple(
-            _pad_to_capacity(
-                idx_i,
-                idx_j,
-                nat,
+            _neighbor_list(
+                pairs,
                 cutoff,
                 skin,
-                capacity,
                 positions,
                 dd,
                 shift_raw=shift,
                 lattice=structure.lattice,
                 periodic_axes=structure.periodic,
             )
-            for cutoff, (idx_i, idx_j, shift) in zip(
-                cutoffs, per_threshold_cell_pairs
-            )
+            for cutoff, (pairs, shift) in zip(cutoffs, per_threshold_cell_pairs)
         )
 
 
@@ -1786,12 +1807,16 @@ def _build_batched_neighborlists(
     numbers = structure.numbers.reshape(-1, nat)  # (B, nat)
     positions = structure.positions.reshape(-1, nat, 3)
     n_systems = numbers.shape[0]
-    is_real = numbers != 0
+    is_real = real_atoms(numbers)
 
     thresholds = tuple(cutoff + skin for cutoff in cutoffs)
     _check_batched_search_radius(max(thresholds))
 
-    per_threshold_pairs: list[tuple[Tensor, Tensor, Tensor | None]] = []
+    # The indices stay in fragments, which `_pad_to_capacity` joins with
+    # the padding in a single copy.
+    per_threshold_pairs: list[
+        tuple[list[Tensor], list[Tensor], Tensor | None]
+    ] = []
     if structure.lattice is None:
         # One search over the real atoms of every system, kept apart by
         # their system index, then renumbered into the padded layout.
@@ -1810,8 +1835,8 @@ def _build_batched_neighborlists(
         ):
             per_threshold_pairs.append(
                 (
-                    real_atom_index[pairs.idx_i],
-                    real_atom_index[pairs.idx_j],
+                    [real_atom_index[pairs.idx_i]],
+                    [real_atom_index[pairs.idx_j]],
                     None,
                 )
             )
@@ -1846,21 +1871,26 @@ def _build_batched_neighborlists(
             )
             # The chunk numbers its atoms from zero.
             offset = first * nat
-            for chunks, (idx_i, idx_j, shift) in zip(
-                per_threshold_chunks, searched
-            ):
-                chunks.append((idx_i + offset, idx_j + offset, shift))
+            for chunks, (pairs, shift) in zip(per_threshold_chunks, searched):
+                chunks.append(
+                    (pairs.idx_i + offset, pairs.idx_j + offset, shift)
+                )
 
         for chunks in per_threshold_chunks:
-            idx_i, idx_j, shift = (torch.cat(column) for column in zip(*chunks))
-            per_threshold_pairs.append((idx_i, idx_j, shift))
+            fragments_i, fragments_j, shifts = map(list, zip(*chunks))
+            # Only the fragment lists hold the pairs, so that joining them
+            # frees each one.
+            chunks.clear()
+            per_threshold_pairs.append(
+                (fragments_i, fragments_j, torch.cat(shifts))
+            )
 
     dd: DD = {"device": positions.device, "dtype": positions.dtype}
     with stage("pad to capacity"):
         return tuple(
             _pad_to_capacity(
-                idx_i,
-                idx_j,
+                fragments_i,
+                fragments_j,
                 n_systems * nat,
                 cutoff,
                 skin,
@@ -1871,12 +1901,102 @@ def _build_batched_neighborlists(
                 lattice=structure.lattice,
                 periodic_axes=structure.periodic,
             )
-            for cutoff, (idx_i, idx_j, shift) in zip(
+            for cutoff, (fragments_i, fragments_j, shift) in zip(
                 cutoffs, per_threshold_pairs
             )
         )
 
 
+try:
+    from torch._C._functorch import (  # pyright: ignore[reportMissingImports]
+        peek_interpreter_stack,
+        pop_dynamic_layer_stack,
+        push_dynamic_layer_stack,
+    )
+
+    _CAN_POP_LAYERS = True
+except ImportError:  # pragma: no cover
+    _CAN_POP_LAYERS = False
+
+
+@contextlib.contextmanager
+def _pop_transform_layers() -> Generator[None]:
+    """
+    Run the body with every ``torch.func`` layer set aside.
+
+    ``torch._functorch.pyfunctorch.temporarily_pop_interpreter_stack``
+    pops one layer only, so under ``jacrev(jacrev(f))`` the tensors made in
+    the body would still be wrapped by the outer one.
+    """
+    if not _CAN_POP_LAYERS:  # pragma: no cover
+        raise RuntimeError(
+            "Building a neighbour list inside `jacrev`/`grad` needs "
+            "`torch._C._functorch.pop_dynamic_layer_stack`, which this "
+            f"PyTorch ({torch.__version__}) does not provide. Build the "
+            "list outside the transform."
+        )
+
+    popped = []
+    try:
+        while peek_interpreter_stack() is not None:
+            popped.append(pop_dynamic_layer_stack())
+        yield
+    finally:
+        for layer in reversed(popped):
+            push_dynamic_layer_stack(layer)
+
+
+@contextlib.contextmanager
+def _outside_transforms(structure: Structure) -> Generator[Structure]:
+    """
+    Run a build with the ``jacrev``/``grad`` layers of ``torch.func`` set
+    aside, on a structure whose tensors are unwrapped from them.
+
+    A list is index data and carries no gradient. Under ``jacrev`` the
+    tensors a build creates (tile indices, masks) would be wrapped like its
+    inputs, and the native search cannot read a wrapped tensor, so the
+    build runs as plain eager code on the values underneath. A ``vmap``
+    layer cannot be set aside: the size of the list depends on the data,
+    which a batched tensor does not have.
+
+    Yields
+    ------
+    Structure
+        ``structure`` without the grad-tracking wrappers of its tensors.
+
+    Raises
+    ------
+    RuntimeError
+        A tensor of ``structure`` is batched by ``torch.func.vmap``.
+    """
+    fields = ("numbers", "positions", "lattice", "periodic")
+    tensors = {n: getattr(structure, n) for n in fields}
+
+    if any(t is not None and is_vmapped(t) for t in tensors.values()):
+        raise RuntimeError(
+            "A neighbour list cannot be built inside `torch.func.vmap`: its "
+            "size depends on the data. Build the list(s) outside `vmap` (at "
+            "a common `capacity` for lists that are stacked) and pass them "
+            "in."
+        )
+
+    unwrapped = {
+        n: unwrap_gradtracking(t) for n, t in tensors.items() if t is not None
+    }
+    if all(unwrapped[n] is tensors[n] for n in unwrapped):
+        yield structure
+        return
+
+    with _pop_transform_layers():
+        # The list keeps `periodic` as its `periodic_axes`; a copy, made
+        # with the layers aside so that it is not wrapped, so that no tensor
+        # that sat under a wrapper outlives the transform inside the list.
+        if unwrapped.get("periodic") is not None:
+            unwrapped["periodic"] = unwrapped["periodic"].clone()
+        yield structure.replace(**unwrapped)
+
+
+@torch.compiler.disable
 @torch.no_grad()
 def _build_neighborlists(
     structure: Structure,
@@ -1911,20 +2031,21 @@ def _build_neighborlists(
     """
     _check_search_arguments(cutoffs, skin, tile)
 
-    build = (
-        _build_batched_neighborlists
-        if structure.numbers.ndim > 1
-        else _build_single_neighborlists
-    )
-    return build(
-        structure,
-        cutoffs,
-        tile=tile,
-        skin=skin,
-        capacity=capacity,
-        distance_kernel=distance_kernel,
-        stage=stage,
-    )
+    with _outside_transforms(structure) as plain:
+        build = (
+            _build_batched_neighborlists
+            if plain.numbers.ndim > 1
+            else _build_single_neighborlists
+        )
+        return build(
+            plain,
+            cutoffs,
+            tile=tile,
+            skin=skin,
+            capacity=capacity,
+            distance_kernel=distance_kernel,
+            stage=stage,
+        )
 
 
 def build_neighborlists(
@@ -2005,6 +2126,15 @@ def build_neighborlists(
     ValueError
         A cutoff or ``skin`` is negative; ``tile < 1``; or a batched
         ``structure`` is searched with ``max(cutoffs) + skin == 0``.
+    RuntimeError
+        ``structure`` is batched by ``torch.func.vmap``. Inside ``jacrev``,
+        ``jacfwd``, ``hessian``, ``jvp`` and ``grad`` the build works: it
+        reads the values of the tensors, and the list holds only integer
+        and boolean data, so it is a constant to the transform. (``jacfwd``
+        batches only the tangents, not the primal positions the build
+        reads.) The build is a graph break under ``torch.compile``, and
+        PyTorch returns an all-zero gradient for ``torch.compile(jacrev(f))``
+        when ``f`` has any graph break; use ``grad``, or build outside.
     """
     return _build_neighborlists(
         structure,

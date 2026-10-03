@@ -47,7 +47,6 @@ from ._paths import (
     Bind,
     bind_dense,
     bind_precomputed,
-    bind_precomputed_batch,
     bind_sparse,
 )
 from ._variants import VARIANTS
@@ -110,7 +109,7 @@ CELL_PAIR = (("other", "periodic_triclinic"), ("other", "periodic_one_atom"))
 BATCH_CASES = [
     pytest.param(bind_dense, MOLECULE_PAIR, id="dense-01+SiH4"),
     pytest.param(
-        bind_precomputed_batch,
+        bind_precomputed,
         CELL_PAIR,
         id="precomputed-periodic_triclinic+periodic_one_atom",
     ),
@@ -124,7 +123,7 @@ BATCH_CASES = [
 
 CELL_BATCH_CASES = [
     pytest.param(
-        bind_precomputed_batch,
+        bind_precomputed,
         CELL_PAIR,
         id="precomputed-periodic_triclinic+periodic_one_atom",
     ),
@@ -138,7 +137,7 @@ CELL_BATCH_CASES = [
 # The paths that accept a batch of cells and can be traced.
 bulk_and_slab_paths = pytest.mark.parametrize(
     "bind",
-    [bind_precomputed_batch, bind_sparse],
+    [bind_precomputed, bind_sparse],
     ids=["precomputed", "sparse"],
 )
 

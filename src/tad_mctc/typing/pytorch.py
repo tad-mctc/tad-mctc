@@ -27,11 +27,9 @@ tensor-like behavior (`.to` and `.type` methods) to classes.
 from __future__ import annotations
 
 from typing import (
-    TYPE_CHECKING,
     Any,
     ClassVar,
     NoReturn,
-    Protocol,
     TypedDict,
     TypeVar,
     cast,
@@ -41,19 +39,9 @@ import torch
 from torch import Tensor
 
 from ..exceptions import DtypeError
-from .compat import CountingFunction, Self
-
-if TYPE_CHECKING:
-    # Only for the `CNFunc` annotation below -- importing these at runtime
-    # would cycle back here, since `io.checks.structure` already imports
-    # from this package (`..typing`).
-    from ..io.structure import Structure
-    from ..ncoord.common import NeighborListMode
-    from ..neighbor.images import PeriodicShifts
-    from ..neighbor.list import NeighborList
+from .compat import Self
 
 __all__ = [
-    "CNFunc",
     "DD",
     "MockTensor",
     "ModuleLike",
@@ -583,26 +571,3 @@ class ModuleLike(torch.nn.Module):
     ) -> None:
         if any(tensor.dtype != dtype for tensor in tensors):
             raise RuntimeError("All tensors must have the same dtype!")
-
-
-##############################################################################
-
-
-class CNFunc(Protocol):
-    """
-    Type annotation for a coordination-number function: the call signature
-    every :class:`~tad_mctc.ncoord.common.CNModel` preset (``cn_d3``,
-    ``cn_d4``, ...) satisfies.
-    """
-
-    def __call__(
-        self,
-        structure: Structure,
-        pairs: PeriodicShifts | NeighborList | None = None,
-        *,
-        mode: NeighborListMode = "graph",
-    ) -> Tensor:
-        """
-        Calculate the coordination number of each atom in the system.
-        """
-        ...

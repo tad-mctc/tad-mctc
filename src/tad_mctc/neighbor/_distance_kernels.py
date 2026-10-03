@@ -24,7 +24,7 @@ candidate tile pair, and there is more than one way to compute that on a
 given device, dtype and tile width -- measured to matter by 3-12x on
 CPU and to reverse sign entirely across CUDA precisions. A
 **distance kernel** is one such way: a name, a predicate saying when it
-applies, and the computation itself. Three exist today --
+applies, and the computation itself. There are three:
 
 * ``"triton"`` -- a hand-written GPU kernel, the same shape of kernel
   LASP-D3's CUDA and NVIDIA's Warp ``cluster_tile`` kernel already use for
@@ -44,15 +44,11 @@ applies, and the computation itself. Three exist today --
 :func:`select_kernel` is the whole interface: it walks the list in
 priority order and returns the first applicable one, or honours an
 explicit ``force`` override. Each kernel's own applicability check is
-self-contained -- adding a fourth kernel later means writing one more
-:class:`DistanceKernel` and inserting it into :data:`_KERNELS`, never
-editing this function.
+self-contained, so a new kernel is one more :class:`DistanceKernel` in
+:data:`_KERNELS`, without changes to this function.
 
 This is deliberately a registry for *this one problem*, not a general
-dispatch mechanism for the package: with a single use case, generalising
-the shape of ``applicable`` (what parameters a kernel's condition might
-ever need) would be guessing, not designing. Revisit only once a second,
-unrelated dispatch need exists somewhere else in this codebase.
+dispatch mechanism for the package.
 
 The ``"triton"`` kernel is written in Triton (pure Python, JIT-compiled at
 call time -- no C/CUDA extension to build, the same mechanism
@@ -78,7 +74,7 @@ Example
 >>> from tad_mctc.neighbor._distance_kernels import is_available, select_kernel
 >>> is_available(torch.device("cpu"))
 False
->>> select_kernel(torch.device("cpu"), torch.float64, tile_width=32).name
+>>> select_kernel(torch.device("cpu")).name
 'baddbmm'
 """
 
@@ -161,17 +157,17 @@ class DistanceKernel(NamedTuple):
     name : str
         Stable identifier, used by :func:`select_kernel`'s ``force``
         override and in its error messages.
-    applicable : Callable[[torch.device, torch.dtype, int], bool]
-        Whether this kernel should be considered for a given device,
-        dtype and tile width. Self-contained: a kernel decides for
-        itself, so :func:`select_kernel` never needs to know why.
+    applicable : Callable[[torch.device], bool]
+        Whether this kernel should be considered for a given device.
+        Self-contained: a kernel decides for itself, so
+        :func:`select_kernel` never needs to know why.
     compute : Callable[[Tensor, Tensor], Tensor]
         ``(positions_a, positions_b)``, each ``(chunk, tile_width, 3)``,
         to ``distance_squared``, ``(chunk, tile_width, tile_width)``.
     """
 
     name: str
-    applicable: Callable[[torch.device, torch.dtype, int], bool]
+    applicable: Callable[[torch.device], bool]
     compute: Callable[[Tensor, Tensor], Tensor]
 
 
@@ -326,17 +322,17 @@ def _broadcast_distance_squared(
 _KERNELS: list[DistanceKernel] = [
     DistanceKernel(
         name="triton",
-        applicable=lambda device, dtype, tile_width: is_available(device),
+        applicable=is_available,
         compute=pairwise_distance_squared,
     ),
     DistanceKernel(
         name="baddbmm",
-        applicable=lambda device, dtype, tile_width: device.type == "cpu",
+        applicable=lambda device: device.type == "cpu",
         compute=_baddbmm_distance_squared,
     ),
     DistanceKernel(
         name="broadcast",
-        applicable=lambda device, dtype, tile_width: True,
+        applicable=lambda device: True,
         compute=_broadcast_distance_squared,
     ),
 ]
@@ -346,24 +342,17 @@ last and unconditionally applicable, so this list always yields one."""
 
 def select_kernel(
     device: torch.device,
-    dtype: torch.dtype,
-    tile_width: int,
     *,
     force: str | None = None,
     kernels: list[DistanceKernel] | None = None,
 ) -> DistanceKernel:
     """
-    Pick the distance kernel to use for this device, dtype and tile
-    width.
+    Pick the distance kernel to use on this device.
 
     Parameters
     ----------
     device : torch.device
         Device the positions live on.
-    dtype : torch.dtype
-        Floating dtype of the positions.
-    tile_width : int
-        Atoms per tile (``Tiles.tile``).
     force : str | None, optional
         Skip priority selection and use the kernel with this
         :attr:`DistanceKernel.name` instead. ``None`` (default) selects
@@ -384,7 +373,7 @@ def select_kernel(
     ValueError
         If ``force`` names a kernel that is not in ``kernels``, or that
         is in ``kernels`` but reports itself not applicable for this
-        device/dtype/tile_width -- never silently substituted for
+        device -- never silently substituted for
         another kernel.
     RuntimeError
         If no kernel in ``kernels`` is applicable and ``force`` is not
@@ -402,21 +391,19 @@ def select_kernel(
                 f"must be one of {sorted(by_name)}"
             )
         kernel = by_name[force]
-        if not kernel.applicable(device, dtype, tile_width):
+        if not kernel.applicable(device):
             raise ValueError(
                 f"distance_kernel={force!r} requested but is not "
-                f"applicable for device={device}, dtype={dtype}, "
-                f"tile_width={tile_width}"
+                f"applicable for device={device}"
             )
         return kernel
 
     for kernel in candidates:
-        if kernel.applicable(device, dtype, tile_width):
+        if kernel.applicable(device):
             return kernel
 
     raise RuntimeError(
-        "no distance kernel is applicable for device="
-        f"{device}, dtype={dtype}, tile_width={tile_width}; the "
+        f"no distance kernel is applicable for device={device}; the "
         "`kernels` list passed to `select_kernel` must end in an "
         "unconditionally applicable fallback."
     )
@@ -453,6 +440,29 @@ def split_lattice(
     if cells.shape[0] == 1:
         return cells[0], None
     return None, cells
+
+
+def _image_translation(shift: Tensor, cell: Tensor) -> Tensor:
+    """
+    The Cartesian translation of each integer lattice shift.
+
+    Parameters
+    ----------
+    shift : Tensor
+        ``(n, 3)``, integer lattice translations.
+    cell : Tensor
+        One ``(3, 3)`` cell for every row, or one ``(n, 3, 3)`` cell per
+        row, lattice vectors as rows.
+
+    Returns
+    -------
+    Tensor
+        ``(n, 3)``, in the dtype of ``cell``.
+    """
+    displacement = shift.to(cell.dtype)
+    if cell.ndim == 2:
+        return displacement @ cell
+    return (displacement.unsqueeze(-2) @ cell).squeeze(-2)
 
 
 def pair_distance_squared(
@@ -511,8 +521,7 @@ def pair_distance_squared(
     del positions_i, positions_j
 
     if shared_lattice is not None:
-        translation = shift.to(shared_lattice.dtype) @ shared_lattice
-        difference = difference + translation
+        difference = difference + _image_translation(shift, shared_lattice)
 
     elif system_lattices is not None:
         # Each pair takes the cell of its own system. This gathers a
@@ -520,8 +529,6 @@ def pair_distance_squared(
         # handled separately above.
         system = idx_i // atoms_per_system
         pair_cell = system_lattices.index_select(0, system)
-        shift_row = shift.to(pair_cell.dtype).unsqueeze(-2)  # (n_pairs, 1, 3)
-        translation = (shift_row @ pair_cell).squeeze(-2)
-        difference = difference + translation
+        difference = difference + _image_translation(shift, pair_cell)
 
     return (difference * difference).sum(-1)

@@ -27,10 +27,9 @@ import torch
 from tad_mctc.data.structures import get_structure
 from tad_mctc.io.structure import Structure, pack_structures
 from tad_mctc.ncoord import cn_d3
-from tad_mctc.neighbor._tiles import Tiles, tile_pairs
+from tad_mctc.neighbor._tiles import Tiles, _is_forward
 from tad_mctc.neighbor.images import (
-    build_ghost_pool,
-    build_shared_periodic_shifts,
+    build_periodic_shifts,
     count_image_rings_mctclib,
     wrap_to_central_cell,
 )
@@ -38,7 +37,6 @@ from tad_mctc.neighbor.list import (
     NeighborList,
     _ghost_pool,
     _ghost_shift_in_original_coordinates,
-    _is_forward,
     _neighbor_list,
     _Pairs,
     _split_cells_by_pair_budget,
@@ -871,10 +869,44 @@ def test_periodic_padding_targets_the_phantom_row() -> None:
     )
     padded = ~nbl.mask
 
+    assert bool(padded.any()), "test needs a list with padded slots"
     assert bool((nbl.idx_i[padded] == nat).all())
     assert bool((nbl.idx_j[padded] == nat).all())
+    assert bool((nbl.shift[padded] == 0).all())
     assert bool((nbl.idx_i[nbl.mask] != nat).all())
     assert bool((nbl.idx_j[nbl.mask] != nat).all())
+
+
+def test_periodic_explicit_capacity_keeps_the_leading_entries() -> None:
+    """A periodic list with an explicit `capacity` holds the same leading
+    entries as the auto-sized one: all of them, then padding, for a larger
+    capacity, and the first `capacity` of them, flagged as `overflow`, for
+    a smaller one."""
+    torch.manual_seed(7)
+    nat = 10
+    lattice = _CUBIC_CELL.to(DEVICE)
+    periodic = torch.tensor([True, True, True], device=DEVICE)
+    positions = torch.rand(nat, 3, dtype=torch.double, device=DEVICE) @ lattice
+    structure = hydrogens(positions, lattice=lattice, periodic=periodic)
+
+    full = build_neighborlist(structure, cutoff=6.0, tile=4)
+    npair = int(full.mask.sum())
+
+    for capacity in (npair + 37, npair // 2):
+        nbl = build_neighborlist(
+            structure, cutoff=6.0, tile=4, capacity=capacity
+        )
+        kept = min(npair, capacity)
+
+        assert nbl.idx_i.shape[0] == capacity
+        assert nbl.shift.shape == (capacity, 3)
+        assert nbl.overflow is (capacity < npair)
+        assert int(nbl.mask.sum()) == kept
+        assert torch.equal(nbl.idx_i[:kept], full.idx_i[:kept])
+        assert torch.equal(nbl.idx_j[:kept], full.idx_j[:kept])
+        assert torch.equal(nbl.shift[:kept], full.shift[:kept])
+        assert bool((nbl.idx_i[kept:] == nat).all())
+        assert bool((nbl.shift[kept:] == 0).all())
 
 
 def test_padding_atoms_of_a_single_cell_have_no_pairs() -> None:
@@ -1483,9 +1515,7 @@ def test_ghost_pool_matches_a_loop_over_systems_atoms_and_shifts() -> None:
         is_real, batch.positions, batch.lattice, periodics, cutoff
     )
 
-    shifts = build_shared_periodic_shifts(
-        batch.lattice, periodics, cutoff
-    ).shifts
+    shifts = build_periodic_shifts(batch.lattice, periodics, cutoff).shifts
     shifts = shifts[_is_forward(shifts)]
     rings = count_image_rings_mctclib(batch.lattice, periodics, cutoff)
     expected_positions, expected_owner = [], []
@@ -1512,8 +1542,7 @@ def test_ghost_pool_matches_a_loop_over_systems_atoms_and_shifts() -> None:
 
 def test_ghost_pool_holds_the_primary_cell_and_half_of_the_images() -> None:
     """Of every pair of opposite images, the pool holds only the forward
-    one: its size is the primary cell plus half of the other images of
-    the full pool."""
+    one: its size is the primary cell plus half of its other images."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
     cutoff = 12.0
     cell = load_structure("other", "periodic_cubic", dd)
@@ -1527,11 +1556,8 @@ def test_ghost_pool_holds_the_primary_cell_and_half_of_the_images() -> None:
         cell.periodic.unsqueeze(0),
         cutoff,
     )
-    full_pool, _, _ = build_ghost_pool(
-        cell.positions, cell.lattice, cell.periodic, cutoff
-    )
-
-    n_images = full_pool.shape[0] - nat
+    n_shifts = build_periodic_shifts(cell.lattice, cell.periodic, cutoff)
+    n_images = nat * (n_shifts.shifts.shape[0] - 1)
     assert ghost_positions.shape[0] == nat + n_images // 2
     assert bool(_is_forward(shift).all())
 

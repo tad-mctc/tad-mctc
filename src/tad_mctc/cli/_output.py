@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import torch
 
+from ..batch import real_atoms
 from ..data import pse
 from ..io.structure import Structure
 from ..neighbor import _native
@@ -55,7 +56,7 @@ def print_system_info(path: str, structure: Structure) -> None:
     and whether it is periodic."""
     numbers = structure.numbers
     # Padding atoms of the shorter frames of a batch are not atoms.
-    is_real = numbers != 0
+    is_real = real_atoms(numbers)
 
     print()
     print("System")
@@ -119,7 +120,7 @@ def print_results(cn_name: str, cn: Tensor, structure: Structure) -> None:
     instead of the raw per-atom tensor, which is unreadable past a
     handful of atoms. For a batch, the statistics run over the real atoms
     of all frames; the zero CN of a padding atom is left out."""
-    is_real = structure.numbers != 0
+    is_real = real_atoms(structure.numbers)
     real_cn = cn[is_real]
     # `nonzero` lists the real atoms in the same order as `cn[is_real]`.
     real_index = is_real.nonzero()

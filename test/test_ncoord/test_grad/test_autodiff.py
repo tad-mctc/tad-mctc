@@ -39,7 +39,6 @@ from .._paths import (
     Bind,
     bind_dense,
     bind_precomputed,
-    bind_precomputed_batch,
     bind_sparse,
 )
 from .._variants import VARIANTS
@@ -157,9 +156,7 @@ def test_gradcheck_batch_dense(
 def test_gradcheck_batch_precomputed(
     pair: tuple[tuple[str, str], tuple[str, str]], variant_name: str
 ) -> None:
-    _check_batch_grad(
-        bind_precomputed_batch, pair, variant_name, nondet_tol=0.0
-    )
+    _check_batch_grad(bind_precomputed, pair, variant_name, nondet_tol=0.0)
 
 
 @pytest.mark.grad
@@ -186,9 +183,7 @@ def test_gradgradcheck_batch_dense(
 def test_gradgradcheck_batch_precomputed(
     pair: tuple[tuple[str, str], tuple[str, str]], variant_name: str
 ) -> None:
-    _check_batch_gradgrad(
-        bind_precomputed_batch, pair, variant_name, nondet_tol=0.0
-    )
+    _check_batch_gradgrad(bind_precomputed, pair, variant_name, nondet_tol=0.0)
 
 
 @pytest.mark.grad

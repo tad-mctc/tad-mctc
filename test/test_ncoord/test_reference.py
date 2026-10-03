@@ -41,7 +41,6 @@ from ._paths import (
     Bind,
     bind_dense,
     bind_precomputed,
-    bind_precomputed_batch,
     bind_sparse,
 )
 from ._variants import VARIANTS
@@ -220,7 +219,7 @@ def test_batch_precomputed(
     pair: tuple[tuple[str, str], tuple[str, str]],
     dtype: torch.dtype,
 ) -> None:
-    _check_batch(bind_precomputed_batch, pair, variant_name, dtype)
+    _check_batch(bind_precomputed, pair, variant_name, dtype)
 
 
 @pytest.mark.parametrize("dtype", [torch.float, torch.double])

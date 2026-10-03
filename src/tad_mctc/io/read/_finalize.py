@@ -35,6 +35,21 @@ from ..checks import content_checks, deflatable_check, shape_checks
 
 __all__: list[str] = []
 
+# The reader options: those :func:`~tad_mctc.io.checks.deflatable_check`
+# reads, and `batch_agnostic`, which the xyz reader reads itself and passes
+# on. Every reader hands its keyword arguments to `finalize_geometry`, which
+# rejects any other name instead of ignoring it.
+_READER_OPTIONS = frozenset(
+    {
+        "padding_value",
+        "raise_padding_exception",
+        "raise_padding_warning",
+        "shift_for_last",
+        "shift_value",
+        "batch_agnostic",
+    }
+)
+
 
 def resolve_dd(
     device: torch.device | None,
@@ -101,18 +116,19 @@ def finalize_geometry(
     Raises
     ------
     TypeError
-        ``check_coldfusion`` or ``coldfusion_cutoff`` is passed. The
-        distance check needs the whole structure, so a single format's
-        reader does not run it; the option would otherwise be ignored
-        silently.
+        A keyword argument is not a reader option. The padding checks only
+        read their options when the positions clash with the padding
+        value, so a misspelled option would otherwise be ignored silently.
     """
-    for name in ("check_coldfusion", "coldfusion_cutoff"):
-        if name in kwargs:
-            raise TypeError(
-                f"`{name}` is not a reader option. Pass `check_coldfusion` "
-                "to `read`/`read_structure`, or call "
-                "`tad_mctc.io.checks.coldfusion_check` on the structure."
-            )
+    unknown = sorted(set(kwargs) - _READER_OPTIONS)
+    if unknown:
+        raise TypeError(
+            f"Unknown reader option(s): {unknown}. The reader options are "
+            f"{sorted(_READER_OPTIONS)}. The interatomic distance check "
+            "needs the whole structure: pass `check_coldfusion=True` to "
+            "`read`/`read_structure`, or call "
+            "`tad_mctc.io.checks.coldfusion_check` on the structure."
+        )
 
     shape_checks(numbers, positions, allow_batched=False)
     content_checks(numbers, positions, allow_batched=False)
