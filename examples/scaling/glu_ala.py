@@ -88,24 +88,30 @@ LADDER_A_MAX_LABEL = 2048  # glu_ala_a's largest size label
 
 
 def _safe_extractall(tar: tarfile.TarFile, directory: Path) -> None:
-    """`tar.extractall(directory)`, guarded against a member path escaping
-    `directory` (the classic tar path-traversal footgun). `filter="data"`
-    (Python >= 3.12) already guards this; older Pythons get the same
-    check by hand -- `Path.is_relative_to` needs 3.9, so this uses
-    `relative_to`'s `ValueError` instead, for 3.8 compatibility."""
-    if hasattr(tarfile, "data_filter"):
-        tar.extractall(directory, filter="data")
-        return
+    """Safely `tar.extractall(directory)`.
 
-    resolved = directory.resolve()
-    for member in tar.getmembers():
-        try:
-            (resolved / member.name).resolve().relative_to(resolved)
-        except ValueError:
+    Only regular files and directories are allowed. Rejecting links
+    up front also blocks the known symlink/hardlink bypasses of the
+    `data` filter (CVE-2025-4517 et al., fixed in 3.10.18 / 3.11.13 /
+    3.12.11 / 3.13.4) on interpreters that predate those fixes.
+    Extraction then uses `filter="data"` (PEP 706; 3.10.12+ / 3.11.4+),
+    which also blocks path traversal, device files, and unsafe
+    permission bits. Older interpreters are refused rather than given
+    a weaker hand-rolled check.
+    """
+    if not hasattr(tarfile, "data_filter"):
+        raise RuntimeError(
+            "Safe tar extraction requires Python 3.10.12+ / 3.11.4+"
+        )
+
+    members = tar.getmembers()
+    for member in members:
+        if not (member.isfile() or member.isdir()):
             raise RuntimeError(
-                f"Unsafe path in archive: {member.name}"
-            ) from None
-    tar.extractall(directory)
+                f"Unsupported member type in archive: {member.name}"
+            )
+
+    tar.extractall(directory, members=members, filter="data")
 
 
 def ensure_ladder(directory: Path, archive_stem: str) -> None:

@@ -327,7 +327,11 @@ def test_vmap_over_recompute_mode_raises() -> None:
     def f_recompute(positions: torch.Tensor) -> torch.Tensor:
         return f_sparse(positions, mode="recompute")
 
-    with pytest.raises(RuntimeError, match="_NoopSaveInputs"):
+    # The message differs across torch versions: older ones fail inside
+    # `_NoopSaveInputs`, newer ones reject saved tensor hooks up front.
+    with pytest.raises(
+        RuntimeError, match="_NoopSaveInputs|saved tensor hooks"
+    ):
         vmap(jacrev(f_recompute))(batch)
 
 
