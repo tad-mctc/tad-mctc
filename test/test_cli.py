@@ -27,8 +27,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from tad_mctc.cli import main
-from tad_mctc.cli import _timing
+from tad_mctc.cli import _timing, main
 from tad_mctc.cli._args import CN_MODELS
 from tad_mctc.cli._main import _build_neighborlist, _coordination_number
 from tad_mctc.cli._output import print_native_build, print_system_info
@@ -404,7 +403,13 @@ def test_system_info_lists_charge_and_uhf_of_every_frame(
             ["compiler", "flags"],
         ),
     ],
-    ids=["precompiled", "disabled", "unavailable", "jit-compiled", "jit-cached"],
+    ids=[
+        "precompiled",
+        "disabled",
+        "unavailable",
+        "jit-compiled",
+        "jit-cached",
+    ],
 )
 def test_native_build_report(
     capsys: pytest.CaptureFixture[str],
