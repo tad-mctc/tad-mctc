@@ -21,15 +21,20 @@ info and timing step, and the timed neighbour-list build.
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pytest
 import torch
 
 from tad_mctc.cli import main
-from tad_mctc.cli._main import _build_neighborlist
+from tad_mctc.cli import _timing
+from tad_mctc.cli._args import CN_MODELS
+from tad_mctc.cli._main import _build_neighborlist, _coordination_number
+from tad_mctc.cli._output import print_native_build, print_system_info
 from tad_mctc.cli._timing import Timings
 from tad_mctc.io.structure import Structure
+from tad_mctc.neighbor import _native
 from tad_mctc.neighbor.list import build_neighborlist
 from tad_mctc.typing import DD
 
@@ -220,3 +225,230 @@ def test_non_positive_omp_is_a_usage_error(
 
     assert exc.value.code == 2
     assert "--omp: must be at least 1" in capsys.readouterr().err
+
+
+def test_non_integer_omp_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    structure = tmp_path / "water.xyz"
+    structure.write_text(_WATER)
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--omp", "many", str(structure)])
+
+    assert exc.value.code == 2
+    assert "invalid int value: 'many'" in capsys.readouterr().err
+
+
+def test_nlist_only_cannot_be_combined_with_a_dense_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    structure = tmp_path / "water.xyz"
+    structure.write_text(_WATER)
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--nlist-only", "--neighbor", "dense", str(structure)])
+
+    assert exc.value.code == 2
+    assert "cannot be combined" in capsys.readouterr().err
+
+
+def test_cuda_without_a_cuda_device_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    structure = tmp_path / "water.xyz"
+    structure.write_text(_WATER)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    with pytest.raises(SystemExit, match="no CUDA device"):
+        main(["--cuda", str(structure)])
+
+
+def test_cuda_run_moves_the_structure_to_the_device(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The move is its own timed step. There is no device here, so the
+    move is recorded and left undone."""
+    structure = tmp_path / "water.xyz"
+    structure.write_text(_WATER)
+    moved_to: list[torch.device] = []
+
+    def record_move(self: Structure, device: torch.device) -> Structure:
+        moved_to.append(device)
+        return self
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(Structure, "to", record_move)
+
+    argv = ["--timing", "--cuda", "--neighbor", "dense", str(structure)]
+    assert main(argv) == 0
+
+    assert moved_to == [torch.device("cuda")]
+    assert "move to device" in capsys.readouterr().out.split("Timing")[-1]
+
+
+@pytest.mark.parametrize("nlist_only", [False, True])
+def test_sparse_run_without_the_native_extension_reports_it(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    nlist_only: bool,
+) -> None:
+    """With the extension disabled, the sparse run goes through the
+    pure-Python search and says so."""
+    structure = tmp_path / "water.xyz"
+    structure.write_text(_WATER)
+    monkeypatch.setenv("TAD_MCTC_DISABLE_NATIVE", "1")
+    _native._load_with_info.cache_clear()
+
+    argv = ["--nlist-only"] if nlist_only else []
+    try:
+        assert main([*argv, str(structure)]) == 0
+    finally:
+        _native._load_with_info.cache_clear()
+    out = capsys.readouterr().out
+
+    assert "disabled by TAD_MCTC_DISABLE_NATIVE" in out
+    assert ("Neighbour list" in out) == nlist_only
+    assert ("Results" in out) != nlist_only
+
+
+def test_dense_run_of_a_cell_builds_its_periodic_shifts(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A periodic structure is summed over its images through shifts built
+    for the model's cutoff, as its own timed step."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+    structure = load_structure("other", "periodic_triclinic", dd)
+    args = argparse.Namespace(cn="d3", neighbor="dense", mode="graph")
+    cn = _coordination_number(
+        args, CN_MODELS["d3"], structure, Timings(enabled=True)
+    )
+
+    assert "build periodic shifts" in capsys.readouterr().out
+    assert cn.shape == structure.numbers.shape
+    assert bool(torch.isfinite(cn).all())
+
+
+def test_system_info_leaves_out_charge_and_uhf_if_unset(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    numbers = torch.tensor([2])
+    structure = Structure(numbers, torch.zeros(1, 3))
+
+    print_system_info("he.xyz", structure)
+    out = capsys.readouterr().out
+
+    assert "charge" not in out
+    assert "uhf" not in out
+    assert "periodic  no" in out
+
+
+def test_system_info_lists_charge_and_uhf_of_every_frame(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    structure = Structure(
+        torch.tensor([[2, 0], [1, 1]]),
+        torch.zeros(2, 2, 3),
+        charge=torch.tensor([0.0, 1.0]),
+        uhf=torch.tensor([0.0, 2.0]),
+    )
+
+    print_system_info("frames.xyz", structure)
+    out = capsys.readouterr().out
+
+    assert "charge    0 1" in out
+    assert "uhf       0 2" in out
+
+
+@pytest.mark.parametrize(
+    ("info", "expected", "absent"),
+    [
+        (
+            _native.BuildInfo("precompiled", "/lib/ext.so"),
+            ["precompiled (TAD_MCTC_BUILD_NATIVE=1 install)", "/lib/ext.so"],
+            ["compiler", "flags", "ninja", "error"],
+        ),
+        (
+            _native.BuildInfo("disabled"),
+            ["disabled by TAD_MCTC_DISABLE_NATIVE, pure Python"],
+            ["library", "compiler", "ninja"],
+        ),
+        (
+            _native.BuildInfo("unavailable", error="no compiler"),
+            ["failed to load or compile, pure Python", "error     no compiler"],
+            ["library", "ninja"],
+        ),
+        (
+            _native.BuildInfo(
+                "jit",
+                "/lib/ext.so",
+                compiled_now=True,
+                ninja="/bin/ninja (1.11)",
+                cflags=("-O3", "-fno-fast-math"),
+                compiler="/bin/c++ (gcc 13)",
+            ),
+            [
+                "compiled on first use (JIT), compiled in this run",
+                "compiler  /bin/c++ (gcc 13)",
+                "flags     -O3 -fno-fast-math",
+                "ninja     /bin/ninja (1.11)",
+            ],
+            ["error"],
+        ),
+        (
+            _native.BuildInfo("jit", "/lib/ext.so"),
+            ["compiled on first use (JIT), cached build", "not found"],
+            ["compiler", "flags"],
+        ),
+    ],
+    ids=["precompiled", "disabled", "unavailable", "jit-compiled", "jit-cached"],
+)
+def test_native_build_report(
+    capsys: pytest.CaptureFixture[str],
+    info: _native.BuildInfo,
+    expected: list[str],
+    absent: list[str],
+) -> None:
+    print_native_build(info)
+    out = capsys.readouterr().out
+
+    for text in expected:
+        assert text in out
+    for text in absent:
+        assert text not in out.replace("Native extension", "")
+
+
+def test_timings_wait_for_queued_cuda_kernels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Kernels launch asynchronously, so each step is closed only after
+    the device is done, if CUDA is in use."""
+    calls: list[str] = []
+    monkeypatch.setattr(torch.cuda, "is_initialized", lambda: True)
+    monkeypatch.setattr(torch.cuda, "synchronize", lambda: calls.append("sync"))
+
+    _timing._synchronize_cuda()
+
+    assert calls == ["sync"]
+
+
+def test_cuda_neighbour_list_does_not_report_the_native_extension(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The search on a CUDA device does not run through the CPU
+    extension, so there is nothing to report about it."""
+    structure = tmp_path / "water.xyz"
+    structure.write_text(_WATER)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(Structure, "to", lambda self, device: self)
+
+    assert main(["--cuda", "--nlist-only", str(structure)]) == 0
+    out = capsys.readouterr().out
+
+    assert "Neighbour list" in out
+    assert "Native extension" not in out

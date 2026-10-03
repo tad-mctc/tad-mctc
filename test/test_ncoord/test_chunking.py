@@ -254,3 +254,32 @@ def test_sum_over_neighborlist_is_reusable(
                 nbl, one_per_pair, positions, mode=mode
             )
             assert torch.equal(total, expected.to(total.dtype))
+
+
+def test_chunk_size_depends_on_the_device() -> None:
+    """The CPU and the other devices each have their own chunk size."""
+    assert common_module._chunk_size(torch.empty(1)) == (
+        common_module._CHUNK_SIZE_CPU
+    )
+    assert common_module._chunk_size(torch.empty(1, device="meta")) == (
+        common_module._CHUNK_SIZE_GPU
+    )
+
+
+def test_graph_mode_under_tracing_takes_one_chunk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """While `torch.compile` traces, the graph mode leaves the chunk loop
+    out, so a small chunk size no longer splits the list."""
+    structure = load_structure("mb16_43", "01", DD_DOUBLE)
+    nbl = build_neighborlist(structure, cn_d3.cutoff)
+
+    _set_chunk_size(monkeypatch, ONE_CHUNK)
+    one_chunk = _value_and_gradients(cn_d3, structure, nbl)
+
+    _set_chunk_size(monkeypatch, 1)
+    monkeypatch.setattr(common_module, "is_compiling", lambda: True)
+    traced = _value_and_gradients(cn_d3, structure, nbl)
+
+    for expected, actual in zip(one_chunk, traced):
+        assert torch.allclose(actual, expected, atol=1e-12, rtol=0)

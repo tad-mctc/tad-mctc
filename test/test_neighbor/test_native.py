@@ -694,3 +694,151 @@ def test_pair_filter_native_not_applicable_for_half_precision() -> None:
         _atom_pairs_within_thresholds(
             tiles, tile_a, tile_b, positions, (3.0,), pair_filter="native"
         )
+
+
+def test_source_digest_is_none_without_the_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_native, "_SOURCE", "/no/such/_native_pairs.cpp")
+    assert _native._source_digest() is None
+
+
+def test_with_version_of_no_program_is_none() -> None:
+    assert _native._with_version(None) is None
+
+
+def test_with_version_of_a_program_that_does_not_run_is_its_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_to_run(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("exec format error")
+
+    monkeypatch.setattr(_native.subprocess, "run", fail_to_run)
+    assert _native._with_version("/usr/bin/c++") == "/usr/bin/c++"
+
+
+def test_with_version_of_a_program_without_output_is_its_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def run_silently(*args: Any, **kwargs: Any) -> Any:
+        return types.SimpleNamespace(stdout="")
+
+    monkeypatch.setattr(_native.subprocess, "run", run_silently)
+    assert _native._with_version("/usr/bin/c++") == "/usr/bin/c++"
+
+
+@pytest.fixture
+def fresh_load() -> Any:
+    """Start the test with no cached load and leave none behind, since the
+    tests below make it fail on purpose."""
+    _native._load_with_info.cache_clear()
+    yield
+    _native._load_with_info.cache_clear()
+
+
+def test_disabled_native_extension_is_reported_and_unavailable(
+    monkeypatch: pytest.MonkeyPatch, fresh_load: None
+) -> None:
+    monkeypatch.setenv("TAD_MCTC_DISABLE_NATIVE", "1")
+
+    assert _native.build_info().origin == "disabled"
+    assert not _native.is_available()
+
+
+def test_without_the_extension_the_pair_filter_returns_nothing(
+    monkeypatch: pytest.MonkeyPatch, fresh_load: None
+) -> None:
+    """The caller falls back to the Python path on `None`."""
+    monkeypatch.setenv("TAD_MCTC_DISABLE_NATIVE", "1")
+    positions = torch.randn(20, 3)
+    tiles = Tiles(positions, tile=8)
+    tile_a, tile_b = tile_pairs(tiles, 3.0)
+
+    result = _native.atom_pairs_within_thresholds_native(
+        tiles.index,
+        tiles.valid,
+        tile_a,
+        tile_b,
+        positions,
+        (3.0,),
+        None,
+        None,
+        64,
+    )
+
+    assert result is None
+
+
+def test_pair_filter_native_without_the_extension_raises(
+    monkeypatch: pytest.MonkeyPatch, fresh_load: None
+) -> None:
+    """Requested explicitly, a missing extension is an error, where the
+    automatic choice falls back to the Python path."""
+    monkeypatch.setenv("TAD_MCTC_DISABLE_NATIVE", "1")
+    positions = torch.randn(20, 3)
+    tiles = Tiles(positions, tile=8)
+    tile_a, tile_b = tile_pairs(tiles, 3.0)
+
+    with pytest.raises(ValueError, match="failed to load"):
+        _atom_pairs_within_thresholds(
+            tiles, tile_a, tile_b, positions, (3.0,), pair_filter="native"
+        )
+
+    ((automatic_i, automatic_j, _),) = _atom_pairs_within_thresholds(
+        tiles, tile_a, tile_b, positions, (3.0,)
+    )
+    ((python_i, python_j, _),) = _atom_pairs_within_thresholds(
+        tiles, tile_a, tile_b, positions, (3.0,), pair_filter="python"
+    )
+    assert torch.equal(automatic_i, python_i)
+    assert torch.equal(automatic_j, python_j)
+
+
+def _fail_to_compile(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the JIT build fail, as on a machine without a C++ toolchain."""
+    from torch.utils import cpp_extension
+
+    find_spec = importlib.util.find_spec
+
+    def find_no_precompiled_module(name: str, *args: Any) -> Any:
+        if name == _native._PRECOMPILED:
+            return None
+        return find_spec(name, *args)
+
+    def fail(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("c++: error: no such compiler")
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_no_precompiled_module)
+    monkeypatch.setattr(cpp_extension, "load", fail)
+
+
+def test_a_failed_build_is_reported_without_a_warning(
+    monkeypatch: pytest.MonkeyPatch, fresh_load: None
+) -> None:
+    """No toolchain is the ordinary case, so it is quiet: the build info
+    carries the reason."""
+    monkeypatch.delenv("TAD_MCTC_NATIVE_CFLAGS", raising=False)
+    monkeypatch.delenv("TAD_MCTC_DISABLE_NATIVE", raising=False)
+    _fail_to_compile(monkeypatch)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        info = _native.build_info()
+
+    assert info.origin == "unavailable"
+    assert info.error == "c++: error: no such compiler"
+    assert not _native.is_available()
+
+
+def test_a_failed_build_with_added_flags_warns(
+    monkeypatch: pytest.MonkeyPatch, fresh_load: None
+) -> None:
+    """With flags the user added, a failure is likely theirs to fix."""
+    monkeypatch.delenv("TAD_MCTC_DISABLE_NATIVE", raising=False)
+    monkeypatch.setenv("TAD_MCTC_NATIVE_CFLAGS", "-mno-such-flag")
+    _fail_to_compile(monkeypatch)
+
+    with pytest.warns(UserWarning, match="TAD_MCTC_NATIVE_CFLAGS"):
+        info = _native.build_info()
+
+    assert info.origin == "unavailable"

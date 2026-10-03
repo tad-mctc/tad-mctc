@@ -1647,3 +1647,24 @@ def test_batched_list_is_stale_only_for_the_batch_as_a_whole() -> None:
     strained_lattice = batch.lattice.clone()
     strained_lattice[1] *= 1.01
     assert bool(nbl.stale(batch.replace(lattice=strained_lattice)))
+
+
+def test_to_without_a_change_returns_the_list_itself() -> None:
+    """A copy to the device and dtype the list already has is not a copy."""
+    positions = torch.randn(10, 3, dtype=torch.float64)
+    nbl = build_neighborlist(hydrogens(positions), cutoff=3.0, tile=4)
+
+    assert nbl.to() is nbl
+    assert nbl.to(dtype=torch.float64) is nbl
+
+
+def test_type_changes_the_floating_dtype() -> None:
+    """`type` is `to(dtype=...)`: the floating slots follow, the index
+    slots stay."""
+    positions = torch.randn(10, 3, dtype=torch.float64)
+    nbl = build_neighborlist(hydrogens(positions), cutoff=3.0, tile=4)
+
+    converted = nbl.type(torch.float32)
+
+    assert converted.dtype == torch.float32
+    assert converted.idx_i.dtype == torch.long
