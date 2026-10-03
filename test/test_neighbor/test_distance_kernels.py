@@ -30,7 +30,6 @@ from tad_mctc.neighbor._distance_kernels import (
     DistanceKernel,
     _baddbmm_distance_squared,
     _broadcast_distance_squared,
-    pair_distance_squared,
     select_kernel,
     split_lattice,
 )
@@ -185,12 +184,6 @@ def test_split_lattice() -> None:
     shared, per_system = split_lattice(cell.expand(4, 3, 3))
     assert shared is None
     assert per_system is not None and per_system.shape == (4, 3, 3)
-
-
-def test_pair_distance_squared_is_public() -> None:
-    import tad_mctc.neighbor as neighbor
-
-    assert neighbor.pair_distance_squared is pair_distance_squared
 
 
 def test_baddbmm_matches_broadcast_at_large_coordinates() -> None:
