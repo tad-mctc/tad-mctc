@@ -32,13 +32,14 @@ from tad_mctc.cli._args import CN_MODELS
 from tad_mctc.cli._main import _build_neighborlist, _coordination_number
 from tad_mctc.cli._output import print_native_build, print_system_info
 from tad_mctc.cli._timing import Timings
+from tad_mctc.exceptions import StructureWarning
 from tad_mctc.io.structure import Structure
 from tad_mctc.neighbor import _native
 from tad_mctc.neighbor.list import build_neighborlist
 from tad_mctc.typing import DD
 
-from .conftest import DEVICE
-from .utils import load_structure
+from ..conftest import DEVICE
+from ..utils import load_structure
 
 _WATER = """3
 water
@@ -204,7 +205,9 @@ def test_single_atom_has_a_finite_std(
     structure = tmp_path / "he.xyz"
     structure.write_text("1\nhelium\nHe  0.000  0.000  0.000\n")
 
-    assert main(["--neighbor", "dense", str(structure)]) == 0
+    # the lone atom sits in the origin, which the padding check flags
+    with pytest.warns(StructureWarning, match="padding value"):
+        assert main(["--neighbor", "dense", str(structure)]) == 0
     out = capsys.readouterr().out
 
     assert float(out.split("std")[-1].split()[0]) == 0.0

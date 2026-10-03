@@ -27,6 +27,10 @@ markers = [
   "grad: Marks tests which perform 'gradcheck' evaluations, this can be slow.",
   "large: Marks tests for large molecules, this can be slow.",
 ]
+filterwarnings = [
+  # emitted by torch's own compile stack on Python 3.14, not by our code
+  "ignore:`torch.jit.script(_method)?` is not supported in Python 3.14:DeprecationWarning",
+]
 
 
 [tool.mypy]
