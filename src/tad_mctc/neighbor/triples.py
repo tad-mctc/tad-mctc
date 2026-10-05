@@ -58,6 +58,13 @@ kernel launches would otherwise dominate. Both are proven, by test, to enumerate
 the exact same triple set for the same input -- see
 ``test/test_neighbor/test_triples.py``.
 
+:class:`TripleList` is the other form, for reuse over many evaluations
+(e.g. the steps of a molecular dynamics): every triangle of a list's pairs,
+enumerated once, each with its three sides as slots of the list. A
+consumer computes what depends on a pair (a distance, a coefficient) once
+per slot and only looks it up per triple, and masks the triples at its own
+cutoff.
+
 List *construction* (this whole module) is data-dependent --
 ``bincount``/``argsort`` for the CSR adjacency, a Python loop over centre
 atoms or ``searchsorted``/``cumsum`` for the flat enumeration, boolean
@@ -71,11 +78,13 @@ the same split :mod:`.list` draws between building and consuming a
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, NamedTuple
 
 import torch
 
+from ..tree import Node, child
 from ..typing import Tensor
 from ._distance_kernels import _image_translation, split_lattice
 from ._tiles import _is_forward, _ragged_runs
@@ -84,7 +93,12 @@ from .list import NeighborList, _molecular_shift
 if TYPE_CHECKING:
     from ..io.structure import Structure
 
-__all__ = ["TripleChunk", "TripleIndex", "triples_from_neighborlist"]
+__all__ = [
+    "TripleChunk",
+    "TripleIndex",
+    "TripleList",
+    "triples_from_neighborlist",
+]
 
 
 class TripleChunk(NamedTuple):
@@ -198,6 +212,17 @@ def _oriented_csr(
         degree[a]]``, at the image ``neighbour_shift[...]`` relative to
         ``a``.
     """
+    return _oriented_csr_entries(nat, idx_i, idx_j, shift)[:4]
+
+
+def _oriented_csr_entries(
+    nat: int, idx_i: Tensor, idx_j: Tensor, shift: Tensor | None
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    """
+    :func:`_oriented_csr`, and in addition the entry of the pairs each
+    neighbour comes from, ``(n_pairs,)``: neighbour ``n`` of the CSR is
+    the pair ``entry[n]`` of `idx_i`, `idx_j` and `shift`.
+    """
     if shift is None:
         upward = idx_j > idx_i
     else:
@@ -219,7 +244,7 @@ def _oriented_csr(
 
     degree = torch.bincount(src_sorted, minlength=nat)
     offset = torch.cat([degree.new_zeros(1), torch.cumsum(degree, dim=0)])[:nat]
-    return offset, neighbours, neighbour_shift, degree
+    return offset, neighbours, neighbour_shift, degree, order
 
 
 def _triangle_rows(degree: Tensor) -> tuple[Tensor, Tensor]:
@@ -794,3 +819,243 @@ def triples_from_neighborlist(
         cutoff,
         chunk_size,
     )
+
+
+class _PairLookup:
+    """
+    The slot of a pair of a :class:`.NeighborList`, from its two atoms and
+    the image shift of the second: a sorted table of integer keys, one per
+    pair, searched with ``searchsorted``.
+
+    A pair ``(a, b, S)`` and ``(b, a, -S)`` are the same pair, so both are
+    first turned to point forward: ``a < b``, or ``a == b`` with ``S``
+    forward (see :func:`._tiles._is_forward`). The shifts enter the key in
+    a mixed radix sized to the shifts of the list, so a key is exact, and
+    a shift beyond them is not a pair of the list.
+    """
+
+    def __init__(
+        self,
+        nat: int,
+        slot: Tensor,
+        idx_i: Tensor,
+        idx_j: Tensor,
+        shift: Tensor,
+    ) -> None:
+        self.nat = nat
+        low, high, s = self._forward(idx_i, idx_j, shift)
+
+        self.low = s.amin(0) if s.shape[0] > 0 else s.new_zeros(3)
+        self.high = s.amax(0) if s.shape[0] > 0 else s.new_zeros(3)
+        self.radix = self.high - self.low + 1
+
+        largest = nat * nat * math.prod(self.radix.tolist())
+        if largest >= 2**63:
+            raise ValueError(
+                f"The pairs of {nat} atoms with shifts from "
+                f"{self.low.tolist()} to {self.high.tolist()} cannot be "
+                "numbered with 64-bit integers; fold the positions into the "
+                "cell before building the list."
+            )
+
+        self.keys, order = torch.sort(self._key(low, high, s))
+        self.slot = slot[order]
+
+    @staticmethod
+    def _forward(
+        idx_i: Tensor, idx_j: Tensor, shift: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        flip = (idx_i > idx_j) | ((idx_i == idx_j) & ~_is_forward(shift))
+        first = torch.where(flip, idx_j, idx_i)
+        second = torch.where(flip, idx_i, idx_j)
+        return first, second, torch.where(flip.unsqueeze(-1), -shift, shift)
+
+    def _key(self, first: Tensor, second: Tensor, shift: Tensor) -> Tensor:
+        key = first * self.nat + second
+        for axis in range(3):
+            key = key * self.radix[axis] + (shift[:, axis] - self.low[axis])
+        return key
+
+    def find(
+        self, idx_i: Tensor, idx_j: Tensor, shift: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        """
+        The slot of each pair ``(idx_i, idx_j, shift)``, and whether it is
+        a pair of the list at all (where it is not, the slot is arbitrary).
+        """
+        first, second, s = self._forward(idx_i, idx_j, shift)
+        inside = ((s >= self.low) & (s <= self.high)).all(-1)
+        s = torch.minimum(torch.maximum(s, self.low), self.high)
+
+        key = self._key(first, second, s)
+        at = torch.searchsorted(self.keys, key).clamp(
+            max=self.keys.shape[0] - 1
+        )
+        return self.slot[at], inside & (self.keys[at] == key)
+
+
+class TripleList(Node):
+    """
+    Every triangle of the pairs of a :class:`.NeighborList`: three atoms (or
+    images of atoms) of which each two are a pair of the list. Each triple
+    holds its three atoms and its three sides, as slots of the list.
+
+    It is built once, eagerly, from the list alone (:meth:`from_neighborlist`)
+    and valid exactly as long as the list is: at the positions the list was
+    built from, its pairs are every pair within ``cutoff + skin``, so the
+    triples are every triple with all three sides within that reach; while
+    no atom has moved by more than ``skin / 2`` (see :meth:`stale`), they
+    still hold every triple with all sides within ``cutoff``. A consumer
+    computes the quantities of the pairs once over the slots of
+    :attr:`pairs` and masks each triple at its own cutoff by the distances
+    of its sides, which only ever need the list's own data.
+
+    Each triple is listed once, with the smallest of its three points as the
+    centre ``idx_j`` (see :func:`_oriented_csr`), like
+    :func:`triples_from_neighborlist`, and like the list, a batch is one flat
+    system. This holds every triple within the reach, which grow as its
+    sixth power per atom, at six integers each.
+
+    A frozen :class:`~tad_mctc.tree.Node` of integer index data, without a
+    gradient.
+
+    Attributes
+    ----------
+    pairs : NeighborList
+        The list the triples are built from.
+    idx_i, idx_j, idx_k : Tensor
+        ``(n_triples,)``, the atoms of each triple, ``idx_j`` the centre.
+    side_ij, side_jk, side_ik : Tensor
+        ``(n_triples,)``, the slot of :attr:`pairs` of each side.
+    """
+
+    pairs: NeighborList = child()
+    idx_i: Tensor = child()
+    idx_j: Tensor = child()
+    idx_k: Tensor = child()
+    side_ij: Tensor = child()
+    side_jk: Tensor = child()
+    side_ik: Tensor = child()
+
+    @classmethod
+    @torch.no_grad()
+    def from_neighborlist(
+        cls, nbl: NeighborList, *, chunk_size: int = 2_000_000
+    ) -> TripleList:
+        """
+        The triangles of the pairs of `nbl`.
+
+        Only the list enters, not a geometry: a candidate triple is two
+        neighbours of a centre, and it is kept if the third side, between
+        the two neighbours, is a pair of the list as well.
+
+        Parameters
+        ----------
+        nbl : NeighborList
+            The pairs.
+        chunk_size : int, optional
+            Upper bound on the candidate triples tested at once. Defaults
+            to ``2_000_000``.
+
+        Returns
+        -------
+        TripleList
+            Every triangle of `nbl`, once.
+
+        Raises
+        ------
+        ValueError
+            If the atoms and image shifts of `nbl` are too many to number
+            its pairs with 64-bit integers.
+        """
+        slot = nbl.mask.nonzero().squeeze(-1)
+        real_i = nbl.idx_i.index_select(0, slot)
+        real_j = nbl.idx_j.index_select(0, slot)
+        nat = math.prod(nbl.numbers_shape)
+
+        if nbl.periodic:
+            real_shift = nbl.shift.index_select(0, slot).to(torch.long)
+            offset, neighbours, neighbour_shift, degree, entry = (
+                _oriented_csr_entries(nat, real_i, real_j, real_shift)
+            )
+        else:
+            real_shift = torch.zeros(
+                slot.shape[0], 3, dtype=torch.long, device=slot.device
+            )
+            offset, neighbours, neighbour_shift, degree, entry = (
+                _oriented_csr_entries(nat, real_i, real_j, None)
+            )
+        neighbour_slot = slot[entry]
+        lookup = _PairLookup(nat, slot, real_i, real_j, real_shift)
+
+        # Candidate triples of all centres numbered by one flat index, as in
+        # `TripleIndex`.
+        ntri = degree * (degree - 1) // 2
+        tri_offset = torch.cat([ntri.new_zeros(1), torch.cumsum(ntri, 0)])
+        total = int(tri_offset[-1].item())
+        first_row, row_offset = _triangle_rows(degree)
+
+        parts: list[tuple[Tensor, ...]] = []
+        step = max(chunk_size, 1)
+        for start in range(0, total, step):
+            flat = torch.arange(
+                start, min(start + step, total), device=slot.device
+            )
+            centre = torch.searchsorted(tri_offset, flat, right=True) - 1
+            local_a, local_b = _triangular_indices(
+                flat, row_offset, first_row[centre]
+            )
+            slot_a = offset[centre] + local_a
+            slot_b = offset[centre] + local_b
+            left, right = neighbours[slot_a], neighbours[slot_b]
+
+            # from the first neighbour to the second: `x_k + S_k - x_i - S_i`
+            if nbl.periodic:
+                shift = neighbour_shift[slot_b] - neighbour_shift[slot_a]
+            else:
+                shift = real_shift.new_zeros(flat.shape[0], 3)
+            side_ik, found = lookup.find(left, right, shift)
+
+            parts.append(
+                (
+                    left[found],
+                    centre[found],
+                    right[found],
+                    neighbour_slot[slot_a][found],
+                    neighbour_slot[slot_b][found],
+                    side_ik[found],
+                )
+            )
+
+        if parts:
+            fields = [torch.cat(column) for column in zip(*parts)]
+        else:
+            fields = [slot.new_zeros(0) for _ in range(6)]
+
+        return cls(
+            pairs=nbl,
+            idx_i=fields[0],
+            idx_j=fields[1],
+            idx_k=fields[2],
+            side_ij=fields[3],
+            side_jk=fields[4],
+            side_ik=fields[5],
+        )
+
+    @property
+    def reach(self) -> float:
+        """The longest side of the triples at the positions the list was
+        built from: its ``cutoff + skin``."""
+        return self.pairs.cutoff + self.pairs.skin
+
+    def check_compatible(self, structure: Structure, cutoff: float) -> None:
+        """
+        Raise unless these triples are compatible with `structure` and a
+        consumer's `cutoff`, see :meth:`.NeighborList.check_compatible`.
+        """
+        self.pairs.check_compatible(structure, cutoff)
+
+    def stale(self, structure: Structure) -> Tensor:
+        """Whether the list, and with it these triples, should be rebuilt,
+        see :meth:`.NeighborList.stale`."""
+        return self.pairs.stale(structure)

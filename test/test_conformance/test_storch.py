@@ -68,9 +68,8 @@ def _t(values: tuple[float, ...], grad: bool = False) -> torch.Tensor:
 
 def _points(n: int = 4) -> torch.Tensor:
     gen = torch.Generator().manual_seed(0)
-    return torch.rand(
-        n, 3, generator=gen, dtype=torch.float64, device="cpu"
-    ).to(DEVICE)
+    x = torch.rand(n, 3, generator=gen, dtype=torch.float64, device="cpu")
+    return x.to(DEVICE)
 
 
 # -- functions of one tensor ----------------------------------------------
