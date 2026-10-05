@@ -183,23 +183,13 @@ def run_compiled_or_skip(
 ) -> Any:
     """
     Compile ``fn`` with ``torch.compile`` on :data:`COMPILE_BACKEND` and call
-    it, skipping the test instead of failing when this Python/PyTorch/platform
-    combination cannot carry it out.
-
-    Support is not predictable from :data:`DYNAMO_SUPPORTED` alone: PyTorch
-    2.4 cannot compile ``torch.func`` transforms (``Cannot access storage of
-    TensorWrapper``) or trace some ``autograd.Function`` calls. Both are
-    version gaps, not bugs in the code under test. A wrong *value* still
-    fails, since only the compile-and-call step is wrapped, never the
-    assertion that follows it.
+    it, skipping the test when this Python/PyTorch combination does not
+    support Dynamo (:data:`DYNAMO_SUPPORTED`).
     """
     if not DYNAMO_SUPPORTED:
         pytest.skip(DYNAMO_UNSUPPORTED_REASON)
 
-    try:
-        compiled = torch.compile(
-            fn, fullgraph=fullgraph, dynamic=dynamic, backend=COMPILE_BACKEND
-        )
-        return compiled(*args)
-    except Exception as exc:  # pylint: disable=broad-except
-        return pytest.skip(f"torch.compile unsupported here: {exc}")
+    compiled = torch.compile(
+        fn, fullgraph=fullgraph, dynamic=dynamic, backend=COMPILE_BACKEND
+    )
+    return compiled(*args)

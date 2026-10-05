@@ -22,12 +22,6 @@ The checked outputs are the eigenvalues and the projector onto the lowest
 eigenvector (``v[:, 0] v[:, 0]^T``), which is invariant to the sign of the
 eigenvector. Inputs are random symmetric 4x4 matrices, a batch of two for
 `vmap`.
-
-Exclusions: the `torch.compile` check of the two broadening methods
-(custom autograd function with ``setup_context``) is skipped on torch < 2.5,
-where Dynamo cannot inline it (``TypeError: too many positional
-arguments``); the ``None`` path (``torch.linalg.eigh``) is compiled on every
-version.
 """
 
 from __future__ import annotations
@@ -39,7 +33,6 @@ import pytest
 import torch
 from torch.func import vmap
 
-from tad_mctc._version import __tversion__
 from tad_mctc.autograd import (
     dgradcheck,
     dgradgradcheck,
@@ -119,20 +112,8 @@ def test_forward_matches_reverse(method: Method) -> None:
         assert jacfwd_matches_jacrev(f, _symmetric(), atol=1e-8, rtol=1e-6)
 
 
-OLD_TORCH = pytest.mark.skipif(
-    __tversion__ < (2, 6, 0),
-    reason="Dynamo cannot inline the custom autograd function before 2.6",
-)
-
-COMPILE_METHODS = [
-    pytest.param(None, id="none"),
-    pytest.param("cond", id="cond", marks=OLD_TORCH),
-    pytest.param("lorn", id="lorn", marks=OLD_TORCH),
-]
-
-
 @pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
-@pytest.mark.parametrize("method", COMPILE_METHODS)
+@pytest.mark.parametrize("method", METHODS)
 def test_compile_matches_eager(method: Method) -> None:
     a = _symmetric()
 

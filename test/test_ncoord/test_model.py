@@ -33,7 +33,6 @@ import pytest
 import torch
 from torch.func import vmap
 
-from tad_mctc._version import __tversion__
 from tad_mctc.autograd import jacrev_matches_finite_diff
 from tad_mctc.data import radii
 from tad_mctc.data.structures import get_structure
@@ -330,10 +329,6 @@ def test_table_cache_not_filled_under_compile() -> None:
 
 
 @pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
-@pytest.mark.skipif(
-    __tversion__ < (2, 5, 0),
-    reason="`torch.compile` of `torch.func` transforms needs PyTorch 2.5.0.",
-)
 @pytest.mark.parametrize("warm", [False, True])
 def test_table_cache_cold_under_compiled_jacrev(warm: bool) -> None:
     """`torch.compile(jacrev(...))` with a `TableFunction`. Filling a cold

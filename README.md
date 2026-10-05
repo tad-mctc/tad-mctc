@@ -5,7 +5,7 @@
     <td>Compatibility:</td>
     <td>
       <img src="https://img.shields.io/badge/Python-3.10%20|%203.11%20|%203.12|%203.13%20|%203.14%20-blue.svg" alt="Python Versions"/>
-      <img src="https://img.shields.io/badge/PyTorch-%3E=2.4.0-blue.svg" alt="PyTorch Versions"/>
+      <img src="https://img.shields.io/badge/PyTorch-%3E=2.6.0-blue.svg" alt="PyTorch Versions"/>
     </td>
   </tr>
   <tr>
@@ -156,8 +156,6 @@ The following dependencies are required
 
 | PyTorch \ Python | 3.10               | 3.11               | 3.12               | 3.13               | 3.14               |
 | ---------------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
-| 2.4.1            | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: | :x:                | :x:                |
-| 2.5.1            | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: | :x:                | :x:                |
 | 2.6.0            | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: | :x:                |
 | 2.7.1            | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: | :x:                |
 | 2.8.0            | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: | :x:                |
@@ -171,7 +169,7 @@ The following dependencies are required
 :white_check_mark: tested in CI &nbsp;&nbsp; :heavy_check_mark: supported, but not tested in CI (should still work) &nbsp;&nbsp; :x: not supported
 
 Note that only the latest bug fix version is listed, but all preceding bug fix minor versions are supported.
-For example, although only version 2.4.1 is listed, version 2.4.0 is also supported.
+For example, although only version 2.7.1 is listed, version 2.7.0 is also supported.
 
 
 
