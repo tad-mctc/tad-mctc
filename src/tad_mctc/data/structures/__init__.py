@@ -92,6 +92,7 @@ def get_structure(
     record: str,
     device: torch.device | None = None,
     dtype: torch.dtype | None = None,
+    charge: Tensor | float | None = None,
 ) -> Structure:
     """
     Look up one structure by collection and record id.
@@ -110,6 +111,9 @@ def get_structure(
     dtype : torch.dtype | None, optional
         Floating dtype for the structure's floating-point fields. ``None``
         keeps the default dtype.
+    charge : Tensor | float | None, optional
+        Total charge, replacing the record's own. ``None`` (default) keeps
+        the record's charge (absent means neutral).
 
     Returns
     -------
@@ -126,7 +130,16 @@ def get_structure(
     fields = _lookup_or_raise(
         records, record, "record", context=f"collection '{collection}'"
     )
-    return Structure(**fields).to(device=device, dtype=dtype)
+    structure = Structure(**fields).to(device=device, dtype=dtype)
+    if charge is None:
+        return structure
+
+    charge = torch.as_tensor(
+        charge,
+        device=structure.positions.device,
+        dtype=structure.positions.dtype,
+    )
+    return structure.replace(charge=charge)
 
 
 def list_collections() -> list[str]:

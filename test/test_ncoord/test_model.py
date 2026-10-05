@@ -45,10 +45,9 @@ from tad_mctc.ncoord.d4 import cn_d4, d4_en_weight
 from tad_mctc.ncoord.eeq import cn_eeq, cn_eeq_en
 from tad_mctc.ncoord.eeqbc import cn_eeqbc, cn_eeqbc_en
 from tad_mctc.ncoord.gfn2 import cn_gfn2
+from tad_mctc.tools.testing import requires_compile
 
 from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
     compile_fullgraph,
     jacrev,
     run_compiled_or_skip,
@@ -300,7 +299,7 @@ def test_table_cache_survives_cold_fill_under_jacrev() -> None:
     energy(positions)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_table_cache_not_filled_under_compile() -> None:
     """A cold cache is left cold while `torch.compile(fullgraph=True)` is
     tracing (see `test_table_cache_cold_under_compiled_jacrev` for why), and
@@ -328,7 +327,7 @@ def test_table_cache_not_filled_under_compile() -> None:
         assert type(cached) is torch.Tensor
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 @pytest.mark.parametrize("warm", [False, True])
 def test_table_cache_cold_under_compiled_jacrev(warm: bool) -> None:
     """`torch.compile(jacrev(...))` with a `TableFunction`. Filling a cold
@@ -478,7 +477,7 @@ def test_cut_coordination_number_matches_log1p_formula() -> None:
     assert torch.allclose(got, want, atol=1e-12, rtol=0)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cut_coordination_number_compiles_fullgraph_with_tensor_cn_max() -> (
     None
 ):

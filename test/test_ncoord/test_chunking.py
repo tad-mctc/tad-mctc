@@ -36,12 +36,11 @@ from tad_mctc.ncoord import cn_d3, cn_d4, cn_eeq_en
 from tad_mctc.ncoord import common as common_module
 from tad_mctc.ncoord.common import CNModel, sum_over_neighborlist
 from tad_mctc.neighbor.list import NeighborList, build_neighborlist
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
 from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
     compile_fullgraph,
     jacrev,
     load_structure,
@@ -194,7 +193,7 @@ def test_sparse_gradcheck(monkeypatch: pytest.MonkeyPatch) -> None:
 # traced.
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_sparse_compiles_as_one_chunk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

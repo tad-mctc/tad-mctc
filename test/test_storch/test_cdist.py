@@ -26,14 +26,11 @@ import torch
 
 from tad_mctc import storch
 from tad_mctc.convert import numpy_to_tensor
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    compile_fullgraph,
-)
+from ..utils import compile_fullgraph
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
@@ -136,14 +133,13 @@ def test_ps(dtype: torch.dtype, p: int) -> None:
     assert pytest.approx(d1.cpu(), abs=tol) == d2.cpu()
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_cdist_torch_compile_fullgraph() -> None:
     """
     ``storch.cdist`` must trace with ``torch.compile(fullgraph=True)``,
     since every dense path built on it (e.g. ``properties.enn``) does.
     """
-    torch._dynamo.reset()
-
     dd: DD = {"device": DEVICE, "dtype": torch.float64}
     x = numpy_to_tensor(
         np.random.default_rng(3).standard_normal((2, 4, 3)), **dd
@@ -166,7 +162,8 @@ def test_cdist_torch_compile_fullgraph() -> None:
     )
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_quadratic_expansion_torch_compile_fullgraph() -> None:
     """
     The quadratic expansion calls ``storch.safe_sqrt``. A domain check there
@@ -174,8 +171,6 @@ def test_quadratic_expansion_torch_compile_fullgraph() -> None:
     ``torch.compile(fullgraph=True)`` (Dynamo) as data-dependent control
     flow.
     """
-    torch._dynamo.reset()
-
     dd: DD = {"device": DEVICE, "dtype": torch.float64}
     x = numpy_to_tensor(
         np.random.default_rng(3).standard_normal((2, 4, 3)), **dd

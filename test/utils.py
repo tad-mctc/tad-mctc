@@ -20,8 +20,6 @@ Utility functions for testing.
 
 from __future__ import annotations
 
-import shutil
-import sys
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -33,7 +31,9 @@ from tad_mctc.batch import pack
 from tad_mctc.convert import numpy_to_tensor, symmetrizef
 from tad_mctc.data.structures import get_structure
 from tad_mctc.io.structure import Structure, pack_structures
-from tad_mctc.tools.compile import is_compile_supported
+from tad_mctc.tools.compile import compile_fullgraph as _compile_fullgraph
+from tad_mctc.tools.compile import get_compile_backend, is_compile_supported
+from tad_mctc.tools.testing import COMPILE_UNSUPPORTED_REASON
 from tad_mctc.typing import DD, Tensor
 
 __all__ = [
@@ -41,8 +41,6 @@ __all__ = [
     "_symrng",
     "COMPILE_BACKEND",
     "compile_fullgraph",
-    "DYNAMO_SUPPORTED",
-    "DYNAMO_UNSUPPORTED_REASON",
     "hydrogens",
     "jacfwd",
     "jacrev",
@@ -132,45 +130,17 @@ def load_batch(sources: Sequence[tuple[str, str]], dd: DD) -> Structure:
     return pack_structures([load_structure(*source, dd) for source in sources])
 
 
-DYNAMO_SUPPORTED = is_compile_supported()
-"""For ``@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)``
-on any test that calls ``torch.compile``. The capability probe itself
-(``is_compile_supported``) lives in ``tad_mctc.tools.compile`` -- it is
-plain-torch, has no `pytest` dependency, and other "tad-*" packages can
-call it directly instead of duplicating the probe in their own test
-suite."""
-
-DYNAMO_UNSUPPORTED_REASON = (
-    "torch.compile/Dynamo is not supported on this Python/PyTorch combination"
-)
-
-
-def _has_cxx_compiler() -> bool:
-    """Whether the C++ compiler that TorchInductor calls is on ``PATH``. On
-    Windows that is MSVC's ``cl``, which a plain CI runner does not expose
-    (``InvalidCxxCompiler: Compiler: cl is not found``)."""
-    if sys.platform == "win32":
-        names = ["cl"]
-    else:
-        names = ["c++", "g++", "clang++"]
-    return any(shutil.which(name) is not None for name in names)
-
-
-COMPILE_BACKEND = "inductor" if _has_cxx_compiler() else "aot_eager"
-"""The ``torch.compile`` backend for tests. The compile tests check that a
-function traces as one graph (``fullgraph=True``), which Dynamo decides
-before any backend runs. Without a C++ compiler, ``"aot_eager"`` still traces
-and runs AOTAutograd, just without generating C++ code."""
+COMPILE_BACKEND = get_compile_backend()
+"""The ``torch.compile`` backend for tests (see
+:func:`tad_mctc.tools.compile.get_compile_backend`)."""
 
 
 def compile_fullgraph(fn: Callable[..., Any]) -> Callable[..., Any]:
-    """``torch.compile(fn)`` as one graph, with static shapes, on
+    """:func:`tad_mctc.tools.compile.compile_fullgraph` on
     :data:`COMPILE_BACKEND`. Skips the test if ``torch.compile`` itself
     refuses to construct."""
     try:
-        return torch.compile(
-            fn, fullgraph=True, dynamic=False, backend=COMPILE_BACKEND
-        )
+        return _compile_fullgraph(fn, backend=COMPILE_BACKEND)
     except Exception as exc:  # pylint: disable=broad-except
         return pytest.skip(f"torch.compile unsupported here: {exc}")
 
@@ -184,10 +154,10 @@ def run_compiled_or_skip(
     """
     Compile ``fn`` with ``torch.compile`` on :data:`COMPILE_BACKEND` and call
     it, skipping the test when this Python/PyTorch combination does not
-    support Dynamo (:data:`DYNAMO_SUPPORTED`).
+    support Dynamo (:func:`~tad_mctc.tools.compile.is_compile_supported`).
     """
-    if not DYNAMO_SUPPORTED:
-        pytest.skip(DYNAMO_UNSUPPORTED_REASON)
+    if not is_compile_supported():
+        pytest.skip(COMPILE_UNSUPPORTED_REASON)
 
     compiled = torch.compile(
         fn, fullgraph=fullgraph, dynamic=dynamic, backend=COMPILE_BACKEND

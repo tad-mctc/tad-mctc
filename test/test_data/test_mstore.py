@@ -21,6 +21,7 @@ Test that every mstore dataset is reachable through `get_structure`.
 from __future__ import annotations
 
 import pytest
+import torch
 
 from tad_mctc.data.structures import get_structure, list_records
 from tad_mctc.data.structures.mstore import datasets
@@ -48,3 +49,19 @@ def test_get_structure_looks_up_real_records(
 def test_list_records_matches_dataset_keys() -> None:
     for collection in datasets:
         assert sorted(list_records(collection)) == sorted(datasets[collection])
+
+
+def test_get_structure_keeps_record_charge() -> None:
+    structure = get_structure("upu23", "0a", dtype=torch.float64)
+
+    assert structure.charge is not None
+    assert structure.charge.item() == -1.0
+
+
+@pytest.mark.parametrize("charge", [2.0, torch.tensor(2.0)])
+def test_get_structure_overrides_charge(charge: torch.Tensor | float) -> None:
+    structure = get_structure("upu23", "0a", dtype=torch.float64, charge=charge)
+
+    assert structure.charge is not None
+    assert structure.charge.dtype == torch.float64
+    assert structure.charge.item() == 2.0

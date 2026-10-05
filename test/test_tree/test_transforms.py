@@ -28,15 +28,11 @@ import torch
 from torch.func import jacfwd, jacrev, vmap
 from torch.utils import _pytree as pytree
 
-from tad_mctc.tools import is_compile_supported
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.tree import combine, partition, stack
 
 from ..utils import compile_fullgraph
 from .samples import Sub
-
-COMPILE = pytest.mark.skipif(
-    not is_compile_supported(), reason="torch.compile is not supported"
-)
 
 DTYPE = torch.float64
 
@@ -126,7 +122,7 @@ def test_jacfwd_through_partition_combine() -> None:
     assert torch.allclose(grads[".positions"], _reference_gradient(node))
 
 
-@COMPILE
+@requires_compile
 def test_compile_fullgraph_and_no_recompile() -> None:
     from torch._dynamo.testing import CompileCounter
 
@@ -139,7 +135,7 @@ def test_compile_fullgraph_and_no_recompile() -> None:
     assert counter.frame_count == 1
 
 
-@COMPILE
+@requires_compile
 def test_to_inside_compile() -> None:
     def fn(node: Sub) -> torch.Tensor:
         return _energy(node.to(dtype=torch.float32))
@@ -149,7 +145,7 @@ def test_to_inside_compile() -> None:
     assert torch.allclose(compiled(node), fn(node))
 
 
-@COMPILE
+@requires_compile
 def test_construction_inside_compile() -> None:
     def fn(n: torch.Tensor, pos: torch.Tensor) -> torch.Tensor:
         return _energy(Sub(numbers=n, positions=pos))
@@ -174,7 +170,7 @@ def test_cxx_pytree() -> None:
     assert all(a is b for a, b in zip(cxx_leaves, py_leaves))
 
 
-@COMPILE
+@requires_compile
 def test_replace_inside_compile() -> None:
     def fn(node: Sub) -> torch.Tensor:
         return _energy(node.replace(cutoff=10.0))

@@ -15,8 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test the shared ``is_compiling`` tracing-state helper and the
-``is_compile_supported`` capability probe directly. Their callers
+Test the shared ``is_compiling`` tracing-state helper, the
+``is_compile_supported`` capability probe (through the ``requires_compile``
+marker built on it) and the ``compile_fullgraph`` wrapper directly. Their callers
 (``math/einsum.py``, ``storch/elemental.py``) exercise them only
 indirectly, through their own compile tests.
 """
@@ -26,30 +27,31 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tad_mctc.tools import is_compile_supported, is_compiling
-
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    run_compiled_or_skip,
+from tad_mctc.tools import compile as compile_module
+from tad_mctc.tools import (
+    compile_fullgraph,
+    get_compile_backend,
+    has_cxx_compiler,
+    is_compile_supported,
+    is_compiling,
 )
+from tad_mctc.tools.testing import COMPILE_UNSUPPORTED_REASON, requires_compile
+
+from ..utils import run_compiled_or_skip
 
 
 def test_is_compiling_outside_compile() -> None:
     assert is_compiling() is False
 
 
-def test_is_compile_supported_matches_test_suite_flag() -> None:
-    # `test/utils.py`'s `DYNAMO_SUPPORTED` is just this function, called
-    # once at import time; keep the two in sync so a future change to one
-    # cannot silently drift from the other.
-    assert is_compile_supported() is DYNAMO_SUPPORTED
+def test_requires_compile_skips_without_compile_support() -> None:
+    assert requires_compile.args == (not is_compile_supported(),)
+    assert requires_compile.kwargs["reason"] == COMPILE_UNSUPPORTED_REASON
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_is_compiling_inside_torch_compile_fullgraph() -> None:
-    torch._dynamo.reset()
-
     def f(x: torch.Tensor) -> torch.Tensor:
         # `is_compiling()` itself is the thing under test, so its result is
         # smuggled out as a tensor rather than a Python `bool` return value
@@ -65,3 +67,60 @@ def test_is_compiling_inside_torch_compile_fullgraph() -> None:
 
     assert torch.equal(eager_result, torch.zeros(3))
     assert torch.equal(compiled_result, torch.ones(3))
+
+
+@pytest.mark.parametrize(
+    "platform,found,expected",
+    [
+        ("linux", {"g++"}, True),
+        ("linux", {"cl"}, False),
+        ("win32", {"cl"}, True),
+        ("win32", {"g++"}, False),
+    ],
+)
+def test_has_cxx_compiler(
+    monkeypatch: pytest.MonkeyPatch,
+    platform: str,
+    found: set[str],
+    expected: bool,
+) -> None:
+    monkeypatch.setattr(compile_module.sys, "platform", platform)
+    monkeypatch.setattr(
+        compile_module.shutil,
+        "which",
+        lambda name: f"/usr/bin/{name}" if name in found else None,
+    )
+    assert has_cxx_compiler() is expected
+
+
+@pytest.mark.parametrize(
+    "compiler,expected", [(True, "inductor"), (False, "aot_eager")]
+)
+def test_get_compile_backend(
+    monkeypatch: pytest.MonkeyPatch, compiler: bool, expected: str
+) -> None:
+    monkeypatch.setattr(compile_module, "has_cxx_compiler", lambda: compiler)
+    assert get_compile_backend() == expected
+
+
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
+def test_compile_fullgraph() -> None:
+    def f(x: torch.Tensor) -> torch.Tensor:
+        return torch.sin(x) * 2.0
+
+    x = torch.linspace(0.0, 1.0, 5)
+    compiled = compile_fullgraph(f, backend="aot_eager")
+    assert torch.equal(compiled(x), f(x))
+
+
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
+def test_compile_fullgraph_graph_break() -> None:
+    def f(x: torch.Tensor) -> torch.Tensor:
+        torch._dynamo.graph_break()
+        return x + 1.0
+
+    compiled = compile_fullgraph(f, backend="aot_eager")
+    with pytest.raises(Exception):
+        compiled(torch.zeros(3))

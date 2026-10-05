@@ -28,7 +28,11 @@ from __future__ import annotations
 import pytest
 import torch
 
-from tad_mctc.autograd import dgradcheck, dgradgradcheck
+from tad_mctc.autograd import (
+    dgradcheck,
+    dgradgradcheck,
+    positions_gradchecker,
+)
 from tad_mctc.io.structure import Structure
 from tad_mctc.typing import DD, Callable, Tensor
 
@@ -62,12 +66,7 @@ def gradchecker(
     """The CN on the path `bind` sets up, as a function of positions
     alone, and the positions to differentiate it at."""
     cn_function = bind(VARIANTS[variant_name].call, structure)
-
-    def func(pos: Tensor) -> Tensor:
-        return cn_function(structure.replace(positions=pos))
-
-    positions = structure.positions.detach().clone().requires_grad_(True)
-    return func, positions
+    return positions_gradchecker(cn_function, structure)
 
 
 ########################################################################

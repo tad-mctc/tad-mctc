@@ -37,12 +37,11 @@ from tad_mctc.io.structure import Structure
 from tad_mctc.ncoord import cn_d3
 from tad_mctc.neighbor import list as nblist
 from tad_mctc.neighbor.list import NeighborList, build_neighborlist
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
 from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
     jacrev,
     load_structure,
 )
@@ -244,12 +243,11 @@ def test_list_built_inside_jacrev_of_vmap_raises() -> None:
 # compile
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_list_built_inside_compiled_function() -> None:
     """The build is data-dependent, so Dynamo runs it eagerly (a graph
     break); it must still give the same list."""
-    torch._dynamo.reset()  # pylint: disable=protected-access
-
     structure = _molecule()
     expected = build_neighborlist(structure, CUTOFF)
 
@@ -263,12 +261,11 @@ def test_list_built_inside_compiled_function() -> None:
     _assert_same_list(built, expected)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_list_built_inside_fullgraph_compile_raises() -> None:
     """The build cannot be one graph; Dynamo must say so and not return
     anything."""
-    torch._dynamo.reset()  # pylint: disable=protected-access
-
     structure = _molecule()
 
     def f(positions: Tensor) -> Tensor:
@@ -283,10 +280,9 @@ def test_list_built_inside_fullgraph_compile_raises() -> None:
 # Not `torch.compile(jacrev(f))`: PyTorch (2.4 and 2.10 alike) returns an
 # all-zero gradient for it whenever `f` contains a graph break of any kind,
 # build or not. `grad` is unaffected.
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_list_built_inside_compiled_grad() -> None:
-    torch._dynamo.reset()  # pylint: disable=protected-access
-
     structure = _molecule()
     expected = build_neighborlist(structure, CUTOFF)
 
@@ -301,10 +297,9 @@ def test_list_built_inside_compiled_grad() -> None:
     assert torch.allclose(out, 2 * structure.positions)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_list_built_inside_jacrev_of_compiled_function() -> None:
-    torch._dynamo.reset()  # pylint: disable=protected-access
-
     structure = _molecule()
     expected = build_neighborlist(structure, CUTOFF)
 

@@ -24,12 +24,9 @@ import pytest
 import torch
 
 from tad_mctc.autograd import checks
+from tad_mctc.tools.testing import requires_compile
 
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    compile_fullgraph,
-)
+from ..utils import compile_fullgraph
 
 
 def test_is_gradtracking_true(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -152,7 +149,8 @@ def test_vmapped_vs_functorch_under_transforms(
     assert seen == [(functorch, vmapped)]
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 @pytest.mark.parametrize(
     "check",
     [checks.is_gradtracking, checks.is_vmapped, checks.is_functorch_tensor],
@@ -168,7 +166,6 @@ def test_true_under_compile(check: Callable[[torch.Tensor], bool]) -> None:
     just returning `x`) is run eagerly by older PyTorch even under
     `fullgraph=True`, which would hide the traced result.
     """
-    torch._dynamo.reset()  # pylint: disable=protected-access
 
     def f(x: torch.Tensor) -> torch.Tensor:
         return x + (1.0 if check(x) else 0.0)

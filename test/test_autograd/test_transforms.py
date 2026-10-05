@@ -83,12 +83,11 @@ from tad_mctc.storch import (
     safe_reciprocal,
     safe_sqrt,
 )
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import DD, Callable, Tensor
 
 from ..conftest import DEVICE
 from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
     jacfwd,
     jacrev,
     run_compiled_or_skip,
@@ -199,7 +198,7 @@ def test_cdist_transforms() -> None:
     _assert_fd(f, x[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cdist_compile() -> None:
     x = _positions()[0]
 
@@ -217,7 +216,7 @@ def test_safe_divide_transforms() -> None:
     _assert_jac(safe_divide, a[0], b[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_safe_divide_compile() -> None:
     a, b = _positive(BATCH, NAT), _positive(BATCH, NAT)
     _assert_compile(safe_divide, a[0], b[0])
@@ -230,7 +229,7 @@ def test_safe_reciprocal_transforms() -> None:
     _assert_jac(safe_reciprocal, x[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_safe_reciprocal_compile() -> None:
     x = _positive(BATCH, NAT)[0]
     _assert_compile(safe_reciprocal, x)
@@ -257,7 +256,7 @@ def test_safe_pow_transforms() -> None:
     _assert_jac(f_int, x[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_safe_pow_compile() -> None:
     x = _positive(BATCH, NAT)[0]
 
@@ -279,7 +278,7 @@ def test_safe_sqrt_transforms() -> None:
     _assert_jac(safe_sqrt, x[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_safe_sqrt_compile() -> None:
     x = _positive(BATCH, NAT)[0]
     _assert_compile(safe_sqrt, x)
@@ -377,7 +376,7 @@ def test_eighb_generalised_transforms(scheme: str) -> None:
     _assert_jac(f, a[0], b[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_eighb_compile() -> None:
     a = _symmetric(NAT)[0]
 
@@ -395,7 +394,7 @@ def test_eighb_compile() -> None:
     # PyTorch either.
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_eighb_generalised_compile() -> None:
     a, b = _symmetric(NAT)[0], _spd(NAT)[0]
 
@@ -426,7 +425,7 @@ def test_enn_transforms() -> None:
     _assert_fd(f, p[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_enn_compile() -> None:
     p = _positions()[0]
 
@@ -443,7 +442,7 @@ def test_center_of_mass_transforms() -> None:
     _assert_jac(center_of_mass, m[0], p[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_center_of_mass_compile() -> None:
     m, p = _positive(BATCH, NAT)[0], _positions()[0]
     _assert_compile(center_of_mass, m, p)
@@ -456,7 +455,7 @@ def test_positions_rel_com_transforms() -> None:
     _assert_jac(positions_rel_com, m[0], p[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_positions_rel_com_compile() -> None:
     m, p = _positive(BATCH, NAT)[0], _positions()[0]
     _assert_compile(positions_rel_com, m, p)
@@ -468,7 +467,7 @@ def test_inertia_moment_transforms() -> None:
     _assert_jac(inertia_moment, m[0], p[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_inertia_moment_compile() -> None:
     m, p = _positive(BATCH, NAT)[0], _positions()[0]
     _assert_compile(inertia_moment, m, p)
@@ -480,7 +479,7 @@ def test_rot_consts_transforms() -> None:
     _assert_jac(rot_consts, m[0], p[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_rot_consts_compile() -> None:
     m, p = _positive(BATCH, NAT)[0], _positions()[0]
     _assert_compile(rot_consts, m, p)
@@ -496,7 +495,7 @@ def test_bond_angles_transforms() -> None:
     _assert_jac(f, p[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_bond_angles_compile() -> None:
     p = _positions()[0]
 
@@ -516,7 +515,7 @@ def test_guess_bond_length_transforms() -> None:
     _assert_jac(f, cn[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_guess_bond_length_compile() -> None:
     cn = _positive(BATCH, NAT)[0]
 
@@ -538,7 +537,7 @@ def test_guess_bond_order_transforms() -> None:
     _assert_jac(f, p[0], cn[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_guess_bond_order_compile() -> None:
     p, cn = _positions()[0], _positive(BATCH, NAT)[0]
 
@@ -563,7 +562,7 @@ def test_zero_masked_pairs_transforms() -> None:
     _assert_jac(f, t[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_zero_masked_pairs_compile() -> None:
     t = torch.randn(BATCH, NAT, NAT, 3, **dd)[0]
 
@@ -584,7 +583,7 @@ def test_psort_transforms() -> None:
     _assert_jac(f, x[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_psort_compile() -> None:
     x = _positive(BATCH, NAT)[0]
 
@@ -604,7 +603,7 @@ def test_reshape_fortran_transforms() -> None:
     _assert_jac(f, x[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_reshape_fortran_compile() -> None:
     x = _positive(BATCH, NAT, 3)[0]
 
@@ -624,7 +623,7 @@ def test_symmetrize_transforms() -> None:
     _assert_jac(f, x[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_symmetrize_compile() -> None:
     x = _positive(BATCH, NAT, NAT)[0]
 
@@ -647,7 +646,7 @@ def test_get_vdw_pairwise_vmap() -> None:
     assert torch.equal(vmapped, looped)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_get_vdw_pairwise_compile() -> None:
     """The table is read from disk once, at import, so a first call that
     happens inside a trace does not do file I/O."""
@@ -676,7 +675,7 @@ def test_exp_count_transforms() -> None:
     _assert_jac(exp_count, r[0], r0[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_exp_count_compile() -> None:
     r, r0 = _positive(BATCH, NAT, NAT)[0], _positive(BATCH, NAT, NAT)[0]
     _assert_compile(exp_count, r, r0)
@@ -690,7 +689,7 @@ def test_erf_count_transforms() -> None:
     _assert_jac(erf_count, r[0], r0[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_erf_count_compile() -> None:
     r, r0 = _positive(BATCH, NAT, NAT)[0], _positive(BATCH, NAT, NAT)[0]
     _assert_compile(erf_count, r, r0)
@@ -704,7 +703,7 @@ def test_gfn2_count_transforms() -> None:
     _assert_jac(gfn2_count, r[0], r0[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_gfn2_count_compile() -> None:
     r, r0 = _positive(BATCH, NAT, NAT)[0], _positive(BATCH, NAT, NAT)[0]
     _assert_compile(gfn2_count, r, r0)
@@ -729,7 +728,7 @@ def test_cut_coordination_number_transforms() -> None:
     _assert_jac(f_tensor, cn[0], cn_max[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cut_coordination_number_compile() -> None:
     cn = _positive(BATCH, NAT)[0] * 4.0
     cn_max = torch.tensor(8.0, **dd)
@@ -756,7 +755,7 @@ def test_cn_d3_transforms() -> None:
     _assert_fd(f, p[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cn_d3_compile() -> None:
     p = _positions()[0]
 
@@ -777,7 +776,7 @@ def test_cn_d4_transforms() -> None:
     _assert_jac(f, p[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cn_d4_compile() -> None:
     p = _positions()[0]
 
@@ -798,7 +797,7 @@ def test_cn_gfn2_transforms() -> None:
     _assert_jac(f, p[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cn_gfn2_compile() -> None:
     p = _positions()[0]
 
@@ -819,7 +818,7 @@ def test_cn_eeq_transforms() -> None:
     _assert_jac(f, p[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cn_eeq_compile() -> None:
     p = _positions()[0]
 
@@ -840,7 +839,7 @@ def test_cn_eeqbc_transforms() -> None:
     _assert_jac(f, p[0])
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cn_eeqbc_compile() -> None:
     p = _positions()[0]
 
@@ -862,7 +861,7 @@ def test_cn_eeq_tensor_cn_max_transforms() -> None:
     _assert_jac(f, p[0], cn_max[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cn_eeq_tensor_cn_max_compile() -> None:
     p = _positions()[0]
     m = torch.tensor(8.0, **dd)
@@ -875,7 +874,7 @@ def test_cn_eeq_tensor_cn_max_compile() -> None:
     _assert_compile(f, p, m)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cn_batched_compile() -> None:
     """A real leading batch dimension (not ``vmap``) under ``fullgraph``."""
     p = _positions()
@@ -910,7 +909,7 @@ def test_cn_d3_periodic_precomputed_transforms() -> None:
     _assert_jac(f, p[0], lat[0], argnums=1)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_cn_d3_periodic_precomputed_compile() -> None:
     p, lat = _positions(), _lattice()
     shifts = build_periodic_shifts(lat, PERIODIC, 40.0)
@@ -935,7 +934,7 @@ def test_wrap_to_central_cell_transforms() -> None:
     _assert_jac(f, p[0], lat[0], argnums=0)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_wrap_to_central_cell_compile() -> None:
     p, lat = _positions()[0], _lattice()[0]
 

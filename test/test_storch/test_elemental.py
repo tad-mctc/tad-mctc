@@ -24,14 +24,11 @@ import pytest
 import torch
 
 from tad_mctc import storch
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    compile_fullgraph,
-)
+from ..utils import compile_fullgraph
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
@@ -45,7 +42,8 @@ def test_sqrt_fail(dtype: torch.dtype) -> None:
         storch.safe_sqrt(torch.tensor([-1, 2, 3], **dd), eps=-2)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_sqrt_torch_compile_fullgraph_default_eps() -> None:
     """
     Representative case: with the default ``eps`` (built internally via
@@ -55,8 +53,6 @@ def test_sqrt_torch_compile_fullgraph_default_eps() -> None:
     rejects as data-dependent control flow under ``fullgraph=True``, so it
     is skipped while compiling.
     """
-    torch._dynamo.reset()
-
     x = torch.tensor([-1.0, 2.0, 3.0], dtype=torch.float64, device=DEVICE)
 
     def f(x: torch.Tensor) -> torch.Tensor:
@@ -70,7 +66,8 @@ def test_sqrt_torch_compile_fullgraph_default_eps() -> None:
     assert pytest.approx(eager_value.cpu()) == compiled_value.cpu()
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_sqrt_torch_compile_fullgraph_negative_eps() -> None:
     """
     A negative ``eps`` reaches the domain check's ``raise`` path. Eager mode
@@ -79,8 +76,6 @@ def test_sqrt_torch_compile_fullgraph_negative_eps() -> None:
     the domain check is skipped while compiling, the same dispatch shape
     ``math.einsum`` uses.
     """
-    torch._dynamo.reset()
-
     x = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float64, device=DEVICE)
     negative_eps = torch.tensor(-2.0, dtype=torch.float64, device=DEVICE)
 
@@ -97,7 +92,8 @@ def test_sqrt_torch_compile_fullgraph_negative_eps() -> None:
     assert (torch.isnan(compiled_value) == False).all()
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_sqrt_torch_compile_fullgraph_python_negative_eps_raises() -> None:
     """
     Unlike a ``Tensor`` ``eps``, a negative Python ``eps`` is a constant to
@@ -105,8 +101,6 @@ def test_sqrt_torch_compile_fullgraph_python_negative_eps_raises() -> None:
     ``torch.compile(fullgraph=True)``, see
     ``test_pow_torch_compile_fullgraph_python_eps_zero_raises``.
     """
-    torch._dynamo.reset()
-
     x = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float64, device=DEVICE)
 
     def f(x: torch.Tensor) -> torch.Tensor:
@@ -192,7 +186,8 @@ def test_pow_fail() -> None:
         storch.safe_pow(x, "2")  # type: ignore[arg-type]
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_pow_torch_compile_fullgraph_eps_zero() -> None:
     """
     ``eps == 0`` is the validation branch, the same shape as
@@ -202,8 +197,6 @@ def test_pow_torch_compile_fullgraph_eps_zero() -> None:
     rejecting the tensor-valued ``if (eps == 0).any():`` as data-dependent
     control flow.
     """
-    torch._dynamo.reset()
-
     x = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float64, device=DEVICE)
     zero_eps = torch.tensor(0.0, dtype=torch.float64, device=DEVICE)
 
@@ -220,7 +213,8 @@ def test_pow_torch_compile_fullgraph_eps_zero() -> None:
     assert (torch.isnan(compiled_value) == False).all()
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_pow_torch_compile_fullgraph_python_eps_zero_raises() -> None:
     """
     A Python ``eps`` is a constant to Dynamo, so its check is no
@@ -229,8 +223,6 @@ def test_pow_torch_compile_fullgraph_python_eps_zero_raises() -> None:
     fullgraph trace as ``Unsupported``, whose message carries the
     ``ValueError`` text only on newer torch versions.
     """
-    torch._dynamo.reset()
-
     x = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float64, device=DEVICE)
 
     def f(x: torch.Tensor) -> torch.Tensor:
@@ -244,15 +236,14 @@ def test_pow_torch_compile_fullgraph_python_eps_zero_raises() -> None:
         compiled(x)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_pow_torch_compile_fullgraph_scalar_exponent() -> None:
     """
     A Python scalar exponent never reaches the ``Tensor``-exponent branch,
     but it does pass the ``eps == 0`` validation. The scalar-exponent path
     must fullgraph-compile and match eager.
     """
-    torch._dynamo.reset()
-
     x = torch.tensor([-1.0, 0.0, 2.0], dtype=torch.float64, device=DEVICE)
 
     def f(x: torch.Tensor) -> torch.Tensor:
@@ -266,7 +257,8 @@ def test_pow_torch_compile_fullgraph_scalar_exponent() -> None:
     assert torch.equal(eager_value, compiled_value)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_pow_torch_compile_fullgraph_tensor_exponent() -> None:
     """
     The ``Tensor``-exponent branch: ``(exponent > 0).all() & (x >= 0).all()``
@@ -277,8 +269,6 @@ def test_pow_torch_compile_fullgraph_tensor_exponent() -> None:
     compiles under ``fullgraph=True`` while reproducing the eager result
     exactly, including the ``x == 0`` boundary.
     """
-    torch._dynamo.reset()
-
     x = torch.tensor([0.0, 1.0, -2.0], dtype=torch.float64, device=DEVICE)
     exponent = torch.tensor([2.0, 3.0, 0.5], dtype=torch.float64, device=DEVICE)
 
@@ -293,15 +283,14 @@ def test_pow_torch_compile_fullgraph_tensor_exponent() -> None:
     assert torch.equal(eager_value, compiled_value)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_pow_torch_compile_fullgraph_tensor_exponent_fast_path() -> None:
     """
     Same as above but exercising the fast-path branch specifically (all
     exponents positive, all ``x`` non-negative, including an exact zero),
     where the result must stay exactly ``torch.pow``'s.
     """
-    torch._dynamo.reset()
-
     x = torch.tensor([0.0, 1.0, 2.0], dtype=torch.float64, device=DEVICE)
     exponent = torch.tensor([2.0, 2.0, 2.0], dtype=torch.float64, device=DEVICE)
 
