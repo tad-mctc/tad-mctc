@@ -36,7 +36,7 @@ import torch
 from ..convert import symmetrize
 from ..typing import Callable, Tensor
 
-__all__ = ["eighb"]
+__all__ = ["eighb", "inv_cholesky_factor"]
 
 # Note that 'none' is included only for testing purposes. A module-level
 # constant: Dynamo cannot read an attribute off an autograd `Function` class.
@@ -508,6 +508,46 @@ def _eig_sort_out(
     return w, v
 
 
+def inv_cholesky_factor(b: Tensor, is_posdef: bool = False) -> Tensor:
+    """
+    Inverse of the lower Cholesky factor of a positive definite matrix.
+
+    The result can be passed to :func:`eighb` as `l_inv` to solve several
+    generalised eigenvalue problems sharing the same metric `b`.
+
+    Parameters
+    ----------
+    b : Tensor
+        Real symmetric positive definite matrix (or batch thereof).
+    is_posdef : bool, optional
+        If True, `b` is assumed to be positive definite already. Otherwise,
+        the diagonals of zero-padded rows/columns are set to 1, as done in
+        :func:`eighb`. [DEFAULT=False]
+
+    Returns
+    -------
+    Tensor
+        Lower triangular :math:`L^{-1}` with :math:`B = LL^T`.
+
+    Note
+    ----
+    The inverse is computed via a triangular solve. LU-based routines
+    (`torch.linalg.solve`, `torch.inverse`) must be avoided: on CPU with more
+    than one thread, batched LU factorisation returns corrupt pivots or
+    deadlocks (pytorch/pytorch#142815).
+    """
+    if is_posdef is False:
+        is_zero = torch.eq(b, 0)
+        mask = torch.all(is_zero, dim=-1) & torch.all(is_zero, dim=-2)
+        b = b + torch.diag_embed(mask.type(b.dtype))
+
+    l = torch.linalg.cholesky(b)
+
+    identity = torch.zeros_like(l)
+    identity.diagonal(dim1=-2, dim2=-1)[:] = 1
+    return torch.linalg.solve_triangular(l, identity, upper=False)
+
+
 def eighb(
     a: Tensor,
     b: Tensor | None = None,
@@ -517,7 +557,7 @@ def eighb(
     sort_out: bool = True,
     aux: bool = True,
     is_posdef: bool = False,
-    **kwargs: Any,
+    l_inv: Tensor | None = None,
 ) -> tuple[Tensor, Tensor]:
     r"""
     Solves general & standard eigen-problems, with optional broadening.
@@ -560,10 +600,17 @@ def eighb(
     aux : bool, optional
         Converts zero-padding to identity-padding. This can improve
         the stability of backwards propagation. [DEFAULT=True]
-    direct_inv : bool, optional
-        If True then the matrix inversion will be computed
-        directly rather than via a call to torch.solve. Only relevant to
-        the cholesky scheme. [DEFAULT=False]
+    is_posdef : bool, optional
+        If True, `b` is assumed to be positive definite already and the
+        identity-padding of its zero-padded rows/columns is skipped.
+        [DEFAULT=False]
+    l_inv : array_like, optional
+        Precomputed inverse of the lower Cholesky factor of the metric
+        (see :func:`inv_cholesky_factor`), used instead of `b` to solve the
+        generalised eigenvalue problem with the Cholesky scheme. As the
+        metric is often fixed while `a` changes (e.g. the overlap in an SCF),
+        this avoids refactorising and reinverting it on every call. Mutually
+        exclusive with `b`. With `aux`, zero-padding is detected from `a`.
 
     Returns
     -------
@@ -673,7 +720,13 @@ def eighb(
         is_zero = torch.eq(a, 0)
         mask = torch.all(is_zero, dim=-1) & torch.all(is_zero, dim=-2)
 
-    if b is None:  # For standard eigenvalue problem
+    if l_inv is not None:
+        if b is not None:
+            raise ValueError("Pass either `b` or `l_inv`, not both.")
+        if scheme != "chol":
+            raise ValueError("`l_inv` is only supported by the 'chol' scheme.")
+
+    if b is None and l_inv is None:  # For standard eigenvalue problem
         if aux and mask is not None:
             # Convert from zero-padding to padding with largest eigenvalue estimate
             shift = estimate_minmax(a)[-1].unsqueeze(-1)
@@ -687,7 +740,7 @@ def eighb(
         # encountered in the Löwdin scheme. To ensure positive definiteness
         # the diagonals of padding columns/rows are therefore set to 1.
 
-        if is_posdef is False:
+        if b is not None and is_posdef is False:
             # Create a mask which is True wherever a column/row pair is 0-valued
             is_zero = torch.eq(b, 0)
             mask = torch.all(is_zero, dim=-1) & torch.all(is_zero, dim=-2)
@@ -697,18 +750,11 @@ def eighb(
 
         # For Cholesky decomposition scheme
         if scheme == "chol":
-            # Perform Cholesky factorization (A = LL^{T}) of B to attain L
-            l = torch.linalg.cholesky(b)
-
-            # Compute the inverse of L:
-            if kwargs.get("direct_inv", False):
-                # Via the direct method if specifically requested
-                l_inv = torch.inverse(l)
-            else:
-                # Otherwise compute via an indirect method (default)
-                identity = torch.zeros_like(l)
-                identity.diagonal(dim1=-2, dim2=-1)[:] = 1
-                l_inv = torch.linalg.solve(l, identity)
+            # Inverse of the Cholesky factor L of B (B = LL^{T}), unless the
+            # caller precomputed it (B is already identity-padded here)
+            if l_inv is None:
+                assert b is not None
+                l_inv = inv_cholesky_factor(b, is_posdef=True)
 
             # Transpose of l_inv: improves speed in batch mode
             l_inv_t = torch.transpose(l_inv, -1, -2)
@@ -729,6 +775,8 @@ def eighb(
             v = l_inv_t @ v_
 
         elif scheme == "lowd":  # For Löwdin Orthogonalisation scheme
+            assert b is not None
+
             # Perform the BV = WV eigen decomposition.
             w, v = func(b, *args)
 

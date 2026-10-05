@@ -184,6 +184,13 @@ def test_eighb_fail() -> None:
     with pytest.raises(ValueError):
         storch.linalg.eighb(a, b=a, scheme="unknown")  # type: ignore
 
+    l_inv = storch.linalg.inv_cholesky_factor(_metric_rng(10, dd))
+    with pytest.raises(ValueError):
+        storch.linalg.eighb(a, b=a, l_inv=l_inv)
+
+    with pytest.raises(ValueError):
+        storch.linalg.eighb(a, l_inv=l_inv, scheme="lowd")
+
 
 def test_eighb_standard_single() -> None:
     """eighb accuracy on a single standard eigenvalue problem."""
@@ -235,8 +242,7 @@ def test_eighb_standard_batch() -> None:
         assert same_device, "Device persistence check"
 
 
-@pytest.mark.parametrize("direct_inverse", [True, False])
-def test_eighb_general_single(direct_inverse: bool) -> None:
+def test_eighb_general_single() -> None:
     """eighb accuracy on a single general eigenvalue problem."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
 
@@ -249,9 +255,7 @@ def test_eighb_general_single(direct_inverse: bool) -> None:
 
         schemes: list[Literal["chol", "lowd"]] = ["chol", "lowd"]
         for scheme in schemes:
-            w_calc, v_calc = storch.linalg.eighb(
-                a, b, scheme=scheme, direct_inv=direct_inverse
-            )
+            w_calc, v_calc = storch.linalg.eighb(a, b, scheme=scheme)
 
             mae_w = torch.max(torch.abs(w_calc - w_ref))
             mae_v = torch.max(torch.abs((v_calc @ v_calc.T).fill_diagonal_(0)))
@@ -302,6 +306,96 @@ def test_eighb_general_batch() -> None:
 
                 assert mae_w < 1e-10, f"Eigenvalue tolerance test {scheme}"
                 assert same_device, "Device persistence check"
+
+
+def test_eighb_l_inv_single() -> None:
+    """eighb with a precomputed inverse Cholesky factor on a single problem."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    for _ in range(10):
+        a = _symrng((10, 10), dd)
+        b = _metric_rng(10, dd)
+
+        w_ref = linalg.eigh(tensor_to_numpy(a), tensor_to_numpy(b))[0]
+        w_ref = numpy_to_tensor(w_ref, **dd)
+
+        w_b, v_b = storch.linalg.eighb(a, b)
+
+        l_inv = storch.linalg.inv_cholesky_factor(b)
+        w_calc, v_calc = storch.linalg.eighb(a, l_inv=l_inv)
+
+        assert torch.max(torch.abs(w_calc - w_ref)) < 1e-11
+        assert torch.max(torch.abs(w_calc - w_b)) < 1e-14
+        assert torch.max(torch.abs(v_calc - v_b)) < 1e-14
+
+
+def test_eighb_l_inv_batch() -> None:
+    """eighb with a precomputed inverse Cholesky factor on a padded batch."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    for _ in range(10):
+        sizes = np.random.randint(2, 10, (11,))
+        a = [_symrng((s, s), dd) for s in sizes]
+        b = [_metric_rng(s, dd) for s in sizes]
+        a_batch, b_batch = pack(a), pack(b)
+
+        w_ref = pack(
+            [
+                numpy_to_tensor(
+                    linalg.eigh(tensor_to_numpy(i), tensor_to_numpy(j))[0], **dd
+                )
+                for i, j in zip(a, b)
+            ]
+        )
+
+        # zero-padded metric, identity-padded inside `inv_cholesky_factor`
+        l_inv = storch.linalg.inv_cholesky_factor(b_batch)
+
+        for aux in [True, False]:
+            w_b, v_b = storch.linalg.eighb(a_batch, b_batch, aux=aux)
+            w_calc, v_calc = storch.linalg.eighb(a_batch, l_inv=l_inv, aux=aux)
+
+            assert torch.max(torch.abs(w_calc - w_ref)) < 1e-10
+            assert torch.max(torch.abs(w_calc - w_b)) < 1e-14
+            assert torch.max(torch.abs(v_calc - v_b)) < 1e-14
+
+
+def test_eighb_general_batch_multithreaded() -> None:
+    """
+    Batched Cholesky scheme must not use LU factorisation.
+
+    On CPU with more than one thread, batched LU factorisation (as used by
+    `torch.linalg.solve` and `torch.inverse`) returns corrupt pivots or
+    deadlocks for matrices of size ~150 and above (pytorch/pytorch#142815).
+    """
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+    size = 200
+
+    a = [_symrng((size, size), dd) for _ in range(4)]
+    b = []
+    for _ in range(4):
+        x = _rng((size, size), dd)
+        b.append(x @ x.mT / size + torch.eye(size, **dd))
+
+    w_ref = torch.stack(
+        [
+            numpy_to_tensor(
+                linalg.eigh(tensor_to_numpy(i), tensor_to_numpy(j))[0], **dd
+            )
+            for i, j in zip(a, b)
+        ]
+    )
+
+    nthreads = torch.get_num_threads()
+    torch.set_num_threads(2)
+    try:
+        w_calc, _ = storch.linalg.eighb(
+            torch.stack(a), torch.stack(b), scheme="chol", is_posdef=True
+        )
+    finally:
+        torch.set_num_threads(nthreads)
+
+    assert torch.max(torch.abs(w_calc - w_ref)) < 1e-10
 
 
 ################################################################################
@@ -419,6 +513,52 @@ def _eigen_proxy_general(
     w, v = storch.linalg.eighb(m, n, scheme=target_scheme, factor=factor)
 
     return w, _spectral_density(w, v)
+
+
+def _eigen_proxy_l_inv(
+    m: Tensor, n: Tensor, size_data: Tensor | None = None
+) -> tuple[Tensor, Tensor]:
+    m, n = symmetrizef(m), symmetrizef(n)
+    if size_data is not None:
+        m = clean_zero_padding(m, size_data)
+        n = clean_zero_padding(n, size_data)
+
+    factor = torch.tensor(1e-12, device=m.device, dtype=m.dtype)
+    l_inv = storch.linalg.inv_cholesky_factor(n)
+    w, v = storch.linalg.eighb(m, l_inv=l_inv, factor=factor)
+
+    return w, _spectral_density(w, v)
+
+
+@pytest.mark.grad
+def test_eighb_l_inv_grad() -> None:
+    """eighb gradient stability through a precomputed Cholesky factor."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    a1 = _symrng((8, 8), dd)
+    b1 = _metric_rng(8, dd)
+
+    a1.requires_grad, b1.requires_grad = True, True
+
+    assert dgradcheck(_eigen_proxy_l_inv, (a1, b1), fast_mode=False)
+
+
+@pytest.mark.grad
+def test_eighb_l_inv_grad_batch() -> None:
+    """eighb gradient stability through a precomputed Cholesky factor."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+
+    sizes = np.random.randint(3, 8, (5,))
+    a2 = pack([_symrng((s, s), dd) for s in sizes])
+    b2 = pack([_metric_rng(s, dd) for s in sizes])
+
+    a2.requires_grad, b2.requires_grad = True, True
+
+    assert dgradcheck(
+        _eigen_proxy_l_inv,
+        (a2, b2, numpy_to_tensor(sizes, **dd)),
+        fast_mode=False,
+    )
 
 
 @pytest.mark.grad
