@@ -187,11 +187,10 @@ def run_compiled_or_skip(
     combination cannot carry it out.
 
     Support is not predictable from :data:`DYNAMO_SUPPORTED` alone: PyTorch
-    2.4 cannot compile ``torch.func`` transforms (``Cannot access storage of
-    TensorWrapper``) or trace some ``autograd.Function`` calls. Both are
-    version gaps, not bugs in the code under test. A wrong *value* still
-    fails, since only the compile-and-call step is wrapped, never the
-    assertion that follows it.
+    2.5 cannot inline custom ``autograd.Function`` calls (``too many
+    positional arguments``). This is a version gap, not a bug in the code
+    under test. A wrong *value* still fails, since only the compile-and-call
+    step is wrapped, never the assertion that follows it.
     """
     if not DYNAMO_SUPPORTED:
         pytest.skip(DYNAMO_UNSUPPORTED_REASON)

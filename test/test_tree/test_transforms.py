@@ -28,7 +28,6 @@ import torch
 from torch.func import jacfwd, jacrev, vmap
 from torch.utils import _pytree as pytree
 
-from tad_mctc._version import __tversion__
 from tad_mctc.tools import is_compile_supported
 from tad_mctc.tree import combine, partition, stack
 
@@ -141,10 +140,6 @@ def test_compile_fullgraph_and_no_recompile() -> None:
 
 
 @COMPILE
-@pytest.mark.skipif(
-    __tversion__ < (2, 5, 0),
-    reason="torch.compile cannot trace Node construction/conversion before 2.5",
-)
 def test_to_inside_compile() -> None:
     def fn(node: Sub) -> torch.Tensor:
         return _energy(node.to(dtype=torch.float32))

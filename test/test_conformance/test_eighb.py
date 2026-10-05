@@ -24,7 +24,7 @@ eigenvector. Inputs are random symmetric 4x4 matrices, a batch of two for
 `vmap`.
 
 Exclusions: the `torch.compile` check of the two broadening methods
-(custom autograd function with ``setup_context``) is skipped on torch < 2.5,
+(custom autograd function with ``setup_context``) is skipped on torch < 2.6,
 where Dynamo cannot inline it (``TypeError: too many positional
 arguments``); the ``None`` path (``torch.linalg.eigh``) is compiled on every
 version.
