@@ -36,15 +36,11 @@ from tad_mctc.exceptions import StructureWarning
 from tad_mctc.io.structure import Structure
 from tad_mctc.neighbor import _native
 from tad_mctc.neighbor.list import build_neighborlist
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
-from ..utils import (
-    COMPILE_BACKEND,
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    load_structure,
-)
+from ..utils import COMPILE_BACKEND, load_structure
 
 _WATER = """3
 water
@@ -481,7 +477,7 @@ def test_cuda_neighbour_list_does_not_report_the_native_extension(
     assert "Native extension" not in out
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_compiled_run_matches_the_eager_run(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
