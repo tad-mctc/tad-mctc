@@ -31,6 +31,7 @@ from torch.utils import _pytree as pytree
 from tad_mctc.tools.testing import requires_compile
 from tad_mctc.tree import combine, partition, stack
 
+from ..conftest import DEVICE
 from ..utils import compile_fullgraph
 from .samples import Sub
 
@@ -41,14 +42,18 @@ def _sub(seed: int = 0, **kwargs) -> Sub:  # type: ignore[no-untyped-def]
     gen = torch.Generator().manual_seed(seed)
     return Sub(
         numbers=torch.tensor([1, 1, 8]),
-        positions=torch.rand(3, 3, generator=gen, dtype=DTYPE),
+        positions=torch.rand(3, 3, generator=gen, dtype=DTYPE, device="cpu").to(
+            DEVICE
+        ),
         **kwargs,
     )
 
 
 def _energy(node: Sub) -> torch.Tensor:
     diff = node.positions[:, None, :] - node.positions[None, :, :]
-    dist2 = (diff**2).sum(-1) + torch.eye(3, dtype=node.dtype)
+    dist2 = (diff**2).sum(-1) + torch.eye(
+        3, dtype=node.dtype, device=node.device
+    )
     return (node.numbers.to(node.dtype) / dist2).sum() * node.cutoff
 
 

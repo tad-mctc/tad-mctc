@@ -27,7 +27,13 @@ conditions (:mod:`.images`) replicate atoms into a ghost pool ahead of
 that same search, rather than changing it.
 """
 
-from ._distance_kernels import pair_distance_squared, split_lattice
+from ._distance_kernels import (
+    gather_index,
+    pair_distance_squared,
+    pair_distance_squared_from_columns,
+    position_columns,
+    split_lattice,
+)
 from .images import *
 from .list import *
 from .triples import *

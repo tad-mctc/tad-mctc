@@ -486,7 +486,8 @@ def atom_pairs_within_thresholds_native(
     -------
     list[tuple[Tensor, Tensor, int]] | None
         ``(idx_i, idx_j, n_found)`` per threshold, in the same order as
-        ``thresholds``: 1D ``torch.long`` tensors, padded to their capacity
+        ``thresholds``: 1D ``torch.int32`` tensors (the stored index
+        dtype of :class:`.NeighborList`), padded to their capacity
         when ``padding`` is given, and the number of pairs found -- or
         ``None`` if the native extension is unavailable (see the module
         docstring); the caller then falls back to the pure-Python path.

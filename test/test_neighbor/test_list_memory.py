@@ -72,11 +72,11 @@ def test_matches_a_periodic_lists_own_tensor_bytes() -> None:
 
 def test_matches_measured_glu_ala_capacity() -> None:
     """Regression pin at the capacity this function was first checked
-    against (`examples/scaling/glu_ala_b_512_to_65536/4096.xyz`): 23 bytes
-    per periodic slot, 17 per molecular slot."""
+    against (`examples/scaling/glu_ala_b_512_to_65536/4096.xyz`): 15 bytes
+    per periodic slot, 9 per molecular slot (int32 atom indices)."""
     capacity = 11_735_040
-    assert estimate_neighborlist_memory(capacity, periodic=True) == 269_905_920
-    assert estimate_neighborlist_memory(capacity, periodic=False) == 199_495_680
+    assert estimate_neighborlist_memory(capacity, periodic=True) == 176_025_600
+    assert estimate_neighborlist_memory(capacity, periodic=False) == 105_615_360
 
 
 def test_zero_capacity_is_zero() -> None:

@@ -155,7 +155,7 @@ def test_padding_atoms_of_a_single_structure_have_no_pairs() -> None:
 
 def test_to_keeps_integer_and_boolean_slots() -> None:
     """`NeighborList.to()` must move every slot to the requested device
-    and dtype, but never cast `idx_i`/`idx_j` away from `long`, `shift`
+    and dtype, but never cast `idx_i`/`idx_j` away from `int32`, `shift`
     away from `int16`, or `mask` away from `bool` -- those are index data,
     not floating-point physics. `TensorLike.to()`, which `NeighborList`
     overrides, casts every slot to the requested floating dtype."""
@@ -164,8 +164,8 @@ def test_to_keeps_integer_and_boolean_slots() -> None:
 
     moved = nbl.to(dtype=torch.float32)
 
-    assert moved.idx_i.dtype == torch.long
-    assert moved.idx_j.dtype == torch.long
+    assert moved.idx_i.dtype == torch.int32
+    assert moved.idx_j.dtype == torch.int32
     assert moved.shift.dtype == torch.int16
     assert moved.mask.dtype == torch.bool
 
@@ -692,7 +692,7 @@ def test_shift_range_is_checked_only_for_the_pairs_kept() -> None:
     out of `NeighborList.shift`'s range on it must not raise and hide
     `overflow`."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
-    kept_pair = torch.tensor([0], device=DEVICE)
+    kept_pair = torch.tensor([0], dtype=torch.int32, device=DEVICE)
     pairs = _Pairs(idx_i=kept_pair, idx_j=kept_pair + 1, n_found=2)
     shift_raw = torch.tensor([[0, 0, 0], [40000, 0, 0]], device=DEVICE)
 
@@ -715,7 +715,7 @@ def test_shift_at_both_ends_of_its_dtype_is_stored() -> None:
     """``int16`` holds -32768 but not +32768, so the range check must
     compare each bound on its own rather than the magnitude."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
-    idx = torch.tensor([0, 0], device=DEVICE)
+    idx = torch.tensor([0, 0], dtype=torch.int32, device=DEVICE)
     pairs = _Pairs(idx_i=idx, idx_j=idx + 1, n_found=2)
     shift_raw = torch.tensor([[-32768, 0, 0], [0, 32767, 0]], device=DEVICE)
 
@@ -737,7 +737,7 @@ def test_shift_just_beyond_either_end_of_its_dtype_raises() -> None:
     """One cell past ``int16``'s range, on either side, must raise
     instead of wrapping around."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
-    idx = torch.tensor([0], device=DEVICE)
+    idx = torch.tensor([0], dtype=torch.int32, device=DEVICE)
     pairs = _Pairs(idx_i=idx, idx_j=idx + 1, n_found=1)
 
     for shift_raw in (
@@ -1668,4 +1668,4 @@ def test_type_changes_the_floating_dtype() -> None:
     converted = nbl.type(torch.float32)
 
     assert converted.dtype == torch.float32
-    assert converted.idx_i.dtype == torch.long
+    assert converted.idx_i.dtype == torch.int32

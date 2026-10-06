@@ -385,8 +385,8 @@ def _check_only_integers_cross_the_boundary(structure: Structure) -> None:
     jacrev(f)(structure.positions)
 
     built = seen[0]
-    assert built.idx_i.dtype == torch.long
-    assert built.idx_j.dtype == torch.long
+    assert built.idx_i.dtype == torch.int32
+    assert built.idx_j.dtype == torch.int32
     assert built.shift.dtype == torch.int16
     assert built.mask.dtype == torch.bool
     if built.periodic_axes is not None:

@@ -128,6 +128,19 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--compile",
+        dest="compile",
+        action="store_true",
+        help=(
+            "Evaluate the coordination number through "
+            "'torch.compile(fullgraph=True)'. The first call traces and "
+            "compiles, and is timed as its own step; the compiled "
+            "function is then called again for the reported result and "
+            "its time. Requires '--mode graph'. Compiling needs a C++ "
+            "compiler on the CPU (the one named by CXX)."
+        ),
+    )
+    parser.add_argument(
         "--coldfusion-check",
         dest="coldfusion_check",
         action="store_true",

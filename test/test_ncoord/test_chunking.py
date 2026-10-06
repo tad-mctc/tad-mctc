@@ -258,7 +258,7 @@ def test_sum_over_neighborlist_is_reusable(
 
 def test_chunk_size_depends_on_the_device() -> None:
     """The CPU and the other devices each have their own chunk size."""
-    assert common_module._chunk_size(torch.empty(1)) == (
+    assert common_module._chunk_size(torch.empty(1, device="cpu")) == (
         common_module._CHUNK_SIZE_CPU
     )
     assert common_module._chunk_size(torch.empty(1, device="meta")) == (

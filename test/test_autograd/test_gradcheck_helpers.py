@@ -40,10 +40,13 @@ from tad_mctc.autograd import (
 )
 from tad_mctc.io.structure import Structure
 
+from ..conftest import DEVICE
+
 
 def _x() -> torch.Tensor:
     gen = torch.Generator().manual_seed(0)
-    return torch.rand(3, generator=gen, dtype=torch.float64).requires_grad_()
+    x = torch.rand(3, generator=gen, dtype=torch.float64, device="cpu")
+    return x.to(DEVICE).requires_grad_()
 
 
 class WrongFirstDerivative(torch.autograd.Function):

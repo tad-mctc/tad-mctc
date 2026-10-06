@@ -26,10 +26,15 @@ from __future__ import annotations
 import pytest
 import torch
 
+from tad_mctc.neighbor import _distance_kernels
 from tad_mctc.neighbor._distance_kernels import (
     DistanceKernel,
     _baddbmm_distance_squared,
     _broadcast_distance_squared,
+    gather_rows,
+    pair_distance_squared,
+    pair_distance_squared_from_columns,
+    position_columns,
     select_kernel,
     split_lattice,
 )
@@ -40,7 +45,8 @@ from tad_mctc.neighbor.list import (
 )
 from tad_mctc.typing import Tensor
 
-from ..utils import hydrogens
+from ..conftest import DEVICE
+from ..utils import hydrogens, jacfwd, jacrev, run_compiled_or_skip
 
 _CPU = torch.device("cpu")
 
@@ -281,3 +287,393 @@ def test_triton_import_failure_disables_triton(
     finally:
         monkeypatch.undo()
         importlib.reload(_distance_kernels)
+
+
+# `pair_distance_squared` sums the three components by hand instead of with
+# `.sum(-1)`, which is ~10x slower for an axis of length 3. These tests pin
+# the values to the plain formula and keep the function usable under the
+# transforms the sparse coordination number is promised to survive.
+
+
+def _pair_inputs(
+    n_atoms: int = 6, n_pairs: int = 40, *, periodic: bool = False
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    """Positions with a trailing phantom atom, random pair indices, integer
+    shifts (all zero for a molecule), and a cell."""
+    generator = torch.Generator(device=DEVICE).manual_seed(7)
+    dd = {"device": DEVICE, "dtype": torch.double}
+    positions = torch.randn(n_atoms + 1, 3, generator=generator, **dd)
+    idx_i = torch.randint(0, n_atoms, (n_pairs,), generator=generator)
+    idx_j = torch.randint(0, n_atoms, (n_pairs,), generator=generator)
+    if periodic:
+        shift = torch.randint(-2, 3, (n_pairs, 3), generator=generator).short()
+    else:
+        shift = torch.zeros(n_pairs, 3, dtype=torch.int16, device=DEVICE)
+    cell = torch.tensor(
+        [[5.0, 0.3, 0.0], [0.2, 6.0, 0.4], [0.0, 0.1, 7.0]], **dd
+    )
+    return positions, idx_i, idx_j, shift, cell
+
+
+def _reference(
+    positions: Tensor,
+    idx_i: Tensor,
+    idx_j: Tensor,
+    shift: Tensor,
+    cell: Tensor | None,
+) -> Tensor:
+    """The textbook formula, with the reduction over the last axis."""
+    difference = positions[idx_j] - positions[idx_i]
+    if cell is not None:
+        difference = difference + shift.to(cell.dtype) @ cell
+    return (difference**2).sum(-1)
+
+
+def test_pair_distance_squared_of_a_molecule() -> None:
+    positions, idx_i, idx_j, shift, _ = _pair_inputs()
+    result = pair_distance_squared(
+        idx_i,
+        idx_j,
+        shift,
+        positions,
+        shared_lattice=None,
+        system_lattices=None,
+        atoms_per_system=positions.shape[0],
+    )
+    expected = _reference(positions, idx_i, idx_j, shift, None)
+
+    assert result.shape == idx_i.shape
+    assert torch.allclose(result, expected, rtol=1e-14, atol=0)
+
+
+def test_pair_distance_squared_with_a_shared_cell() -> None:
+    positions, idx_i, idx_j, shift, cell = _pair_inputs(periodic=True)
+    result = pair_distance_squared(
+        idx_i,
+        idx_j,
+        shift,
+        positions,
+        shared_lattice=cell,
+        system_lattices=None,
+        atoms_per_system=positions.shape[0],
+    )
+    expected = _reference(positions, idx_i, idx_j, shift, cell)
+
+    assert torch.allclose(result, expected, rtol=1e-14, atol=0)
+
+
+def test_pair_distance_squared_with_a_cell_per_system() -> None:
+    """Two systems of three atoms, each pair taking the cell of its own
+    system."""
+    positions, _, _, shift, cell = _pair_inputs(periodic=True)
+    cells = torch.stack([cell, 1.5 * cell])
+    idx_i = torch.tensor([0, 1, 2, 3, 4, 5, 0, 3])
+    idx_j = torch.tensor([1, 2, 0, 5, 3, 4, 2, 4])
+    shift = shift[: idx_i.shape[0]]
+    result = pair_distance_squared(
+        idx_i,
+        idx_j,
+        shift,
+        positions,
+        shared_lattice=None,
+        system_lattices=cells,
+        atoms_per_system=3,
+    )
+
+    pair_cells = cells[idx_i // 3]
+    difference = positions[idx_j] - positions[idx_i]
+    difference = difference + (
+        shift.to(cells.dtype).unsqueeze(-2) @ pair_cells
+    ).squeeze(-2)
+    assert torch.allclose(result, (difference**2).sum(-1), rtol=1e-14, atol=0)
+
+
+def _distance_of(
+    positions: Tensor,
+    case: str,
+    inputs: tuple[Tensor, Tensor, Tensor, Tensor, Tensor],
+) -> Tensor:
+    """``pair_distance_squared`` of ``positions`` for the pairs in
+    ``inputs``, which are made outside of any transform."""
+    _, idx_i, idx_j, shift, cell = inputs
+    return pair_distance_squared(
+        idx_i,
+        idx_j,
+        shift,
+        positions,
+        shared_lattice=cell if case == "cell" else None,
+        system_lattices=None,
+        atoms_per_system=positions.shape[0],
+    )
+
+
+@pytest.mark.parametrize("case", ["molecule", "cell"])
+def test_pair_distance_squared_under_vmap(case: str) -> None:
+    """A batch of positions gives the same result as a loop over them."""
+    inputs = _pair_inputs(periodic=case == "cell")
+    positions = inputs[0]
+    batch = torch.stack([positions, 1.1 * positions, positions + 0.3])
+
+    result = torch.func.vmap(lambda p: _distance_of(p, case, inputs))(batch)
+    expected = torch.stack([_distance_of(p, case, inputs) for p in batch])
+
+    assert result.shape == (3, 40)
+    assert torch.allclose(result, expected, rtol=1e-14, atol=0)
+
+
+@pytest.mark.parametrize("case", ["molecule", "cell"])
+def test_pair_distance_squared_derivatives(case: str) -> None:
+    """``jacrev`` and ``jacfwd`` agree with each other and with the
+    analytic derivative, ``2 * difference`` on atoms ``j`` and ``i``."""
+    inputs = _pair_inputs(periodic=case == "cell")
+    positions, idx_i, idx_j, shift, cell = inputs
+
+    def func(p: Tensor) -> Tensor:
+        return _distance_of(p, case, inputs)
+
+    reverse = jacrev(func)(positions)
+    forward = jacfwd(func)(positions)
+    assert torch.allclose(reverse, forward, rtol=1e-12, atol=1e-12)
+
+    difference = positions[idx_j] - positions[idx_i]
+    if case == "cell":
+        difference = difference + shift.to(cell.dtype) @ cell
+    expected = torch.zeros_like(reverse)
+    rows = torch.arange(idx_i.shape[0])
+    # `index_put_` accumulates, so a pair of an atom with itself is right
+    expected.index_put_((rows, idx_j), 2.0 * difference, accumulate=True)
+    expected.index_put_((rows, idx_i), -2.0 * difference, accumulate=True)
+    assert torch.allclose(reverse, expected, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize("case", ["molecule", "cell"])
+def test_pair_distance_squared_compiles_as_one_graph(case: str) -> None:
+    inputs = _pair_inputs(periodic=case == "cell")
+    positions = inputs[0]
+
+    result = run_compiled_or_skip(
+        lambda p: _distance_of(p, case, inputs), positions
+    )
+
+    assert torch.allclose(
+        result, _distance_of(positions, case, inputs), rtol=1e-14, atol=0
+    )
+
+
+def _three_cases() -> dict[str, tuple[Tensor, Tensor, Tensor, Tensor, dict]]:
+    """Positions, ``int64`` indices, shifts and the lattice arguments of a
+    molecule, a shared cell and two systems with a cell each."""
+    positions, idx_i, idx_j, shift, cell = _pair_inputs(periodic=True)
+    molecule = {"shared_lattice": None, "system_lattices": None}
+    shared = {"shared_lattice": cell, "system_lattices": None}
+    per_system = {
+        "shared_lattice": None,
+        "system_lattices": torch.stack([cell, 1.5 * cell]),
+    }
+    zero = torch.zeros_like(shift)
+    return {
+        "molecule": (positions, idx_i, idx_j, zero, molecule),
+        "shared_cell": (positions, idx_i, idx_j, shift, shared),
+        "cell_per_system": (positions, idx_i, idx_j, shift, per_system),
+    }
+
+
+def _row_formula(
+    positions: Tensor,
+    idx_i: Tensor,
+    idx_j: Tensor,
+    shift: Tensor,
+    lattices: dict,
+) -> Tensor:
+    """The kernel before it gathered by column: rows of ``(n, 3)``
+    positions, then the same per-component sum."""
+    difference = positions.index_select(0, idx_j) - positions.index_select(
+        0, idx_i
+    )
+    if lattices["shared_lattice"] is not None:
+        difference = (
+            difference + shift.to(positions.dtype) @ lattices["shared_lattice"]
+        )
+    elif lattices["system_lattices"] is not None:
+        cells = lattices["system_lattices"].index_select(0, idx_i // 3)
+        difference = difference + (
+            shift.to(positions.dtype).unsqueeze(-2) @ cells
+        ).squeeze(-2)
+    x, y, z = difference[..., 0], difference[..., 1], difference[..., 2]
+    return x * x + y * y + z * z
+
+
+@pytest.mark.parametrize("case", ["molecule", "shared_cell", "cell_per_system"])
+def test_column_gathers_give_the_row_formula_bit_for_bit(case: str) -> None:
+    positions, idx_i, idx_j, shift, lattices = _three_cases()[case]
+
+    result = pair_distance_squared(
+        idx_i, idx_j, shift, positions, atoms_per_system=3, **lattices
+    )
+
+    assert torch.equal(
+        result, _row_formula(positions, idx_i, idx_j, shift, lattices)
+    )
+
+
+@pytest.mark.parametrize("case", ["molecule", "shared_cell", "cell_per_system"])
+def test_int32_indices_give_the_int64_bits(case: str) -> None:
+    """Value and derivative, whichever dtype the list hands over."""
+    positions, idx_i, idx_j, shift, lattices = _three_cases()[case]
+
+    def distances(i: Tensor, j: Tensor) -> object:
+        def f(p: Tensor) -> Tensor:
+            return pair_distance_squared(
+                i, j, shift, p, atoms_per_system=3, **lattices
+            )
+
+        return f(positions), jacrev(f)(positions), jacfwd(f)(positions)
+
+    narrow = distances(idx_i.int(), idx_j.int())
+    wide = distances(idx_i, idx_j)
+
+    for a, b in zip(narrow, wide):  # type: ignore[call-overload]
+        assert torch.equal(a, b)
+
+
+def test_columns_split_once_give_the_same_bits() -> None:
+    positions, idx_i, idx_j, shift, lattices = _three_cases()["shared_cell"]
+    columns = position_columns(positions)
+
+    assert all(c.shape == (positions.shape[0],) for c in columns)
+    assert all(c.is_contiguous() for c in columns)
+    chunks = [
+        pair_distance_squared_from_columns(
+            idx_i[start : start + 16].int(),
+            idx_j[start : start + 16].int(),
+            shift[start : start + 16],
+            columns,
+            atoms_per_system=3,
+            **lattices,
+        )
+        for start in range(0, idx_i.shape[0], 16)
+    ]
+
+    assert torch.equal(
+        torch.cat(chunks),
+        pair_distance_squared(
+            idx_i, idx_j, shift, positions, atoms_per_system=3, **lattices
+        ),
+    )
+
+
+@pytest.mark.parametrize("case", ["molecule", "shared_cell", "cell_per_system"])
+def test_int32_distances_under_vmap(case: str) -> None:
+    positions, idx_i, idx_j, shift, lattices = _three_cases()[case]
+    batch = torch.stack([positions, 1.1 * positions, positions + 0.3])
+
+    def f(p: Tensor) -> Tensor:
+        return pair_distance_squared(
+            idx_i.int(), idx_j.int(), shift, p, atoms_per_system=3, **lattices
+        )
+
+    expected = torch.stack([f(p) for p in batch])
+    assert torch.equal(torch.func.vmap(f)(batch), expected)
+
+
+@pytest.mark.parametrize("case", ["molecule", "shared_cell", "cell_per_system"])
+def test_int32_distances_compile(case: str) -> None:
+    positions, idx_i, idx_j, shift, lattices = _three_cases()[case]
+
+    def f(p: Tensor) -> Tensor:
+        return pair_distance_squared(
+            idx_i.int(), idx_j.int(), shift, p, atoms_per_system=3, **lattices
+        )
+
+    result = run_compiled_or_skip(f, positions)
+    assert torch.allclose(result, f(positions), rtol=1e-14, atol=0)
+
+
+def test_gather_rows_is_index_select_in_eager() -> None:
+    table = torch.arange(12.0, dtype=torch.double).reshape(4, 3)
+    index = torch.tensor([3, 3, 0, 2])
+    assert torch.equal(gather_rows(table, index), table.index_select(0, index))
+    assert torch.equal(gather_rows(table[:, 0], index), table[:, 0][index])
+
+
+def test_gather_rows_takes_the_indexing_path_while_compiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The tracing-only branch runs eagerly here, since coverage cannot see
+    code that `torch.compile` traces."""
+    monkeypatch.setattr(
+        _distance_kernels, "_COMPILED_INDEX_SELECT_JACREV_BUG", True
+    )
+    monkeypatch.setattr(_distance_kernels, "is_compiling", lambda: True)
+    table = torch.arange(12.0, dtype=torch.double).reshape(4, 3)
+    index = torch.tensor([3, 3, 0, 2])
+    assert torch.equal(gather_rows(table, index), table[index])
+
+
+def test_gather_rows_keeps_index_select_where_the_bug_is_fixed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        _distance_kernels, "_COMPILED_INDEX_SELECT_JACREV_BUG", False
+    )
+    monkeypatch.setattr(_distance_kernels, "is_compiling", lambda: True)
+    table = torch.arange(12.0, dtype=torch.double).reshape(4, 3)
+    index = torch.tensor([3, 3, 0, 2])
+    assert torch.equal(gather_rows(table, index), table.index_select(0, index))
+
+
+def test_compiled_gather_rows_gradient() -> None:
+    """``torch.compile(jacrev(f))`` of an ``index_select`` is wrong on
+    PyTorch 2.5 to 2.13: every row came out as the sum of all rows."""
+    x = torch.arange(1.0, 5.0, dtype=torch.double)
+    index = torch.tensor([3, 2, 1, 0])
+
+    def f(p: Tensor) -> Tensor:
+        return gather_rows(p, index) ** 2
+
+    expected = torch.flip(torch.diag(2 * x.flip(0)), (1,))
+    assert torch.equal(torch.func.jacrev(f)(x), expected)
+    result = run_compiled_or_skip(torch.func.jacrev(f), x)
+    assert torch.equal(result, expected)
+
+
+@pytest.mark.parametrize("case", ["molecule", "shared_cell", "cell_per_system"])
+def test_int32_distances_compiled_jacrev(case: str) -> None:
+    """The compiled Jacobian of the distance kernel (column gathers and,
+    per system, the cell gather) matches the eager one."""
+    positions, idx_i, idx_j, shift, lattices = _three_cases()[case]
+
+    def f(p: Tensor) -> Tensor:
+        return pair_distance_squared(
+            idx_i.int(), idx_j.int(), shift, p, atoms_per_system=3, **lattices
+        )
+
+    result = run_compiled_or_skip(torch.func.jacrev(f), positions)
+    assert torch.allclose(
+        result, torch.func.jacrev(f)(positions), rtol=1e-13, atol=1e-13
+    )
+
+
+@pytest.mark.parametrize("case", ["shared_cell", "cell_per_system"])
+def test_lattice_gradient_matches_the_row_formula(case: str) -> None:
+    """The translation is summed column by column: the values are the same
+    bits as the matrix product, the lattice gradient the same to rounding."""
+    positions, idx_i, idx_j, shift, lattices = _three_cases()[case]
+    key = "shared_lattice" if case == "shared_cell" else "system_lattices"
+    lattice = lattices[key].clone().requires_grad_(True)
+    lattices = {**lattices, key: lattice}
+
+    new = pair_distance_squared(
+        idx_i.int(),
+        idx_j.int(),
+        shift,
+        positions,
+        atoms_per_system=3,
+        **lattices,
+    )
+    old = _row_formula(positions, idx_i, idx_j, shift, lattices)
+    assert torch.equal(new, old)
+
+    (g_new,) = torch.autograd.grad(new.sum(), lattice)
+    (g_old,) = torch.autograd.grad(old.sum(), lattice)
+    assert torch.allclose(g_new, g_old, rtol=1e-13, atol=1e-13)

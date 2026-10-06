@@ -499,12 +499,12 @@ void write_pairs(
   const size_t n_thresholds = offsets.size();
   const int64_t tile_width = masks.tile_width;
   const int64_t n_words = masks.n_words;
-  std::vector<int64_t *> out_i(n_thresholds);
-  std::vector<int64_t *> out_j(n_thresholds);
+  std::vector<int32_t *> out_i(n_thresholds);
+  std::vector<int32_t *> out_j(n_thresholds);
   std::vector<int64_t> length(n_thresholds);
   for (size_t k = 0; k < n_thresholds; ++k) {
-    out_i[k] = idx_i[k].data_ptr<int64_t>();
-    out_j[k] = idx_j[k].data_ptr<int64_t>();
+    out_i[k] = idx_i[k].data_ptr<int32_t>();
+    out_j[k] = idx_j[k].data_ptr<int32_t>();
     length[k] = idx_i[k].size(0);
   }
 
@@ -528,8 +528,10 @@ void write_pairs(
           while (word != 0 && slot < stop) {
             const int64_t col = w * kBitsPerWord + lowest_bit(word);
             word &= word - 1; // clears the lowest set bit
-            out_i[k][slot] = index_a[row];
-            out_j[k][slot] = index_b[col];
+            // Cannot truncate: `atom_pairs_within_thresholds_cpu` checks that
+            // every index, and the padding value, fits `int32_t`.
+            out_i[k][slot] = static_cast<int32_t>(index_a[row]);
+            out_j[k][slot] = static_cast<int32_t>(index_b[col]);
             ++slot;
           }
         }
@@ -643,8 +645,8 @@ std::vector<std::tuple<torch::Tensor, torch::Tensor, int64_t>> search_pairs(
       pad_value.has_value()
         ? capacity_for(n_found[k], capacity, capacity_bucket)
         : n_found[k];
-    idx_i[k] = torch::empty({length}, torch::kLong);
-    idx_j[k] = torch::empty({length}, torch::kLong);
+    idx_i[k] = torch::empty({length}, torch::kInt);
+    idx_j[k] = torch::empty({length}, torch::kInt);
     request_huge_pages(idx_i[k].data_ptr(), idx_i[k].nbytes());
     request_huge_pages(idx_j[k].data_ptr(), idx_j[k].nbytes());
   }
@@ -701,6 +703,30 @@ std::vector<std::tuple<torch::Tensor, torch::Tensor, int64_t>>
   );
   TORCH_CHECK(capacity_bucket >= 1, "capacity_bucket must be positive");
   TORCH_CHECK(!thresholds_sq.empty(), "at least one threshold is required");
+
+  // The pair indices are written as `int32_t`. Every real index is below
+  // the number of positions, and the padding value is written as it is. The
+  // pair counts, slots and offsets stay `int64_t`: a list can hold more
+  // pairs than an `int32_t` counts, never more atoms.
+  constexpr int64_t kMaxIndex = std::numeric_limits<int32_t>::max();
+  TORCH_CHECK(
+    positions.size(0) <= kMaxIndex,
+    "positions has ",
+    positions.size(0),
+    " atoms, more than the int32 pair "
+    "indices hold (",
+    kMaxIndex,
+    ")"
+  );
+  TORCH_CHECK(
+    !pad_value.has_value() || (*pad_value >= 0 && *pad_value <= kMaxIndex),
+    "pad_value ",
+    pad_value.value_or(0),
+    " does not fit the int32 pair "
+    "indices (maximum ",
+    kMaxIndex,
+    ")"
+  );
 
   // `anchor`, when given, is one boolean per atom: only pairs with at
   // least one anchor atom are returned (`nullptr` keeps every pair).

@@ -178,23 +178,26 @@ class NeighborList(Node):
     Attributes
     ----------
     idx_i : Tensor
-        ``(capacity,)``, dtype :data:`_IDX_DTYPE` (``torch.long``), first
+        ``(capacity,)``, dtype :data:`_IDX_DTYPE` (``torch.int32``), first
         atom of each pair. Padding is routed to the index one past the
-        last atom (``nat``, or the flattened batch's atom count). Fixed at ``torch.long`` because
-        ``torch.autograd``'s backward pass runs pair-indexed
-        ``index_add``/``gather`` calls through this tensor, and
-        ``gather`` requires an ``int64`` index -- see :data:`_IDX_DTYPE`.
+        last atom (``nat``, or the flattened batch's atom count). Stored as
+        ``int32`` to halve the memory of the list. A consumer slices it
+        and passes the slice through :func:`.gather_index` before any
+        gather, ``index_select``, ``index_add`` or advanced indexing: the
+        backward pass of PyTorch before 2.8 needs ``int64`` indices there
+        (see :data:`_IDX_DTYPE`). ``.long()`` on the slice is always
+        correct, but copies on every version. Never widen the whole list.
     idx_j : Tensor
         ``(capacity,)``, dtype :data:`_IDX_DTYPE`, second atom of each
-        pair.
+        pair. Widened per slice like ``idx_i``.
     shift : Tensor
         ``(capacity, 3)``, dtype :data:`_SHIFT_DTYPE` (``torch.int16``),
         integer image shift. For a molecular list it is all zeros, stored
         as a zero-stride view of a single row (see
         :func:`_molecular_shift`), so it takes no memory per pair. Never
         reaches ``gather``/``index_add`` (it is read, not used as an
-        index), so it carries none of ``idx_i``/``idx_j``'s ``int64``
-        constraint -- see :data:`_SHIFT_DTYPE` for its range.
+        index), so it is not widened like ``idx_i``/``idx_j``
+        and carries none of their ``int64`` constraint -- see :data:`_SHIFT_DTYPE` for its range.
     mask : Tensor
         ``(capacity,)``, ``True`` for a real pair.
     periodic : bool
@@ -277,7 +280,9 @@ class NeighborList(Node):
         Parameters
         ----------
         idx_i, idx_j : Tensor
-            First and second atom of each pair, ``torch.long``.
+            First and second atom of each pair, ``torch.int32`` (what a
+            build produces) or ``torch.long`` (an existing list; checked
+            against the ``int32`` range, then stored as ``int32``).
         shift : Tensor
             Integer image shift of each pair.
         mask : Tensor
@@ -301,6 +306,9 @@ class NeighborList(Node):
         NeighborList
             The new list.
         """
+        idx_i = _stored_indices(idx_i, "idx_i", build_positions)
+        idx_j = _stored_indices(idx_j, "idx_j", build_positions)
+
         # Detached and copied, like `build_positions`: the lattice snapshot
         # exists only for `stale()`'s own cell-change check, never as a
         # gradient path, and must not follow an in-place change of the
@@ -340,9 +348,9 @@ class NeighborList(Node):
             )
         for name in ("idx_i", "idx_j"):
             dtype = getattr(self, name).dtype
-            if dtype != torch.long:
+            if dtype != _IDX_DTYPE:
                 raise ValueError(
-                    f"`{name}` must be a `torch.long` tensor, but dtype is "
+                    f"`{name}` must be a `{_IDX_DTYPE}` tensor, but dtype is "
                     f"'{dtype}'."
                 )
         if self.mask.dtype != torch.bool:
@@ -532,7 +540,10 @@ class NeighborList(Node):
         Returns
         -------
         tuple[Tensor, Tensor, Tensor]
-            ``idx_i`` and ``idx_j``, both ``(n_real,)``, and ``shift``,
+            ``idx_i`` and ``idx_j``, both ``(n_real,)`` and in the stored
+            ``int32`` dtype (:data:`_IDX_DTYPE`; pass them through
+            :func:`.gather_index` before indexing with them, see
+            :class:`NeighborList`), and ``shift``,
             ``(n_real, 3)``. A molecular list's shift is again a zero-stride
             view of one zero row.
         """
@@ -548,12 +559,75 @@ class NeighborList(Node):
         return idx_i, idx_j, shift
 
 
-# Dtype of `idx_i`/`idx_j`. It must stay `torch.long`: the backward pass
-# threads the indices through `gather` (via `index_add`'s backward), and
-# `gather` requires `int64` indices. A narrower dtype works in forward mode
-# but raises `RuntimeError: gather(): Expected dtype int64 for index` under
-# `torch.autograd`, `jacrev` and `vmap`.
-_IDX_DTYPE = torch.long
+# Dtype in which `idx_i`/`idx_j` are *stored*: `int32`, 4 B per index
+# instead of 8, which takes a list from 17 to 9 bytes per capacity slot. An
+# atom index (the phantom `nat` included) stays far below 2**31 for any
+# system that fits in memory, while the number of pairs, which does not, is
+# only ever a tensor length, a slice bound or a native `int64_t`, never one
+# of these indices.
+#
+# A consumer slices a chunk and passes it through `gather_index` (see
+# `tad_mctc.ncoord.common.sum_over_neighborlist`) before any index use.
+# From PyTorch 2.8 that is the slice itself, a view, so autograd keeps it
+# for the backward pass at no cost. Before 2.8 (`setup.cfg` allows
+# `torch>=2.4`), the backward pass threads the indices through `gather`
+# (via `index_add`'s and `index_select`'s backward), which rejects a
+# narrower index (`RuntimeError: gather(): Expected dtype int64 for index`)
+# under `torch.autograd`, `jacrev` and `vmap`, so `gather_index` widens the
+# chunk to `int64`. That copy is kept until the backward pass, 16 bytes per
+# pair more than the views of an `int64` list were. Never widen the whole
+# list. On CPU, an `int32` gather from rows of a table, like `(n, 3)`
+# positions, has a much slower backward pass than an `int64` one, so the
+# consumers gather from columns instead (see
+# `pair_distance_squared_from_columns`). Every construction-side lookup table
+# (`owner`, `real_atom_index`) is `int32` too, because an index operation
+# returns the dtype of the table it reads, not of the index.
+_IDX_DTYPE = torch.int32
+
+# Largest value stored in `idx_i`/`idx_j`: the phantom index of padded slots,
+# which is the number of atoms of the (flattened) system, or of a periodic
+# search's ghost pool. A module constant, read at call time, so a test can
+# lower it to exercise the guard without a huge system.
+_IDX_MAX = torch.iinfo(_IDX_DTYPE).max
+
+
+def _check_index_range(max_index: int, what: str = "atom") -> None:
+    """
+    Raise ``ValueError`` if ``max_index`` does not fit :data:`_IDX_DTYPE`.
+
+    ``max_index`` is the largest value that will be stored: the phantom
+    index of the padding, i.e. the (flattened, batched) atom count, or the
+    size of a periodic search's ghost pool. There is no ``int64`` fallback:
+    a system with more than ``2**31 - 1`` such entries would need far more
+    memory than its list.
+    """
+    if max_index > _IDX_MAX:
+        raise ValueError(
+            f"The largest {what} index of this neighbour list would be "
+            f"{max_index}, above the {_IDX_MAX} (int32 maximum) that "
+            "`idx_i`/`idx_j` can store."
+        )
+
+
+def _stored_indices(idx: Tensor, name: str, build_positions: Tensor) -> Tensor:
+    """
+    ``idx`` in the stored dtype. A freshly built list is ``int32`` already.
+    An ``int64`` list (an existing one being loaded or validated) is
+    checked against the ``int32`` range, by its actual values and by the
+    phantom index of its atom count, before it is cast.
+    """
+    if idx.dtype == _IDX_DTYPE:
+        return idx
+    if idx.dtype != torch.long:
+        raise ValueError(
+            f"`{name}` must be a `{_IDX_DTYPE}` or `torch.long` tensor, but "
+            f"dtype is '{idx.dtype}'."
+        )
+    n_flat = math.prod(build_positions.shape[:-1])
+    largest = max(n_flat, int(idx.max()) if idx.numel() > 0 else 0)
+    _check_index_range(largest)
+    return idx.to(_IDX_DTYPE)
+
 
 # Dtype of `shift`. Never used as a `gather`/`index_add` index -- only
 # read and added into positions -- so it carries none of `_IDX_DTYPE`'s
@@ -567,15 +641,15 @@ _IDX_DTYPE = torch.long
 # rather than truncating a shift silently.
 _SHIFT_DTYPE = torch.int16
 
-# Bytes per capacity slot: `idx_i` + `idx_j` (`_IDX_DTYPE`, 8 B each) and
+# Bytes per capacity slot: `idx_i` + `idx_j` (`_IDX_DTYPE`, 4 B each) and
 # `mask` (torch.bool, 1 B), plus `shift` (`_SHIFT_DTYPE`, 3 x 2 B) for a
 # periodic list only -- a molecular list's all-zero shift is a zero-stride
 # view (see `_molecular_shift`). Exact and independent of
 # `positions.dtype`, since none of these is a floating dtype. Kept in sync
 # with `_IDX_DTYPE`/`_SHIFT_DTYPE` by hand, so that they stay plain,
 # checkable constants.
-_MOLECULAR_BYTES_PER_SLOT = 17
-_PERIODIC_BYTES_PER_SLOT = 23
+_MOLECULAR_BYTES_PER_SLOT = 9
+_PERIODIC_BYTES_PER_SLOT = 15
 
 
 def _molecular_shift(capacity: int, device: torch.device) -> Tensor:
@@ -640,9 +714,9 @@ def estimate_neighborlist_memory(capacity: int, *, periodic: bool) -> int:
     -------
     >>> from tad_mctc.neighbor.list import estimate_neighborlist_memory
     >>> estimate_neighborlist_memory(11_735_040, periodic=False)
-    199495680
+    105615360
     >>> estimate_neighborlist_memory(11_735_040, periodic=True)
-    269905920
+    176025600
     """
     if capacity < 0:
         raise ValueError(f"`capacity` must be >= 0, got {capacity}")
@@ -807,6 +881,12 @@ def _join_pairs(
     once. Each fragment list is emptied as soon as it is joined, to lower
     the peak memory of a large build.
     """
+    # `torch.cat` promotes mixed integer dtypes without a warning, which
+    # would silently rebuild the whole list as `int64` and keep its peak.
+    for fragment in (*fragments_i, *fragments_j):
+        assert (
+            fragment.dtype == _IDX_DTYPE
+        ), f"pair fragments must be {_IDX_DTYPE}, got {fragment.dtype}"
     n_found = sum(int(fragment.shape[0]) for fragment in fragments_i)
     empty = torch.zeros(0, dtype=_IDX_DTYPE, device=device)
 
@@ -1049,8 +1129,10 @@ def _atom_pairs_within_thresholds(
         for k, threshold_squared in enumerate(thresholds_squared):
             keep = candidate & (distance_squared <= threshold_squared)
             block_sel, row_sel, col_sel = keep.nonzero(as_tuple=True)
-            collected_i[k].append(atoms_a[block_sel, row_sel])
-            collected_j[k].append(atoms_b[block_sel, col_sel])
+            # Stored as `_IDX_DTYPE` from the start: `torch.cat` in
+            # `_join_pairs` would otherwise promote the whole list to `int64`.
+            collected_i[k].append(atoms_a[block_sel, row_sel].to(_IDX_DTYPE))
+            collected_j[k].append(atoms_b[block_sel, col_sel].to(_IDX_DTYPE))
 
     results = []
     for fragments_i, fragments_j in zip(collected_i, collected_j):
@@ -1104,6 +1186,8 @@ def _ghost_pairs_to_atom_pairs(
     i_is_primary = is_primary.index_select(0, ghost_i)
     anchor = torch.where(i_is_primary, ghost_i, ghost_j)
     other = torch.where(i_is_primary, ghost_j, ghost_i)
+    # `owner` is `_IDX_DTYPE`, and so are the results: an index operation
+    # returns the dtype of its table, not of its index.
     idx_i = owner.index_select(0, anchor)
     idx_j = owner.index_select(0, other)
     pair_shift = shift.index_select(0, other) - shift.index_select(0, anchor)
@@ -1166,6 +1250,12 @@ def _neighbor_list(
     snapshot for :meth:`NeighborList.stale`; consumers receive it as a
     call-time argument instead (``tad_mctc.ncoord.common``).
     """
+    # A build produces `_IDX_DTYPE` throughout. Not cast here on purpose:
+    # that would hide a stage that built `int64` and keep its peak memory.
+    assert pairs.idx_i.dtype == _IDX_DTYPE == pairs.idx_j.dtype, (
+        f"a build must produce {_IDX_DTYPE} indices, got "
+        f"{pairs.idx_i.dtype} and {pairs.idx_j.dtype}"
+    )
     capacity = pairs.idx_i.shape[0]
     npair = min(pairs.n_found, capacity)
 
@@ -1611,6 +1701,8 @@ def _search_cells(
     # Mapped to the phantom atom with a zero shift below, its padded slots
     # come out as those of the final list, which is so written only once.
     n_ghost = ghost_positions.shape[0]
+    # The ghost pairs are written as `_IDX_DTYPE`, padding value included.
+    _check_index_range(n_ghost, "ghost pool")
     ghost_padding = (
         None if padding is None else _Padding(padding.capacity, n_ghost)
     )
@@ -1630,6 +1722,7 @@ def _search_cells(
         shift_from_original = _ghost_shift_in_original_coordinates(
             ghost_shift, owner, cell_shift
         )
+        owner = owner.to(_IDX_DTYPE)
         if padding is not None:
             owner = torch.cat([owner, owner.new_full((1,), padding.value)])
             shift_from_original = torch.cat(
@@ -1727,7 +1820,7 @@ def _build_single_neighborlists(
         # `positions`. The phantom index `nat` of a padded slot has no
         # entry in `real_atom_index`, so the lists are padded only after
         # renumbering.
-        real_atom_index = is_real.nonzero().squeeze(-1)
+        real_atom_index = is_real.nonzero().squeeze(-1).to(_IDX_DTYPE)
         per_threshold_pairs = _search_molecules(
             positions[is_real],
             thresholds,
@@ -1738,8 +1831,8 @@ def _build_single_neighborlists(
         with stage("pad to capacity"):
             return tuple(
                 _pad_to_capacity(
-                    [real_atom_index[pairs.idx_i]],
-                    [real_atom_index[pairs.idx_j]],
+                    [real_atom_index.index_select(0, pairs.idx_i)],
+                    [real_atom_index.index_select(0, pairs.idx_j)],
                     nat,
                     cutoff,
                     skin,
@@ -1817,7 +1910,9 @@ def _build_batched_neighborlists(
     if structure.lattice is None:
         # One search over the real atoms of every system, kept apart by
         # their system index, then renumbered into the padded layout.
-        flat_index = torch.arange(n_systems * nat, device=positions.device)
+        flat_index = torch.arange(
+            n_systems * nat, dtype=_IDX_DTYPE, device=positions.device
+        )
         real_atom_index = flat_index.reshape(n_systems, nat)[is_real]
         system = torch.arange(n_systems, device=positions.device)
         system_of_atom = system.unsqueeze(-1).expand(n_systems, nat)
@@ -1832,8 +1927,8 @@ def _build_batched_neighborlists(
         ):
             per_threshold_pairs.append(
                 (
-                    [real_atom_index[pairs.idx_i]],
-                    [real_atom_index[pairs.idx_j]],
+                    [real_atom_index.index_select(0, pairs.idx_i)],
+                    [real_atom_index.index_select(0, pairs.idx_j)],
                     None,
                 )
             )
@@ -1866,7 +1961,9 @@ def _build_batched_neighborlists(
                 distance_kernel=distance_kernel,
                 stage=stage,
             )
-            # The chunk numbers its atoms from zero.
+            # The chunk numbers its atoms from zero. `idx + offset` stays in
+            # `_IDX_DTYPE`, which cannot wrap: `_build_neighborlists` has
+            # checked that the flattened atom count fits it.
             offset = first * nat
             for chunks, (pairs, shift) in zip(per_threshold_chunks, searched):
                 chunks.append(
@@ -2027,6 +2124,10 @@ def _build_neighborlists(
         One list per entry of ``cutoffs``, in the same order.
     """
     _check_search_arguments(cutoffs, skin, tile)
+    # The largest stored index is the phantom of the padded slots, the
+    # flattened (batched) atom count, so one check covers every offset and
+    # lookup table of the build.
+    _check_index_range(math.prod(structure.numbers.shape))
 
     with _outside_transforms(structure) as plain:
         build = (
