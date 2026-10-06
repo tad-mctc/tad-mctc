@@ -26,7 +26,7 @@ from torch.torch_version import TorchVersion
 __all__ = ["__version__", "__tversion__"]
 
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 """Version of tad-mctc in semantic versioning."""
 
 __tversion__ = TorchVersion(torch.__version__)
