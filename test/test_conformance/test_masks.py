@@ -32,13 +32,10 @@ from torch.func import vmap
 
 from tad_mctc.autograd import no_vmap_fallback
 from tad_mctc.batch import real_atoms, real_pairs, real_triples
+from tad_mctc.tools.testing import requires_compile
 
 from ..conftest import DEVICE
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    compile_fullgraph,
-)
+from ..utils import compile_fullgraph
 
 
 def _numbers() -> torch.Tensor:
@@ -88,7 +85,7 @@ def test_vmap_matches_loop(f: Callable[[torch.Tensor], torch.Tensor]) -> None:
     assert torch.equal(batched, f(numbers))
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 @pytest.mark.parametrize("f", FUNCTIONS)
 def test_compile_matches_eager(
     f: Callable[[torch.Tensor], torch.Tensor],

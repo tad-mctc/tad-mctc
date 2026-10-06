@@ -43,6 +43,7 @@ __all__ = [
     "jacrev_matches_finite_diff",
     "no_vmap_fallback",
     "numgrad",
+    "positions_gradchecker",
     "vmap_matches_loop",
 ]
 
@@ -308,6 +309,38 @@ def numgrad(
             gradient[..., :, i, j] = 0.5 * (cnr - cnl) / step
 
     return gradient
+
+
+def positions_gradchecker(
+    function: Callable[[Structure], Tensor],
+    structure: Structure,
+) -> tuple[Callable[[Tensor], Tensor], Tensor]:
+    """
+    Prepare a gradient check of ``function`` w.r.t. positions.
+
+    Every other field of ``structure`` is carried through unchanged, as in
+    :func:`numgrad`.
+
+    Parameters
+    ----------
+    function : Callable[[Structure], Tensor]
+        Forward function of a `Structure`.
+    structure : Structure
+        Structure at which the gradient is checked.
+
+    Returns
+    -------
+    tuple[Callable[[Tensor], Tensor], Tensor]
+        ``function`` as a function of the positions alone, and a detached
+        copy of ``structure.positions`` that requires gradients, for
+        :func:`dgradcheck` and :func:`dgradgradcheck`.
+    """
+
+    def func(pos: Tensor) -> Tensor:
+        return function(structure.replace(positions=pos))
+
+    positions = structure.positions.detach().clone().requires_grad_(True)
+    return func, positions
 
 
 def vmap_matches_loop(

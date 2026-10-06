@@ -34,12 +34,11 @@ import torch
 from tad_mctc.io.structure import Structure
 from tad_mctc.ncoord import cn_d3, cn_eeq
 from tad_mctc.ncoord.common import CNModel
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
 from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
     compile_fullgraph,
     load_structure,
 )
@@ -83,7 +82,7 @@ def _assert_compiles_like_eager(
 
 # Every path that can be traced on each sample. The dense path builds the
 # periodic shifts of a cell inside the call, so it takes only molecules.
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 @pytest.mark.parametrize(
     "bind,source",
     [
@@ -107,7 +106,7 @@ def test_compiles_fullgraph(bind: Bind, source: tuple[str, str]) -> None:
 
 
 # The paths that accept a batch of cells and can be traced.
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 @pytest.mark.parametrize(
     "bind",
     [bind_precomputed, bind_sparse],
@@ -117,7 +116,7 @@ def test_compiles_fullgraph_bulk_and_slab(bind: Bind) -> None:
     _assert_compiles_like_eager(cn_d3, bind, bulk_and_slab(DD_DOUBLE))
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_compiles_fullgraph_with_cn_max() -> None:
     """The capped `cn_eeq` preset: `cn_max` is a plain float here, so the
     cap must trace without a data-dependent branch."""

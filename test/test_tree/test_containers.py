@@ -32,7 +32,7 @@ from tad_mctc.ncoord import cn_d3, cn_d4, cn_gfn2
 from tad_mctc.ncoord.common import CNModel
 from tad_mctc.neighbor.images import PeriodicShifts
 from tad_mctc.neighbor.list import NeighborList, build_neighborlist
-from tad_mctc.tools import is_compile_supported
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.tree import combine, leaf_paths
 
 from ..utils import compile_fullgraph
@@ -270,10 +270,8 @@ def test_neighborlist_create_and_consistency() -> None:
         nbl.replace(periodic=False)
 
 
+@requires_compile
 def test_cnmodel_replace_inside_compile() -> None:
-    if not is_compile_supported():
-        pytest.skip("torch.compile is not supported")
-
     structure = _water_structure()
 
     def fn(s: Structure) -> torch.Tensor:

@@ -429,8 +429,6 @@ def _short_repr(value: Any) -> str:
 
 
 def _collect(value: Any, kind: type, out: list[Any]) -> None:
-    # Module-level recursion instead of a closure: Dynamo (torch 2.4) cannot
-    # trace nested functions with free variables.
     if isinstance(value, kind):
         out.append(value)
     elif _is_container(value):

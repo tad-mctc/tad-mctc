@@ -37,11 +37,10 @@ from torch.utils._pytree import tree_flatten
 
 from tad_mctc.exceptions import DtypeError
 from tad_mctc.io.structure import Structure, pack_structures
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import Tensor
 
 from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
     jacrev,
     run_compiled_or_skip,
 )
@@ -481,7 +480,7 @@ def _leaf_op(structure: Structure) -> Tensor:
     return total
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_compile_fullgraph_without_lattice() -> None:
     """`torch.compile(fullgraph=True)` must trace through a `Structure`
     with only its required fields set."""
@@ -493,7 +492,7 @@ def test_compile_fullgraph_without_lattice() -> None:
     assert torch.allclose(result, _leaf_op(structure))
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_compile_fullgraph_with_lattice() -> None:
     """Same guarantee, but with `lattice` also set -- a different pytree
     treespec, so `torch.compile` specializes and traces it separately."""

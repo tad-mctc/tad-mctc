@@ -15,8 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test the gradcheck helpers `dgradgradgradcheck`, `jacfwd_matches_jacrev` and
-`no_vmap_fallback`.
+Test the gradcheck helpers `dgradgradgradcheck`, `jacfwd_matches_jacrev`,
+`no_vmap_fallback` and `positions_gradchecker`.
 
 Each helper is run on a correct function (`torch.sin`) and on a function with
 a deliberately broken custom derivative.
@@ -36,7 +36,9 @@ from tad_mctc.autograd import (
     dgradgradgradcheck,
     jacfwd_matches_jacrev,
     no_vmap_fallback,
+    positions_gradchecker,
 )
+from tad_mctc.io.structure import Structure
 
 
 def _x() -> torch.Tensor:
@@ -227,3 +229,25 @@ def test_no_vmap_fallback_restores_state() -> None:
     with no_vmap_fallback():
         assert not functorch._is_vmap_fallback_enabled()
     assert functorch._is_vmap_fallback_enabled() == before
+
+
+def test_positions_gradchecker() -> None:
+    structure = Structure(
+        numbers=torch.tensor([1, 1]),
+        positions=torch.tensor(
+            [[0.0, 0.0, 0.0], [0.0, 0.0, 1.4]], dtype=torch.float64
+        ),
+        charge=torch.tensor(1.0, dtype=torch.float64),
+    )
+
+    def function(s: Structure) -> torch.Tensor:
+        assert s.charge is not None
+        return s.charge * torch.linalg.vector_norm(s.positions, dim=-1)
+
+    func, positions = positions_gradchecker(function, structure)
+
+    assert positions.requires_grad
+    assert positions is not structure.positions
+    assert not structure.positions.requires_grad
+    assert torch.equal(func(positions), function(structure))
+    assert dgradcheck(func, positions)

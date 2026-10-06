@@ -71,14 +71,11 @@ from tad_mctc.ncoord import (
 )
 from tad_mctc.ncoord.common import CNModel, cut_coordination_number
 from tad_mctc.neighbor.list import NeighborList, build_neighborlist
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.tree import stack
 
 from ..conftest import DEVICE
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    compile_fullgraph,
-)
+from ..utils import compile_fullgraph
 
 DD = {"device": DEVICE, "dtype": torch.float64}
 
@@ -227,7 +224,7 @@ def test_forward_matches_reverse(model: CNModel, path: str) -> None:
 @pytest.mark.filterwarnings(
     "ignore:remat_using_tags_for_fwd_loss_bwd_graph:UserWarning"
 )
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 @pytest.mark.parametrize("path", PATHS)
 @pytest.mark.parametrize("model", PRESETS)
 def test_compile_matches_eager(model: CNModel, path: str) -> None:
@@ -317,9 +314,9 @@ def test_counting_forward_matches_reverse(f: Evaluation) -> None:
     assert jacfwd_matches_jacrev(f, _r())
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 @pytest.mark.parametrize("f", COUNTING)
 def test_counting_compile_matches_eager(f: Evaluation) -> None:
-    torch._dynamo.reset()  # pylint: disable=protected-access
     compiled = compile_fullgraph(f)
     assert torch.allclose(compiled(_r()), f(_r()))
