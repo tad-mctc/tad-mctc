@@ -187,6 +187,7 @@ import torch
 
 from ..typing import Tensor
 from . import _native_flags
+from ._distance_kernels import squared_threshold
 
 __all__ = [
     "BuildInfo",
@@ -497,7 +498,7 @@ def atom_pairs_within_thresholds_native(
         return None
 
     capacity, pad_value = (None, None) if padding is None else padding
-    thresholds_sq = [float(t) * float(t) for t in thresholds]
+    thresholds_sq = [squared_threshold(t, positions.dtype) for t in thresholds]
     result = module.atom_pairs_within_thresholds_cpu(
         index,
         valid,

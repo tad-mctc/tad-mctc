@@ -263,6 +263,27 @@ def pairwise_distance_squared(  # pragma: no cover
     return out
 
 
+# Relative slack, in units of the machine epsilon of the positions' dtype,
+# on the squared threshold. The kernels evaluate a squared distance in
+# different arithmetic (the `baddbmm` expansion, the broadcast difference,
+# Triton, the native extension), so a pair right at a threshold, e.g. the
+# image of an atom one cell edge away for a cutoff that is a multiple of
+# it, rounds to either side depending on the kernel. The slack makes all of
+# them keep such a pair; a consumer wanting the exact cutoff re-masks the
+# list with its own distances (as the dispersion models do).
+_THRESHOLD_SLACK = 8.0
+
+
+def squared_threshold(threshold: float, dtype: torch.dtype) -> float:
+    """
+    The squared `threshold` that a squared distance is compared against, with
+    a few ulps of slack (see ``_THRESHOLD_SLACK``) so that the result at a
+    tie does not depend on the distance kernel.
+    """
+    slack = _THRESHOLD_SLACK * torch.finfo(dtype).eps
+    return float(threshold) * float(threshold) * (1.0 + slack)
+
+
 def _baddbmm_distance_squared(
     positions_a: Tensor, positions_b: Tensor
 ) -> Tensor:

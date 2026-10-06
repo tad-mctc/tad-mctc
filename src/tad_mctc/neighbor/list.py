@@ -95,7 +95,7 @@ from ..batch import real_atoms
 from ..tree import Node, child, context
 from ..typing import DD, Tensor
 from . import _distance_kernels, _native
-from ._distance_kernels import DistanceKernelName
+from ._distance_kernels import DistanceKernelName, squared_threshold
 from ._tiles import Tiles, _integer_box, _is_forward, _ragged_runs, tile_pairs
 from .images import (
     _image_rings,
@@ -1079,12 +1079,12 @@ def _atom_pairs_within_thresholds(
     )
 
     # The distances are compared in the positions' dtype, against each
-    # squared threshold rounded once to that dtype, exactly as the native
-    # path compares them, so that both agree on a pair right at a
-    # threshold.
+    # squared threshold (with a few ulps of slack, so that the kernels agree
+    # on a pair right at it) rounded once to that dtype, exactly as the
+    # native path compares them.
     thresholds_squared = [
         torch.tensor(
-            threshold * threshold,
+            squared_threshold(threshold, reference_positions.dtype),
             dtype=reference_positions.dtype,
             device=reference_positions.device,
         )
