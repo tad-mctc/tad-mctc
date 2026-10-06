@@ -48,7 +48,12 @@ from ..data import en as eneg
 from ..data import radii
 from ..data.table import resolve_table
 from ..io.structure import Structure
-from ..neighbor import pair_distance_squared, split_lattice
+from ..neighbor import (
+    gather_index,
+    pair_distance_squared_from_columns,
+    position_columns,
+    split_lattice,
+)
 from ..neighbor.images import (
     PeriodicShifts,
     build_periodic_shifts,
@@ -667,8 +672,9 @@ class _PaddedAtoms(NamedTuple):
     derivative, even before its contribution is masked to zero.
     """
 
-    positions: Tensor
-    """Cartesian coordinates, ``(total_atoms + 1, 3)``."""
+    position_columns: tuple[Tensor, Tensor, Tensor]
+    """Cartesian coordinates, split into the ``x``, ``y`` and ``z`` columns
+    (``(total_atoms + 1,)`` each) that the pair distances gather from."""
 
     rcov: Tensor
     """Covalent radius of each atom, ``(total_atoms + 1,)``."""
@@ -733,7 +739,7 @@ def _pad_atoms(
         )
 
     return _PaddedAtoms(
-        positions=padded_positions,
+        position_columns=position_columns(padded_positions),
         rcov=rcov[species],
         en=None if en is None else en[species],
         shared_lattice=shared_lattice,
@@ -761,11 +767,11 @@ def _sparse_pair_contributions(
     weight both atoms receive the same count, so the same tensor is
     returned twice; with one, each orientation is weighted separately.
     """
-    distance_squared = pair_distance_squared(
+    distance_squared = pair_distance_squared_from_columns(
         idx_i,
         idx_j,
         shift,
-        atoms.positions,
+        atoms.position_columns,
         shared_lattice=atoms.shared_lattice,
         system_lattices=atoms.system_lattices,
         atoms_per_system=atoms.atoms_per_system,
@@ -827,7 +833,11 @@ def sum_over_neighborlist(
         and to atom ``idx_j`` (the same tensor twice for a symmetric
         quantity). Slots where ``mask`` is ``False`` are padding, which
         point at the phantom atom ``positions.shape[0]``: the function
-        must give them zero, and may look the phantom atom up.
+        must give them zero, and may look the phantom atom up. The indices
+        come as :func:`.gather_index` returns them: the list's ``int32``
+        on PyTorch 2.8 and later, ``int64`` before. Per-atom data gathered
+        from them should be one column per quantity, not rows of a table
+        (see :func:`.pair_distance_squared_from_columns`).
     positions : Tensor
         Cartesian coordinates of the flattened batch, ``(total_atoms, 3)``.
         Sets the device, the dtype and the chunk size, and ties the result
@@ -862,8 +872,13 @@ def sum_over_neighborlist(
     # is still part of the graph of `positions` (with a zero gradient).
     for start in range(0, max(capacity, 1), chunk):
         stop = min(start + chunk, capacity)
-        chunk_i = nbl.idx_i[start:stop]
-        chunk_j = nbl.idx_j[start:stop]
+        # The list stores `int32`. From PyTorch 2.8 the slices are used as
+        # they are: views, so autograd keeps them for the backward pass at no
+        # cost. Before 2.8 the backward pass needs `int64` indices, and
+        # `gather_index` widens this slice (never the whole list); every
+        # node that uses it then keeps the copy until the backward pass.
+        chunk_i = gather_index(nbl.idx_i[start:stop])
+        chunk_j = gather_index(nbl.idx_j[start:stop])
         chunk_mask = nbl.mask[start:stop]
         chunk_shift = nbl.shift[start:stop]
 

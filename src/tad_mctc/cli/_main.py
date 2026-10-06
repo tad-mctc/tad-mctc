@@ -26,7 +26,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from typing import Any
 
 import torch
 
@@ -79,20 +80,61 @@ def _coordination_number(
 
     if args.neighbor == "sparse":
         nbl = _build_neighborlist(structure, model.cutoff, timings)
-        with timings.stage(f"{label} (sparse, {args.mode})"):
-            return model(structure, pairs=nbl, mode=args.mode)
+        return _evaluate(
+            args,
+            lambda s, p: model(s, pairs=p, mode=args.mode),
+            structure,
+            nbl,
+            f"{label} (sparse, {args.mode})",
+            timings,
+        )
 
     if structure.lattice is None:
-        with timings.stage(f"{label} (dense)"):
-            return model(structure)
+        return _evaluate(
+            args,
+            lambda s, p: model(s),
+            structure,
+            None,
+            f"{label} (dense)",
+            timings,
+        )
 
     assert structure.periodic is not None
     with timings.stage("build periodic shifts"):
         shifts = build_periodic_shifts(
             structure.lattice, structure.periodic, model.cutoff
         )
-    with timings.stage(f"{label} (dense)"):
-        return model(structure, pairs=shifts)
+    return _evaluate(
+        args,
+        lambda s, p: model(s, pairs=p),
+        structure,
+        shifts,
+        f"{label} (dense)",
+        timings,
+    )
+
+
+def _evaluate(
+    args: argparse.Namespace,
+    func: Callable[[Structure, Any], Tensor],
+    structure: Structure,
+    pairs: Any,
+    label: str,
+    timings: Timings,
+) -> Tensor:
+    """Call ``func(structure, pairs)`` as the step ``label``. With
+    ``--compile``, ``func`` goes through ``torch.compile(fullgraph=True)``
+    and the first call, which traces and compiles, is its own step, so the
+    step ``label`` times the compiled function alone."""
+    if not args.compile:
+        with timings.stage(label):
+            return func(structure, pairs)
+
+    compiled = torch.compile(func, fullgraph=True)
+    with timings.stage(f"torch.compile ({label})"):
+        compiled(structure, pairs)
+    with timings.stage(f"{label}, compiled"):
+        return compiled(structure, pairs)
 
 
 @contextlib.contextmanager
@@ -121,6 +163,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(
             "--nlist-only builds a neighbour list, so it cannot be "
             "combined with '--neighbor dense'."
+        )
+
+    if args.compile and args.mode == "recompute" and args.neighbor == "sparse":
+        parser.error(
+            "--compile needs '--mode graph': 'recompute' checkpoints the "
+            "pair loop, which is not meant for a compiled function."
         )
 
     if args.cuda and not torch.cuda.is_available():

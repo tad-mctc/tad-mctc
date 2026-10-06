@@ -66,7 +66,8 @@ from ...exceptions import (
 )
 from ...neighbor import (
     build_neighborlist,
-    pair_distance_squared,
+    pair_distance_squared_from_columns,
+    position_columns,
     split_lattice,
 )
 from ...typing import DD, Tensor
@@ -101,6 +102,10 @@ _COLDFUSION_THRESHOLD = 0.5
 # Beyond this size the neighbour list wins: 30x faster at 4000 atoms, and
 # it needs memory only for the pairs within the cutoff.
 _COLDFUSION_DENSE_MAX_ATOMS = 1024
+
+# Pairs checked at once by the neighbour-list form of the check: bounds the
+# `int64` widening of the stored indices and the pair-sized temporaries.
+_COLDFUSION_PAIR_BLOCK = 4_000_000
 
 
 def coldfusion_check(
@@ -209,18 +214,24 @@ def _coldfusion_check_sparse(
 
     idx_i, idx_j, shift = nbl.real_entries()
     shared_lattice, system_lattices = split_lattice(structure.lattice)
-    distance_squared = pair_distance_squared(
-        idx_i,
-        idx_j,
-        shift,
-        structure.positions.reshape(-1, 3),
-        shared_lattice=shared_lattice,
-        system_lattices=system_lattices,
-        atoms_per_system=structure.numbers.shape[-1],
-    )
+    columns = position_columns(structure.positions.reshape(-1, 3))
+    # In blocks, so that the pair-sized temporaries of the distances (and,
+    # before PyTorch 2.8, the widening to `int64`) stay bounded for a large
+    # list.
+    for start in range(0, idx_i.shape[0], _COLDFUSION_PAIR_BLOCK):
+        stop = start + _COLDFUSION_PAIR_BLOCK
+        distance_squared = pair_distance_squared_from_columns(
+            idx_i[start:stop],
+            idx_j[start:stop],
+            shift[start:stop],
+            columns,
+            shared_lattice=shared_lattice,
+            system_lattices=system_lattices,
+            atoms_per_system=structure.numbers.shape[-1],
+        )
 
-    if torch.any(distance_squared < threshold * threshold):
-        raise StructureError("Too close interatomic distances found")
+        if torch.any(distance_squared < threshold * threshold):
+            raise StructureError("Too close interatomic distances found")
 
     return None
 

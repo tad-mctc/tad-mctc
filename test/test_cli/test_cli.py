@@ -324,7 +324,9 @@ def test_dense_run_of_a_cell_builds_its_periodic_shifts(
     for the model's cutoff, as its own timed step."""
     dd: DD = {"device": DEVICE, "dtype": torch.double}
     structure = load_structure("other", "periodic_triclinic", dd)
-    args = argparse.Namespace(cn="d3", neighbor="dense", mode="graph")
+    args = argparse.Namespace(
+        cn="d3", neighbor="dense", mode="graph", compile=False
+    )
     cn = _coordination_number(
         args, CN_MODELS["d3"], structure, Timings(enabled=True)
     )
@@ -472,3 +474,38 @@ def test_cuda_neighbour_list_does_not_report_the_native_extension(
 
     assert "Neighbour list" in out
     assert "Native extension" not in out
+
+
+def test_compiled_run_matches_the_eager_run(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--compile`` times the compile as its own step and reports the
+    same coordination numbers as the eager run."""
+    structure = tmp_path / "water.xyz"
+    structure.write_text(_WATER)
+
+    assert main(["--neighbor", "dense", str(structure)]) == 0
+    eager = capsys.readouterr().out.split("Results")[-1]
+
+    argv = ["--timing", "--compile", "--neighbor", "dense", str(structure)]
+    assert main(argv) == 0
+    out = capsys.readouterr().out
+
+    assert "torch.compile (cn_d3 (dense))" in out
+    assert "cn_d3 (dense), compiled" in out
+    assert out.split("Results")[-1].split("Timing")[0].strip() == (
+        eager.strip()
+    )
+
+
+def test_compile_cannot_be_combined_with_recompute_mode(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    structure = tmp_path / "water.xyz"
+    structure.write_text(_WATER)
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--compile", "--mode", "recompute", str(structure)])
+
+    assert exc.value.code == 2
+    assert "--compile needs '--mode graph'" in capsys.readouterr().err

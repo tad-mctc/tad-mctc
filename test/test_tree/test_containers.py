@@ -308,7 +308,7 @@ def test_neighborlist_validate_index_dtype() -> None:
     nbl = _molecular_list()
     for name in ("idx_i", "idx_j"):
         with pytest.raises(ValueError, match=name):
-            nbl.replace(**{name: getattr(nbl, name).to(torch.int32)})
+            nbl.replace(**{name: getattr(nbl, name).to(torch.int64)})
 
 
 def test_neighborlist_validate_mask_dtype() -> None:

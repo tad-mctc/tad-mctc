@@ -85,6 +85,8 @@ from typing import Literal, NamedTuple
 
 import torch
 
+from .._version import __tversion__
+from ..tools import is_compiling
 from ..typing import Tensor
 
 try:  # pragma: no cover - exercised only with the optional `triton` extra
@@ -138,8 +140,11 @@ except ImportError:
 __all__ = [
     "DistanceKernel",
     "DistanceKernelName",
+    "gather_index",
     "is_available",
     "pair_distance_squared",
+    "pair_distance_squared_from_columns",
+    "position_columns",
     "select_kernel",
     "split_lattice",
 ]
@@ -466,6 +471,98 @@ def _image_translation(shift: Tensor, cell: Tensor) -> Tensor:
     return (displacement.unsqueeze(-2) @ cell).squeeze(-2)
 
 
+# Whether the backward pass of `index_select` and `index_add` (and the
+# batching rules of `vmap`, `jacrev` and `jacfwd`) accept an `int32` index.
+# Before PyTorch 2.8 they thread it through `gather`, which raises
+# `gather(): Expected dtype int64 for index`. A plain Python constant, read
+# when a consumer runs, so it never becomes part of a traced graph.
+_INT32_INDEX_BACKWARD = __tversion__ >= (2, 8, 0)
+
+
+# `torch.compile(torch.func.jacrev(f))` returns wrong gradients (every output
+# row is the sum of the rows, not the row of its own input) for an `f` that
+# calls `Tensor.index_select`, on PyTorch 2.5 to 2.13 (2.14 is correct). Plain
+# `torch.compile`, eager `jacrev` and `jacfwd` are fine, and so is `table[idx]`.
+# Read when a consumer runs, like `_INT32_INDEX_BACKWARD`.
+_COMPILED_INDEX_SELECT_JACREV_BUG = __tversion__ < (2, 14, 0)
+
+
+def gather_rows(table: Tensor, index: Tensor) -> Tensor:
+    """
+    ``table.index_select(0, index)``, except while ``torch.compile`` traces
+    on PyTorch before 2.14, where it is ``table[index]``.
+
+    Compiled ``jacrev`` of an ``index_select`` is wrong there (the cause is
+    in PyTorch, not here), and ``table[index]`` is not. ``index_select`` is
+    kept everywhere else: on CUDA the backward pass of advanced indexing
+    sorts all indices, and on CPU its gather is several times slower.
+
+    Parameters
+    ----------
+    table : Tensor
+        The values to gather from, indexed along dimension 0.
+    index : Tensor
+        One-dimensional indices, as :func:`gather_index` returns them.
+
+    Returns
+    -------
+    Tensor
+        ``(len(index), *table.shape[1:])``.
+    """
+    if _COMPILED_INDEX_SELECT_JACREV_BUG and is_compiling():
+        return table[index]
+    return table.index_select(0, index)
+
+
+def gather_index(index: Tensor) -> Tensor:
+    """
+    A slice of a neighbour list's (``int32``) atom indices, in a dtype
+    that every index operation and its backward pass accept.
+
+    On PyTorch 2.8 and later this is ``index`` itself: an ``int32`` slice
+    of a list is a view, so autograd keeps it for the backward pass
+    without a copy. Before 2.8 it is ``index.long()``, a new ``int64``
+    tensor. ``.long()`` is always correct; this only avoids the copy where
+    PyTorch allows it. Call it on a chunk, never on a whole list.
+
+    Parameters
+    ----------
+    index : Tensor
+        Atom indices, ``int32`` or ``int64``.
+
+    Returns
+    -------
+    Tensor
+        ``index`` itself, or an ``int64`` copy on PyTorch before 2.8.
+    """
+    if _INT32_INDEX_BACKWARD:
+        return index
+    return index.long()
+
+
+def position_columns(positions: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    """
+    The ``x``, ``y`` and ``z`` columns of ``(..., n, 3)`` positions, each
+    a contiguous ``(..., n)`` tensor, for
+    :func:`pair_distance_squared_from_columns`.
+
+    Split once per evaluation, not per chunk: the backward pass of the
+    split then runs once, however many chunks gather from the columns.
+
+    Parameters
+    ----------
+    positions : Tensor
+        Cartesian coordinates, ``(..., n, 3)``.
+
+    Returns
+    -------
+    tuple[Tensor, Tensor, Tensor]
+        The three columns, ``(..., n)`` each.
+    """
+    x, y, z = (column.contiguous() for column in positions.unbind(-1))
+    return x, y, z
+
+
 def pair_distance_squared(
     idx_i: Tensor,
     idx_j: Tensor,
@@ -488,14 +585,15 @@ def pair_distance_squared(
     (``tad_mctc.neighbor.pair_distance_squared``) for the same reason, for
     other consumers of a neighbour list.
 
-    Gathers use ``index_select``, not ``positions[idx]``: on CUDA the
-    backward pass of advanced indexing sorts all indices, and on CPU its
-    gather is several times slower.
+    It splits ``positions`` into columns on every call. A consumer that
+    walks a list in chunks splits them once with :func:`position_columns`
+    and calls :func:`pair_distance_squared_from_columns` per chunk.
 
     Parameters
     ----------
     idx_i, idx_j : Tensor
-        ``(n_pairs,)``, atom indices into ``positions``.
+        ``(n_pairs,)``, atom indices into ``positions``, ``int32`` (as a
+        list stores them) or ``int64``.
     shift : Tensor
         ``(n_pairs, 3)``, integer lattice translation of atom ``idx_j``.
     positions : Tensor
@@ -515,21 +613,98 @@ def pair_distance_squared(
     Tensor
         ``(n_pairs,)``, squared pair distances.
     """
-    positions_i = positions.index_select(0, idx_i)
-    positions_j = positions.index_select(0, idx_j)
-    difference = positions_j - positions_i
-    # Pair-sized copies; free them before the translation allocates more.
-    del positions_i, positions_j
+    return pair_distance_squared_from_columns(
+        idx_i,
+        idx_j,
+        shift,
+        position_columns(positions),
+        shared_lattice=shared_lattice,
+        system_lattices=system_lattices,
+        atoms_per_system=atoms_per_system,
+    )
 
+
+def pair_distance_squared_from_columns(
+    idx_i: Tensor,
+    idx_j: Tensor,
+    shift: Tensor,
+    columns: tuple[Tensor, Tensor, Tensor],
+    *,
+    shared_lattice: Tensor | None,
+    system_lattices: Tensor | None,
+    atoms_per_system: int,
+) -> Tensor:
+    """
+    :func:`pair_distance_squared` from positions already split into
+    columns by :func:`position_columns`.
+
+    Each coordinate is gathered from its own ``(total_atoms,)`` column,
+    not as rows of a ``(total_atoms, 3)`` table. On CPU, PyTorch runs the
+    backward pass of a gather from a table with rows through
+    ``index_add`` for an ``int32`` index, about 4x slower than the
+    ``scatter_add`` it uses for an ``int64`` one (122 vs 32 ns per pair,
+    PyTorch 2.14); the backward pass of a gather from a single column is
+    equally fast for both, and faster than either.
+
+    Gathers use :func:`gather_rows`: ``index_select``, not ``column[idx]``
+    (on CUDA the backward pass of advanced indexing sorts all indices, and
+    on CPU its gather is several times slower), except under
+    ``torch.compile`` before PyTorch 2.14, which miscompiles the ``jacrev``
+    of an ``index_select``.
+
+    Parameters
+    ----------
+    idx_i, idx_j, shift
+        As for :func:`pair_distance_squared`.
+    columns : tuple[Tensor, Tensor, Tensor]
+        ``x``, ``y`` and ``z`` of every atom, ``(total_atoms,)`` each.
+    shared_lattice, system_lattices, atoms_per_system
+        As for :func:`pair_distance_squared`.
+
+    Returns
+    -------
+    Tensor
+        ``(n_pairs,)``, squared pair distances.
+    """
+    # A no-op on PyTorch 2.8 and later; before, it widens the chunk (or the
+    # real entries) it is handed, never a whole stored list.
+    idx_i = gather_index(idx_i)
+    idx_j = gather_index(idx_j)
+    x, y, z = (
+        gather_rows(column, idx_j) - gather_rows(column, idx_i)
+        for column in columns
+    )
+
+    # The translation of each pair's lattice shift, one column at a time:
+    # `sum_m shift[m] * cell[m, k]` for k = x, y, z. A `(n, 3) @ (3, 3)`
+    # product (per system, a batch of `(1, 3) @ (3, 3)`) writes an `(n, 3)`
+    # temporary that is then read through stride-3 slices; this is 12% (one
+    # cell) to 28% (a cell per system) faster for 131k float64 pairs on CPU,
+    # with the same bits.
     if shared_lattice is not None:
-        difference = difference + _image_translation(shift, shared_lattice)
+        # One `(3, 3)` cell for every pair: nine scalars.
+        def entry(m: int, k: int) -> Tensor:
+            return shared_lattice[m, k]
 
     elif system_lattices is not None:
-        # Each pair takes the cell of its own system. This gathers a
-        # `(3, 3)` cell per pair, which is why a single shared cell is
-        # handled separately above.
-        system = idx_i // atoms_per_system
-        pair_cell = system_lattices.index_select(0, system)
-        difference = difference + _image_translation(shift, pair_cell)
+        # Each pair takes the cell of its own system: nine `(n,)` columns.
+        # `int64`, because `gather_rows` needs it before PyTorch 2.8.
+        system = (idx_i // atoms_per_system).long()
 
-    return (difference * difference).sum(-1)
+        def entry(m: int, k: int) -> Tensor:
+            return gather_rows(system_lattices[:, m, k].contiguous(), system)
+
+    else:
+        return x * x + y * y + z * z  # a molecule: nothing to translate
+
+    s0, s1, s2 = (step.to(x.dtype) for step in shift.unbind(-1))
+    x, y, z = (
+        c + (s0 * entry(0, k) + s1 * entry(1, k) + s2 * entry(2, k))
+        for k, c in enumerate((x, y, z))
+    )
+
+    # Written out over the three components: `(difference**2).sum(-1)` is a
+    # reduction over an axis of length 3, which PyTorch evaluates ~10x slower
+    # than the same sum of three columns (0.54 ms vs 5.8 ms for 131k float64
+    # pairs on CPU), and dominated the sparse coordination number.
+    return x * x + y * y + z * z

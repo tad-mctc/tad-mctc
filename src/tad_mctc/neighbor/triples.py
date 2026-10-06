@@ -771,6 +771,10 @@ def triples_from_neighborlist(
     positions = structure.positions.reshape(-1, 3)
     nat = positions.shape[0]
     real_i, real_j, real_shift = nbl.real_entries()
+    # The triple search sorts, counts and gathers, and yields `int64`
+    # triples: it works on `int64` indices (whole list, not chunked).
+    real_i = real_i.long()
+    real_j = real_j.long()
     lattice = structure.lattice if nbl.periodic else None
     atoms_per_system = structure.positions.shape[-2]
 
