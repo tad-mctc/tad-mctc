@@ -27,6 +27,7 @@ import torch
 from tad_mctc.data.structures import (
     collections,
     get_structure,
+    get_structures,
     list_collections,
     list_records,
 )
@@ -122,3 +123,34 @@ def test_get_structure_error_lists_valid_records() -> None:
 def test_list_records_raises_on_unknown_collection() -> None:
     with pytest.raises(KeyError, match="Unknown collection 'nope'"):
         list_records("nope")
+
+
+def test_get_structures_packs_a_batch() -> None:
+    sources = [("mb16_43", "LiH"), ("mb16_43", "SiH4")]
+    structure = get_structures(sources, dtype=torch.float64)
+
+    assert structure.numbers.shape == (2, 5)
+    assert structure.positions.dtype == torch.float64
+    assert (structure.numbers[0, 2:] == 0).all()
+
+
+def test_get_structures_broadcasts_scalar_charge() -> None:
+    sources = [("mb16_43", "LiH"), ("mb16_43", "SiH4")]
+    structure = get_structures(sources, charge=1.0)
+
+    assert structure.charge is not None
+    assert structure.charge.tolist() == [1.0, 1.0]
+
+
+def test_get_structures_takes_one_charge_per_structure() -> None:
+    sources = [("mb16_43", "LiH"), ("mb16_43", "SiH4")]
+    structure = get_structures(sources, charge=[0.0, -1.0])
+
+    assert structure.charge is not None
+    assert structure.charge.tolist() == [0.0, -1.0]
+
+
+def test_get_structures_rejects_charge_count_mismatch() -> None:
+    sources = [("mb16_43", "LiH"), ("mb16_43", "SiH4")]
+    with pytest.raises(ValueError, match="2 structures"):
+        get_structures(sources, charge=[0.0])

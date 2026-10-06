@@ -15,23 +15,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Module containing the version string.
+Test the PyTorch version object.
 """
 
 from __future__ import annotations
 
-import torch
-from torch.torch_version import TorchVersion
-
-__all__ = ["__version__", "__tversion__"]
+from tad_mctc._version import __tversion__
 
 
-__version__ = "0.9.1"
-"""Version of tad-mctc in semantic versioning."""
+def test_tversion_compares_with_tuples() -> None:
+    """`__tversion__` compares with integer tuples."""
+    assert __tversion__ > (1, 0, 0)
+    assert __tversion__ < (99, 0, 0)
 
-__tversion__ = TorchVersion(torch.__version__)
-"""
-Version of PyTorch. Compares with tuples (``__tversion__ >= (2, 8, 0)``) and
-strings, and orders pre-releases before their release (``2.8.0a0`` is older
-than ``2.8.0``).
-"""
+
+def test_tversion_orders_prereleases_first() -> None:
+    """A pre-release sorts before its release, local labels are ignored."""
+    prerelease = type(__tversion__)("2.8.0a0+git7482eb2")
+    assert prerelease < (2, 8, 0)
+    assert prerelease >= (2, 7, 0)
+    assert type(__tversion__)("2.8.0+cu128") >= (2, 8, 0)
