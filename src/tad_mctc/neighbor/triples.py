@@ -975,16 +975,16 @@ class TripleList(Node):
 
         if nbl.periodic:
             real_shift = nbl.shift.index_select(0, slot).to(torch.long)
-            offset, neighbours, neighbour_shift, degree, entry = (
-                _oriented_csr_entries(nat, real_i, real_j, real_shift)
-            )
         else:
             real_shift = torch.zeros(
                 slot.shape[0], 3, dtype=torch.long, device=slot.device
             )
-            offset, neighbours, neighbour_shift, degree, entry = (
-                _oriented_csr_entries(nat, real_i, real_j, None)
+
+        offset, neighbours, neighbour_shift, degree, entry = (
+            _oriented_csr_entries(
+                nat, real_i, real_j, real_shift if nbl.periodic else None
             )
+        )
         neighbour_slot = slot[entry]
         lookup = _PairLookup(nat, slot, real_i, real_j, real_shift)
 
@@ -1010,10 +1010,7 @@ class TripleList(Node):
             left, right = neighbours[slot_a], neighbours[slot_b]
 
             # from the first neighbour to the second: `x_k + S_k - x_i - S_i`
-            if nbl.periodic:
-                shift = neighbour_shift[slot_b] - neighbour_shift[slot_a]
-            else:
-                shift = real_shift.new_zeros(flat.shape[0], 3)
+            shift = neighbour_shift[slot_b] - neighbour_shift[slot_a]
             side_ik, found = lookup.find(left, right, shift)
 
             parts.append(
