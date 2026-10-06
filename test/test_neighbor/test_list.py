@@ -442,6 +442,44 @@ def test_one_atom_cell_folds_every_neighbour_to_three_entries() -> None:
     assert int(nbl.mask.sum().item()) == 3
 
 
+@pytest.mark.parametrize("kernel", ["baddbmm", "broadcast"])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.double])
+def test_images_exactly_at_the_cutoff_are_kept_by_every_kernel(
+    kernel: str, dtype: torch.dtype
+) -> None:
+    """The images of an atom at integer multiples of the lattice constant lie
+    exactly at a cutoff that is such a multiple. Whether the squared distance
+    rounds above or below the squared cutoff depends on the arithmetic of the
+    kernel (the `baddbmm` expansion vs. the broadcast difference), so the
+    list keeps them with a few ulps of slack, for all kernels alike."""
+    edge = 4.0
+    cutoff = 5 * edge
+    positions = torch.tensor(
+        [
+            [3.8802120072262123, 2.831279457599152, 1.8375317725098035],
+            [3.682990736487841, 2.580096480491059, 3.1645915687212147],
+        ],
+        dtype=dtype,
+    )
+    lattice = torch.eye(3, dtype=dtype) * edge
+    periodic = torch.ones(3, dtype=torch.bool)
+
+    nbl = build_neighborlist(
+        hydrogens(positions, lattice=lattice, periodic=periodic),
+        cutoff=cutoff,
+        distance_kernel=kernel,
+    )
+
+    # Every atom with its own images: all lattice vectors n with |n| <= 5,
+    # stored once per pair of +n and -n.
+    r = range(-5, 6)
+    n_images = sum(
+        1 for a in r for b in r for c in r if 0 < a * a + b * b + c * c <= 25
+    )
+    own_images = nbl.mask & (nbl.idx_i == nbl.idx_j)
+    assert int(own_images.sum().item()) == 2 * (n_images // 2)
+
+
 def periodic_neighborlist_pair_set(
     nbl: NeighborList,
 ) -> set[tuple[int, int, int, int, int]]:
