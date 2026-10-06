@@ -153,7 +153,25 @@ def test_vmap_over_stacked_lists_matches_manual_stacking(
     nbls = _lists(model, systems)
     out = torch.func.vmap(model, in_dims=0)(stack(systems), stack(nbls))
 
-    assert torch.allclose(out, manual, atol=1e-12, rtol=0)
+    # DIAGNOSTIC (temporary): report the actual differences on CI.
+    import warnings
+
+    from tad_mctc.neighbor import _native
+
+    loop = torch.stack([model(s, n) for s, n in zip(systems, nbls)])
+    diag = (
+        f"DIAG {variant_name}: "
+        f"|out-manual|={(out - manual).abs().max().item():.3e} "
+        f"at {(out - manual).abs().argmax().item()}, "
+        f"|out-loop|={(out - loop).abs().max().item():.3e}, "
+        f"|manual-loop|={(manual - loop).abs().max().item():.3e}, "
+        f"threads={torch.get_num_threads()}, "
+        f"native={_native.build_info()}, "
+        f"diff={(out - manual).flatten().tolist()}"
+    )
+    warnings.warn(diag, stacklevel=1)
+
+    assert torch.allclose(out, manual, atol=1e-12, rtol=0), diag
 
 
 @pytest.mark.parametrize("variant_name", list(VARIANTS))
