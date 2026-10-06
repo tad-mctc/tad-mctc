@@ -36,13 +36,10 @@ from tad_mctc.autograd import (
     no_vmap_fallback,
 )
 from tad_mctc.convert import symmetrize
+from tad_mctc.tools.testing import requires_compile
 
 from ..conftest import DEVICE
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    compile_fullgraph,
-)
+from ..utils import compile_fullgraph
 
 
 def _matrix(seed: int = 0, batch: int | None = None) -> torch.Tensor:
@@ -89,7 +86,7 @@ def test_forward_matches_reverse() -> None:
     assert jacfwd_matches_jacrev(_forced, _matrix())
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 def test_compile_matches_eager() -> None:
     x = _matrix()
 

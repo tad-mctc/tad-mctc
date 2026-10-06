@@ -27,12 +27,9 @@ import pytest
 import torch
 
 from tad_mctc import math
+from tad_mctc.tools.testing import requires_compile
 
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    run_compiled_or_skip,
-)
+from ..utils import run_compiled_or_skip
 
 
 def test_functions_existence() -> None:
@@ -87,15 +84,14 @@ def test_eager_still_uses_opt_einsum() -> None:
     assert pytest.approx(ref.cpu()) == result.cpu()
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_torch_compile_fullgraph_matches_eager() -> None:
     """`torch.compile(fullgraph=True)` must reproduce the eager result even
     when `opt_einsum` is installed: Dynamo cannot trace
     `opt_einsum.contract`'s internals ("Dynamo does not know how to trace
     method `__setitem__` of class `list`"), so `_torch_einsum` dispatches to
     `torch.einsum` while compiling instead."""
-    torch._dynamo.reset()  # pylint: disable=protected-access
-
     operands = (
         torch.rand(2, 3, dtype=torch.float64),
         torch.rand(3, 4, dtype=torch.float64),

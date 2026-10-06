@@ -50,13 +50,10 @@ from tad_mctc.storch import (
     safe_reciprocal,
     safe_sqrt,
 )
+from tad_mctc.tools.testing import requires_compile
 
 from ..conftest import DEVICE
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    compile_fullgraph,
-)
+from ..utils import compile_fullgraph
 
 DD = {"device": DEVICE, "dtype": torch.float64}
 
@@ -177,7 +174,7 @@ def test_derivatives_finite_at_masked_point(
         assert torch.isfinite(derivative).all()
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 @pytest.mark.parametrize("f", FUNCTIONS)
 def test_compile_matches_eager(
     f: Callable[[torch.Tensor], torch.Tensor],

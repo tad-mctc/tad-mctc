@@ -41,13 +41,10 @@ from tad_mctc.autograd import (
     no_vmap_fallback,
 )
 from tad_mctc.storch import eighb
+from tad_mctc.tools.testing import requires_compile
 
 from ..conftest import DEVICE
-from ..utils import (
-    DYNAMO_SUPPORTED,
-    DYNAMO_UNSUPPORTED_REASON,
-    compile_fullgraph,
-)
+from ..utils import compile_fullgraph
 
 Method = Literal["cond", "lorn"] | None
 
@@ -112,7 +109,7 @@ def test_forward_matches_reverse(method: Method) -> None:
         assert jacfwd_matches_jacrev(f, _symmetric(), atol=1e-8, rtol=1e-6)
 
 
-@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
+@requires_compile
 @pytest.mark.parametrize("method", METHODS)
 def test_compile_matches_eager(method: Method) -> None:
     a = _symmetric()

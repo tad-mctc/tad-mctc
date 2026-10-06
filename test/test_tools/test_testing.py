@@ -15,16 +15,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Tools
------
-
-Collection of tools for:
-- caching
-- memory
-- compile (introspection of the ``torch.compile`` tracing state)
-- testing (`pytest` helpers; not imported here, since `pytest` is optional)
+Test that the `pytest` helpers in ``tad_mctc.tools.testing`` keep `pytest`
+an optional dependency.
 """
 
-from .caching import *
-from .compile import *
-from .memory import *
+from __future__ import annotations
+
+import subprocess
+import sys
+
+
+def test_package_does_not_import_pytest() -> None:
+    # `pytest` is already imported here, so check in a fresh interpreter
+    code = (
+        "import sys\n"
+        "import tad_mctc, tad_mctc.tools, tad_mctc.autograd\n"
+        "assert 'pytest' not in sys.modules\n"
+        "assert 'tad_mctc.tools.testing' not in sys.modules\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True)
