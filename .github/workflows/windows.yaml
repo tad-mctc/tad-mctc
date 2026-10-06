@@ -83,13 +83,3 @@ jobs:
         run: tox -e $TOXENV
         env:
           TOXENV: ${{ env.TOXENV }}
-
-      - name: DIAGNOSTIC vmap lists in fresh processes
-        if: always()
-        run: |
-          for k in 1 2 3 4 5 6; do
-            .tox/$TOXENV/Scripts/python -m pytest -p no:random_order -p no:cacheprovider -q -rw \
-              "test/test_ncoord/test_vmap_lists.py::test_vmap_over_stacked_lists_matches_manual_stacking" 2>&1 | grep -E "DIAG|passed|failed"
-          done
-        env:
-          TOXENV: ${{ env.TOXENV }}
