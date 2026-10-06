@@ -40,13 +40,13 @@ own:
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import TypeVar
 
 import torch
 from torch import Tensor
 
-from ...io.structure import Structure
+from ...io.structure import Structure, pack_structures
 from .glu_ala import glu_ala
 from .mstore import datasets
 from .other import other
@@ -54,6 +54,7 @@ from .other import other
 __all__ = [
     "collections",
     "get_structure",
+    "get_structures",
     "list_collections",
     "list_records",
 ]
@@ -140,6 +141,64 @@ def get_structure(
         dtype=structure.positions.dtype,
     )
     return structure.replace(charge=charge)
+
+
+def get_structures(
+    sources: Sequence[tuple[str, str]],
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
+    charge: Tensor | float | Sequence[Tensor | float | None] | None = None,
+) -> Structure:
+    """
+    Look up several structures and pack them into one batched structure.
+
+    Each source is looked up as in :func:`get_structure` and the results are
+    padded and stacked by :func:`~tad_mctc.io.structure.pack_structures`.
+
+    Parameters
+    ----------
+    sources : Sequence[tuple[str, str]]
+        ``(collection, record)`` pairs, one per structure in the batch.
+    device : torch.device | None, optional
+        Device to move the structures to. ``None`` keeps the default device.
+    dtype : torch.dtype | None, optional
+        Floating dtype for the structures' floating-point fields. ``None``
+        keeps the default dtype.
+    charge : Tensor | float | Sequence[Tensor | float | None] | None, optional
+        Total charges. A scalar is used for every structure, a sequence (or
+        1D tensor) gives one charge per structure. ``None`` (default) keeps
+        the records' charges, as does a ``None`` entry in a sequence.
+
+    Returns
+    -------
+    Structure
+        One structure with a leading batch dimension.
+
+    Raises
+    ------
+    KeyError
+        If a collection or record is not found.
+    ValueError
+        If ``sources`` is empty or ``charge`` is a sequence whose length
+        differs from that of ``sources``.
+    """
+    if isinstance(charge, (int, float)) or (
+        isinstance(charge, Tensor) and charge.ndim == 0
+    ):
+        charge = [charge] * len(sources)
+    elif charge is None:
+        charge = [None] * len(sources)
+    elif len(charge) != len(sources):
+        raise ValueError(
+            f"Got {len(charge)} charges for {len(sources)} structures."
+        )
+
+    return pack_structures(
+        [
+            get_structure(*source, device=device, dtype=dtype, charge=c)
+            for source, c in zip(sources, charge)
+        ]
+    )
 
 
 def list_collections() -> list[str]:
