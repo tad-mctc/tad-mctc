@@ -45,9 +45,8 @@ from ..utils import compile_fullgraph
 def _matrix(seed: int = 0, batch: int | None = None) -> torch.Tensor:
     gen = torch.Generator().manual_seed(seed)
     shape = (3, 3) if batch is None else (batch, 3, 3)
-    return torch.rand(
-        *shape, generator=gen, dtype=torch.float64, device="cpu"
-    ).to(DEVICE)
+    a = torch.rand(*shape, generator=gen, dtype=torch.float64, device="cpu")
+    return a.to(DEVICE)
 
 
 def _forced(x: torch.Tensor) -> torch.Tensor:

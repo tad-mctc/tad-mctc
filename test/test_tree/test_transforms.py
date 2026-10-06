@@ -40,13 +40,8 @@ DTYPE = torch.float64
 
 def _sub(seed: int = 0, **kwargs) -> Sub:  # type: ignore[no-untyped-def]
     gen = torch.Generator().manual_seed(seed)
-    return Sub(
-        numbers=torch.tensor([1, 1, 8]),
-        positions=torch.rand(3, 3, generator=gen, dtype=DTYPE, device="cpu").to(
-            DEVICE
-        ),
-        **kwargs,
-    )
+    pos = torch.rand(3, 3, generator=gen, dtype=DTYPE, device="cpu").to(DEVICE)
+    return Sub(numbers=torch.tensor([1, 1, 8]), positions=pos, **kwargs)
 
 
 def _energy(node: Sub) -> torch.Tensor:
