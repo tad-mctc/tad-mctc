@@ -58,7 +58,7 @@ METHODS = [
 def _symmetric(seed: int = 0, batch: int | None = None) -> torch.Tensor:
     gen = torch.Generator().manual_seed(seed)
     shape = (4, 4) if batch is None else (batch, 4, 4)
-    a = torch.rand(*shape, generator=gen, dtype=torch.float64)
+    a = torch.rand(*shape, generator=gen, dtype=torch.float64, device="cpu")
     return ((a + a.mT) / 2).to(DEVICE)
 
 

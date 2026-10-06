@@ -57,7 +57,9 @@ def _operands(batch: int | None = None) -> tuple[torch.Tensor, ...]:
     lead = () if batch is None else (batch,)
     shapes = [(2, 3), (3, 4), (4, 2)]
     return tuple(
-        torch.rand(*lead, *shape, generator=gen, dtype=torch.float64).to(DEVICE)
+        torch.rand(
+            *lead, *shape, generator=gen, dtype=torch.float64, device="cpu"
+        ).to(DEVICE)
         for shape in shapes
     )
 

@@ -238,6 +238,24 @@ def test_several_chunks_give_the_same_result(
 # ------------------------------------------------------- version gate
 
 
+def test_gather_index_passes_int32_through_when_the_backward_accepts_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_distance_kernels, "_INT32_INDEX_BACKWARD", True)
+    index = torch.arange(5, dtype=torch.int32)
+    assert gather_index(index) is index
+
+
+def test_gather_index_widens_when_the_backward_needs_int64(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_distance_kernels, "_INT32_INDEX_BACKWARD", False)
+    index = torch.arange(5, dtype=torch.int32)
+    gathered = gather_index(index)
+    assert gathered.dtype == torch.int64
+    assert torch.equal(gathered, index.long())
+
+
 def test_gather_index_follows_the_pytorch_version() -> None:
     index = torch.arange(5, dtype=torch.int32)
 

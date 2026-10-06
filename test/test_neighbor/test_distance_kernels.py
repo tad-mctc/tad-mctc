@@ -26,6 +26,7 @@ from __future__ import annotations
 import pytest
 import torch
 
+from tad_mctc.neighbor import _distance_kernels
 from tad_mctc.neighbor._distance_kernels import (
     DistanceKernel,
     _baddbmm_distance_squared,
@@ -593,6 +594,32 @@ def test_gather_rows_is_index_select_in_eager() -> None:
     index = torch.tensor([3, 3, 0, 2])
     assert torch.equal(gather_rows(table, index), table.index_select(0, index))
     assert torch.equal(gather_rows(table[:, 0], index), table[:, 0][index])
+
+
+def test_gather_rows_takes_the_indexing_path_while_compiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The tracing-only branch runs eagerly here, since coverage cannot see
+    code that `torch.compile` traces."""
+    monkeypatch.setattr(
+        _distance_kernels, "_COMPILED_INDEX_SELECT_JACREV_BUG", True
+    )
+    monkeypatch.setattr(_distance_kernels, "is_compiling", lambda: True)
+    table = torch.arange(12.0, dtype=torch.double).reshape(4, 3)
+    index = torch.tensor([3, 3, 0, 2])
+    assert torch.equal(gather_rows(table, index), table[index])
+
+
+def test_gather_rows_keeps_index_select_where_the_bug_is_fixed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        _distance_kernels, "_COMPILED_INDEX_SELECT_JACREV_BUG", False
+    )
+    monkeypatch.setattr(_distance_kernels, "is_compiling", lambda: True)
+    table = torch.arange(12.0, dtype=torch.double).reshape(4, 3)
+    index = torch.tensor([3, 3, 0, 2])
+    assert torch.equal(gather_rows(table, index), table.index_select(0, index))
 
 
 def test_compiled_gather_rows_gradient() -> None:

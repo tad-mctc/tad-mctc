@@ -207,8 +207,9 @@ def test_conversion_device() -> None:
 def test_dtype_device_dd() -> None:
     obj = _sub()
     assert obj.dtype == torch.float64
-    assert obj.device == torch.device("cpu")
-    assert obj.dd == {"device": torch.device("cpu"), "dtype": torch.float64}
+    device = torch.zeros(1).device
+    assert obj.device == device
+    assert obj.dd == {"device": device, "dtype": torch.float64}
 
     class Ints(Node):
         numbers: torch.Tensor = child()
@@ -355,7 +356,7 @@ def test_dtype_device_without_tensors() -> None:
     int_holder = Holder(system=_IntOnly(numbers=torch.tensor([1])))
     with pytest.raises(AttributeError, match="dtype"):
         _ = int_holder.dtype
-    assert int_holder.device == torch.device("cpu")
+    assert int_holder.device == torch.zeros(1).device
 
 
 def test_conversion_of_containers() -> None:
