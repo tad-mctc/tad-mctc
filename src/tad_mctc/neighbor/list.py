@@ -884,9 +884,9 @@ def _join_pairs(
     # `torch.cat` promotes mixed integer dtypes without a warning, which
     # would silently rebuild the whole list as `int64` and keep its peak.
     for fragment in (*fragments_i, *fragments_j):
-        assert fragment.dtype == _IDX_DTYPE, (
-            f"pair fragments must be {_IDX_DTYPE}, got {fragment.dtype}"
-        )
+        assert (
+            fragment.dtype == _IDX_DTYPE
+        ), f"pair fragments must be {_IDX_DTYPE}, got {fragment.dtype}"
     n_found = sum(int(fragment.shape[0]) for fragment in fragments_i)
     empty = torch.zeros(0, dtype=_IDX_DTYPE, device=device)
 

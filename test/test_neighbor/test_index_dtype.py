@@ -32,6 +32,7 @@ from functools import partial
 import pytest
 import torch
 
+from tad_mctc._version import __tversion__
 from tad_mctc.io.structure import Structure, pack_structures
 from tad_mctc.ncoord import cn_d3
 from tad_mctc.ncoord.common import (
@@ -40,13 +41,12 @@ from tad_mctc.ncoord.common import (
     resolve_table,
     sum_over_neighborlist,
 )
-from tad_mctc._version import __tversion__
 from tad_mctc.neighbor import _distance_kernels, _native, gather_index
 from tad_mctc.neighbor._tiles import Tiles, tile_pairs
 from tad_mctc.neighbor.list import (
+    _IDX_DTYPE,
     NeighborList,
     _check_index_range,
-    _IDX_DTYPE,
     build_neighborlist,
 )
 from tad_mctc.typing import DD, Tensor
@@ -392,7 +392,8 @@ def test_batched_molecules_match_their_own_lists() -> None:
         real = batch.numbers[b] != 0
         own = build_neighborlist(
             Structure(
-                numbers=batch.numbers[b][real], positions=batch.positions[b][real]
+                numbers=batch.numbers[b][real],
+                positions=batch.positions[b][real],
             ),
             cutoff=8.0,
         )
@@ -515,8 +516,15 @@ def test_the_native_kernel_writes_int32() -> None:
     tile_a, tile_b = tile_pairs(tiles, 4.0)
 
     ((idx_i, idx_j, n_found),) = _native.atom_pairs_within_thresholds_native(  # type: ignore[misc]
-        tiles.index, tiles.valid, tile_a, tile_b, positions, (4.0,), None,
-        (4096, 40), 4096,
+        tiles.index,
+        tiles.valid,
+        tile_a,
+        tile_b,
+        positions,
+        (4.0,),
+        None,
+        (4096, 40),
+        4096,
     )
 
     assert idx_i.dtype == torch.int32 == idx_j.dtype

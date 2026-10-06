@@ -711,13 +711,21 @@ std::vector<std::tuple<torch::Tensor, torch::Tensor, int64_t>>
   constexpr int64_t kMaxIndex = std::numeric_limits<int32_t>::max();
   TORCH_CHECK(
     positions.size(0) <= kMaxIndex,
-    "positions has ", positions.size(0), " atoms, more than the int32 pair "
-    "indices hold (", kMaxIndex, ")"
+    "positions has ",
+    positions.size(0),
+    " atoms, more than the int32 pair "
+    "indices hold (",
+    kMaxIndex,
+    ")"
   );
   TORCH_CHECK(
     !pad_value.has_value() || (*pad_value >= 0 && *pad_value <= kMaxIndex),
-    "pad_value ", pad_value.value_or(0), " does not fit the int32 pair "
-    "indices (maximum ", kMaxIndex, ")"
+    "pad_value ",
+    pad_value.value_or(0),
+    " does not fit the int32 pair "
+    "indices (maximum ",
+    kMaxIndex,
+    ")"
   );
 
   // `anchor`, when given, is one boolean per atom: only pairs with at

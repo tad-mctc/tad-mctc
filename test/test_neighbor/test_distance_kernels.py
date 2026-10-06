@@ -30,8 +30,8 @@ from tad_mctc.neighbor._distance_kernels import (
     DistanceKernel,
     _baddbmm_distance_squared,
     _broadcast_distance_squared,
-    pair_distance_squared,
     gather_rows,
+    pair_distance_squared,
     pair_distance_squared_from_columns,
     position_columns,
     select_kernel,
@@ -477,7 +477,11 @@ def _three_cases() -> dict[str, tuple[Tensor, Tensor, Tensor, Tensor, dict]]:
 
 
 def _row_formula(
-    positions: Tensor, idx_i: Tensor, idx_j: Tensor, shift: Tensor, lattices: dict
+    positions: Tensor,
+    idx_i: Tensor,
+    idx_j: Tensor,
+    shift: Tensor,
+    lattices: dict,
 ) -> Tensor:
     """The kernel before it gathered by column: rows of ``(n, 3)``
     positions, then the same per-component sum."""
@@ -485,9 +489,9 @@ def _row_formula(
         0, idx_i
     )
     if lattices["shared_lattice"] is not None:
-        difference = difference + shift.to(positions.dtype) @ lattices[
-            "shared_lattice"
-        ]
+        difference = (
+            difference + shift.to(positions.dtype) @ lattices["shared_lattice"]
+        )
     elif lattices["system_lattices"] is not None:
         cells = lattices["system_lattices"].index_select(0, idx_i // 3)
         difference = difference + (
@@ -632,7 +636,12 @@ def test_lattice_gradient_matches_the_row_formula(case: str) -> None:
     lattices = {**lattices, key: lattice}
 
     new = pair_distance_squared(
-        idx_i.int(), idx_j.int(), shift, positions, atoms_per_system=3, **lattices
+        idx_i.int(),
+        idx_j.int(),
+        shift,
+        positions,
+        atoms_per_system=3,
+        **lattices,
     )
     old = _row_formula(positions, idx_i, idx_j, shift, lattices)
     assert torch.equal(new, old)
