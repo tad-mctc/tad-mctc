@@ -39,7 +39,12 @@ from tad_mctc.neighbor.list import build_neighborlist
 from tad_mctc.typing import DD
 
 from ..conftest import DEVICE
-from ..utils import load_structure
+from ..utils import (
+    COMPILE_BACKEND,
+    DYNAMO_SUPPORTED,
+    DYNAMO_UNSUPPORTED_REASON,
+    load_structure,
+)
 
 _WATER = """3
 water
@@ -476,11 +481,22 @@ def test_cuda_neighbour_list_does_not_report_the_native_extension(
     assert "Native extension" not in out
 
 
+@pytest.mark.skipif(not DYNAMO_SUPPORTED, reason=DYNAMO_UNSUPPORTED_REASON)
 def test_compiled_run_matches_the_eager_run(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """``--compile`` times the compile as its own step and reports the
     same coordination numbers as the eager run."""
+    # The CLI compiles with the default backend (Inductor), which needs a C++
+    # compiler that a plain Windows runner lacks.
+    compile_ = torch.compile
+    monkeypatch.setattr(
+        torch,
+        "compile",
+        lambda fn, **kwargs: compile_(fn, **kwargs, backend=COMPILE_BACKEND),
+    )
     structure = tmp_path / "water.xyz"
     structure.write_text(_WATER)
 

@@ -44,6 +44,7 @@ from tad_mctc.neighbor.list import (
 )
 from tad_mctc.typing import Tensor
 
+from ..conftest import DEVICE
 from ..utils import hydrogens, jacfwd, jacrev, run_compiled_or_skip
 
 _CPU = torch.device("cpu")
@@ -298,15 +299,15 @@ def _pair_inputs(
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
     """Positions with a trailing phantom atom, random pair indices, integer
     shifts (all zero for a molecule), and a cell."""
-    generator = torch.Generator().manual_seed(7)
-    dd = {"dtype": torch.double}
+    generator = torch.Generator(device=DEVICE).manual_seed(7)
+    dd = {"device": DEVICE, "dtype": torch.double}
     positions = torch.randn(n_atoms + 1, 3, generator=generator, **dd)
     idx_i = torch.randint(0, n_atoms, (n_pairs,), generator=generator)
     idx_j = torch.randint(0, n_atoms, (n_pairs,), generator=generator)
     if periodic:
         shift = torch.randint(-2, 3, (n_pairs, 3), generator=generator).short()
     else:
-        shift = torch.zeros(n_pairs, 3, dtype=torch.int16)
+        shift = torch.zeros(n_pairs, 3, dtype=torch.int16, device=DEVICE)
     cell = torch.tensor(
         [[5.0, 0.3, 0.0], [0.2, 6.0, 0.4], [0.0, 0.1, 7.0]], **dd
     )

@@ -64,6 +64,15 @@ _INT32_MAX = 2**31 - 1
 DD_DOUBLE: DD = {"device": DEVICE, "dtype": torch.double}
 
 
+def _assert_same(actual: Tensor, expected: Tensor) -> None:
+    """Bit-for-bit on the CPU. CUDA scatter-adds use float atomics whose
+    order varies from run to run, so there two runs agree to rounding only."""
+    if DEVICE is None or DEVICE.type == "cpu":
+        assert torch.equal(actual, expected)
+    else:
+        assert torch.allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
 def _molecule() -> Structure:
     return load_structure("mb16_43", "01", DD_DOUBLE)
 
@@ -149,8 +158,8 @@ def test_cn_matches_int64_indices_exactly(structure: object) -> None:
     with_int32 = _cn_from(nbl, st, st.positions)
     with_int64 = _cn_from(_int64_view(nbl), st, st.positions)
 
-    assert torch.equal(with_int32, with_int64)
-    assert torch.equal(with_int32, cn_d3(st, pairs=nbl))
+    _assert_same(with_int32, with_int64)
+    _assert_same(with_int32, cn_d3(st, pairs=nbl))
 
 
 @pytest.mark.parametrize("structure", [_molecule, _cell])
@@ -173,7 +182,7 @@ def test_transforms_match_int64_indices_exactly(
         batch = torch.stack([st.positions, 1.01 * st.positions])
         return torch.func.vmap(f)(batch)  # type: ignore[no-any-return]
 
-    assert torch.equal(run(nbl), run(view))
+    _assert_same(run(nbl), run(view))
 
 
 @pytest.mark.parametrize("structure", [_molecule, _cell])
@@ -208,9 +217,7 @@ def test_gradient_through_the_public_model_matches_int64() -> None:
     def widened(p: Tensor) -> Tensor:
         return _cn_from(_int64_view(nbl), st, p)
 
-    assert torch.equal(
-        jacrev(public)(st.positions), jacrev(widened)(st.positions)
-    )
+    _assert_same(jacrev(public)(st.positions), jacrev(widened)(st.positions))
 
 
 def test_several_chunks_give_the_same_result(
@@ -260,8 +267,8 @@ def test_forced_widening_gives_the_same_bits(
     monkeypatch.setattr(_distance_kernels, "_INT32_INDEX_BACKWARD", False)
     widened = f(st.positions), jacrev(f)(st.positions)
 
-    assert torch.equal(direct[0], widened[0])
-    assert torch.equal(direct[1], widened[1])
+    _assert_same(direct[0], widened[0])
+    _assert_same(direct[1], widened[1])
 
 
 def _saved_index_copies(nbl: NeighborList, st: Structure, mode: str) -> int:
@@ -489,7 +496,7 @@ def test_the_limit_itself_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_the_native_kernel_refuses_a_padding_value_beyond_int32() -> None:
     if not _native.is_available():
         pytest.skip("native extension is not available")
-    positions = torch.randn(40, 3, dtype=torch.double) * 3.0
+    positions = torch.randn(40, 3, dtype=torch.double, device="cpu") * 3.0
     tiles = Tiles(positions, tile=8)
     tile_a, tile_b = tile_pairs(tiles, 4.0)
 
@@ -511,7 +518,7 @@ def test_the_native_kernel_refuses_a_padding_value_beyond_int32() -> None:
 def test_the_native_kernel_writes_int32() -> None:
     if not _native.is_available():
         pytest.skip("native extension is not available")
-    positions = torch.randn(40, 3, dtype=torch.double) * 3.0
+    positions = torch.randn(40, 3, dtype=torch.double, device="cpu") * 3.0
     tiles = Tiles(positions, tile=8)
     tile_a, tile_b = tile_pairs(tiles, 4.0)
 

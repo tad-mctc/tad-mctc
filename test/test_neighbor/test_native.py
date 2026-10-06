@@ -776,7 +776,7 @@ def test_pair_filter_native_without_the_extension_raises(
     """Requested explicitly, a missing extension is an error, where the
     automatic choice falls back to the Python path."""
     monkeypatch.setenv("TAD_MCTC_DISABLE_NATIVE", "1")
-    positions = torch.randn(20, 3)
+    positions = torch.randn(20, 3, device="cpu")
     tiles = Tiles(positions, tile=8)
     tile_a, tile_b = tile_pairs(tiles, 3.0)
 
