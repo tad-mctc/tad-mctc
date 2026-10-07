@@ -120,7 +120,9 @@ def test_compile_fullgraph_default_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Without `backend`, `get_compile_backend()` chooses it."""
-    monkeypatch.setattr(compile_module, "get_compile_backend", lambda: "aot_eager")
+    monkeypatch.setattr(
+        compile_module, "get_compile_backend", lambda: "aot_eager"
+    )
 
     def f(x: torch.Tensor) -> torch.Tensor:
         return torch.sin(x) * 2.0
