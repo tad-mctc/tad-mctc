@@ -261,3 +261,62 @@ def test_list_for_other_atoms_raise() -> None:
     nbl = _list_for(bulk, ALL_AXES, CUTOFF)
     with pytest.raises(ValueError, match="shape"):
         nbl.check_compatible(batch, CUTOFF)
+
+
+@pytest.mark.parametrize("periodic", [False, True])
+@pytest.mark.parametrize(("built", "current"), [(6, 0), (0, 6)])
+def test_list_rejects_a_changed_real_atom_mask(
+    periodic: bool, built: int, current: int
+) -> None:
+    """A list cannot cross a real-atom/padding transition."""
+    positions = torch.tensor(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+        dtype=torch.double,
+    )
+    lattice = 12.0 * torch.eye(3, dtype=torch.double) if periodic else None
+    structure = Structure(
+        numbers=torch.tensor([1, built, 8]),
+        positions=positions,
+        lattice=lattice,
+    )
+    changed = structure.replace(numbers=torch.tensor([1, current, 8]))
+
+    nbl = build_neighborlist(structure, CUTOFF, skin=1.0)
+
+    with pytest.raises(ValueError, match="real-atom mask"):
+        nbl.check_compatible(changed, CUTOFF)
+    assert nbl.stale(changed)
+
+
+def test_batched_list_rejects_a_changed_real_atom_mask() -> None:
+    """A padding transition in one batch member makes the whole list stale."""
+    positions = torch.tensor(
+        [
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]],
+        ],
+        dtype=torch.double,
+    )
+    structure = Structure(
+        numbers=torch.tensor([[1, 6, 8], [1, 0, 8]]), positions=positions
+    )
+    changed = structure.replace(numbers=torch.tensor([[1, 0, 8], [1, 0, 8]]))
+
+    nbl = build_neighborlist(structure, CUTOFF, skin=1.0)
+
+    with pytest.raises(ValueError, match="real-atom mask"):
+        nbl.check_compatible(changed, CUTOFF)
+    assert nbl.stale(changed)
+
+
+def test_list_accepts_a_different_nonzero_element() -> None:
+    """Changing an element does not change pair topology."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+    structure = _cell(dd, ALL_AXES)
+    changed = structure.replace(numbers=structure.numbers.roll(1, dims=-1))
+    assert bool((changed.numbers != 0).all())
+
+    nbl = build_neighborlist(structure, CUTOFF, skin=1.0)
+
+    nbl.check_compatible(changed, CUTOFF)
+    assert not nbl.stale(changed)

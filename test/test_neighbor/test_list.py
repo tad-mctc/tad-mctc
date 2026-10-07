@@ -83,6 +83,115 @@ def neighborlist_pair_set(nbl) -> set[tuple[int, int]]:  # type: ignore[no-untyp
     return pairs
 
 
+def batched_neighborlist_pair_set(
+    nbl: NeighborList, nat: int
+) -> set[tuple[int, int, int]]:
+    """Real pairs as ``(system, atom_i, atom_j)`` tuples."""
+    idx_i = nbl.idx_i[nbl.mask].tolist()
+    idx_j = nbl.idx_j[nbl.mask].tolist()
+    pairs: set[tuple[int, int, int]] = set()
+    for i, j in zip(idx_i, idx_j):
+        system_i, atom_i = divmod(i, nat)
+        system_j, atom_j = divmod(j, nat)
+        assert system_i == system_j
+        lo, hi = sorted((atom_i, atom_j))
+        pairs.add((system_i, lo, hi))
+    assert len(pairs) == len(idx_i), "a pair was listed more than once"
+    return pairs
+
+
+@pytest.mark.parametrize("distance_kernel", ["broadcast", "baddbmm"])
+def test_batched_pair_set_is_independent_of_tile_width(
+    distance_kernel: str,
+) -> None:
+    """Changing tile width must not change which batched pairs are kept."""
+    one_system = torch.tensor(
+        [
+            [7.204627990722656, 76.56523895263672, 39.61363983154297],
+            [6.2777299880981445, 76.33467864990234, 39.317493438964844],
+        ],
+        dtype=torch.float32,
+    )
+    structure = Structure(
+        numbers=torch.ones((4, 2), dtype=torch.long),
+        positions=one_system.unsqueeze(0).expand(4, -1, -1).clone(),
+    )
+
+    by_tile = {
+        tile: batched_neighborlist_pair_set(
+            build_neighborlist(
+                structure,
+                cutoff=1.0,
+                tile=tile,
+                distance_kernel=distance_kernel,
+            ),
+            nat=2,
+        )
+        for tile in (1, 2)
+    }
+
+    assert by_tile[1] == by_tile[2]
+
+
+@pytest.mark.parametrize("distance_kernel", ["broadcast", "baddbmm"])
+def test_batched_double_cutoff_pairs_survive_tile_screen(
+    distance_kernel: str,
+) -> None:
+    """Separated-system binning must retain double pairs at the cutoff."""
+    generator = torch.Generator().manual_seed(742)
+    n_systems = 4096
+    direction = torch.randn(
+        (n_systems, 3), dtype=torch.double, generator=generator
+    )
+    direction /= torch.linalg.vector_norm(direction, dim=-1, keepdim=True)
+
+    ulp_offset = torch.randint(-8, 9, (n_systems,), generator=generator)
+    radius = torch.ones(n_systems, dtype=torch.double)
+    for _ in range(8):
+        radius = torch.where(
+            ulp_offset > 0,
+            torch.nextafter(radius, torch.full_like(radius, float("inf"))),
+            radius,
+        )
+        radius = torch.where(
+            ulp_offset < 0,
+            torch.nextafter(radius, torch.zeros_like(radius)),
+            radius,
+        )
+        ulp_offset = ulp_offset.sign() * (ulp_offset.abs() - 1).clamp_min(0)
+
+    origin = (
+        torch.rand((n_systems, 3), dtype=torch.double, generator=generator)
+        * 100.0
+    )
+    positions = torch.stack((origin, origin + direction * radius[:, None]), 1)
+    structure = Structure(
+        numbers=torch.ones((n_systems, 2), dtype=torch.long),
+        positions=positions,
+    )
+    dense_distance_squared = ((positions[:, 1] - positions[:, 0]) ** 2).sum(-1)
+    expected = {
+        (int(system), 0, 1)
+        for system in (dense_distance_squared <= 1.0).nonzero().flatten()
+    }
+
+    by_tile = {
+        tile: batched_neighborlist_pair_set(
+            build_neighborlist(
+                structure,
+                cutoff=1.0,
+                tile=tile,
+                distance_kernel=distance_kernel,
+            ),
+            nat=2,
+        )
+        for tile in (1, 2)
+    }
+
+    assert by_tile[1] == by_tile[2]
+    assert expected <= by_tile[1]
+
+
 _GEOMETRIES: list[tuple[str, str]] = [
     ("mb16_43", "H2"),
     ("heavy28", "h2o"),

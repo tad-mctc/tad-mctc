@@ -232,6 +232,10 @@ class NeighborList(Node):
         from, ``(nat,)`` or ``(..., nat)`` for a batch. A plain Python
         tuple, so :meth:`check_compatible` compares it under any
         transform.
+    build_real_mask : Tensor | None
+        Detached copy of which atoms were real (``numbers != 0``) at
+        build time. ``None`` only for lists created directly without a
+        build-time mask.
     overflow : bool
         ``True`` when an explicitly requested ``capacity`` was too small
         to hold every real pair. The list is then truncated silently
@@ -248,6 +252,7 @@ class NeighborList(Node):
     # otherwise move this snapshot along with them, and `stale()` would
     # never see any drift.
     build_positions: Tensor = child()
+    build_real_mask: Tensor | None = child(default=None)
     build_lattice: Tensor | None = child(default=None)
     periodic_axes: Tensor | None = child(default=None)
     cutoff: float = context()
@@ -269,6 +274,7 @@ class NeighborList(Node):
         overflow: bool,
         lattice: Tensor | None = None,
         periodic_axes: Tensor | None = None,
+        build_real_mask: Tensor | None = None,
     ) -> NeighborList:
         """
         Build a list from its pair data and the state it was built from.
@@ -300,6 +306,9 @@ class NeighborList(Node):
             periodic. Detached and copied.
         periodic_axes : Tensor | None, optional
             Axes the list was built periodic along.
+        build_real_mask : Tensor | None, optional
+            Whether each atom was real at build time. Lists made by
+            :func:`build_neighborlist` always provide this mask.
 
         Returns
         -------
@@ -322,6 +331,11 @@ class NeighborList(Node):
             shift=shift,
             mask=mask,
             build_positions=build_positions.detach().clone(),
+            build_real_mask=(
+                None
+                if build_real_mask is None
+                else build_real_mask.detach().clone()
+            ),
             build_lattice=None if lattice is None else lattice.detach().clone(),
             periodic_axes=periodic_axes,
             cutoff=cutoff,
@@ -346,6 +360,14 @@ class NeighborList(Node):
                 "`build_positions`, whose atoms have shape "
                 f"{tuple(self.build_positions.shape[:-1])}."
             )
+        if self.build_real_mask is not None:
+            if self.build_real_mask.dtype != torch.bool:
+                raise ValueError("`build_real_mask` must have dtype `bool`.")
+            if tuple(self.build_real_mask.shape) != self.numbers_shape:
+                raise ValueError(
+                    "`build_real_mask` shape does not match the atoms the "
+                    "list was built for."
+                )
         for name in ("idx_i", "idx_j"):
             dtype = getattr(self, name).dtype
             if dtype != _IDX_DTYPE:
@@ -393,6 +415,7 @@ class NeighborList(Node):
 
         The axis comparison reads the values of ``structure.periodic``,
         so it is skipped under ``torch.compile``, ``vmap`` and ``jacrev``.
+        The real-atom mask comparison is skipped under the same transforms.
         Call this once eagerly before transforming an evaluation. Every
         other check reads plain Python values and always runs.
 
@@ -407,7 +430,8 @@ class NeighborList(Node):
         ------
         ValueError
             ``structure.numbers`` has a different shape than at build
-            time; the list is periodic while ``structure`` has no lattice,
+            time or a different real-atom mask; the list is periodic while
+            ``structure`` has no lattice,
             or the reverse; ``self.cutoff`` is smaller than ``cutoff``;
             ``self.overflow`` is ``True``; or the list's periodic axes
             differ from ``structure.periodic``.
@@ -419,6 +443,17 @@ class NeighborList(Node):
                 f"{tuple(structure.numbers.shape)}; its indices would point "
                 "at the wrong atoms. Rebuild it from this `Structure`."
             )
+
+        if self.build_real_mask is not None:
+            real_mask = real_atoms(structure.numbers)
+            if not is_functorch_tensor(real_mask):
+                build_real_mask = self.build_real_mask.to(real_mask.device)
+                if (real_mask != build_real_mask).any():
+                    raise ValueError(
+                        "`structure.numbers` has a different real-atom mask "
+                        "than this neighbour list; rebuild it after changing "
+                        "padding."
+                    )
 
         if self.periodic and structure.lattice is None:
             raise ValueError(
@@ -499,6 +534,15 @@ class NeighborList(Node):
         if self.skin == 0.0:
             return torch.tensor(True, device=positions.device)
 
+        real_mask_changed = torch.tensor(False, device=positions.device)
+        if self.build_real_mask is not None:
+            real_mask = real_atoms(structure.numbers)
+            if tuple(real_mask.shape) != self.numbers_shape:
+                return torch.tensor(True, device=positions.device)
+            if not is_functorch_tensor(real_mask):
+                build_real_mask = self.build_real_mask.to(real_mask.device)
+                real_mask_changed = (real_mask != build_real_mask).any()
+
         displacement = positions - self.build_positions
         lattice_changed = torch.tensor(False, device=positions.device)
 
@@ -528,7 +572,7 @@ class NeighborList(Node):
             lattice_changed = torch.any(lattice != self.build_lattice)
 
         drift = displacement.norm(dim=-1).max()
-        return (drift > self.skin / 2) | lattice_changed
+        return (drift > self.skin / 2) | lattice_changed | real_mask_changed
 
     def real_entries(self) -> tuple[Tensor, Tensor, Tensor]:
         """
@@ -1206,6 +1250,7 @@ def _pad_to_capacity(
     shift_raw: Tensor | None = None,
     lattice: Tensor | None = None,
     periodic_axes: Tensor | None = None,
+    build_real_mask: Tensor | None = None,
 ) -> NeighborList:
     """
     Pad raw, exact pairs, given as fragments (see :func:`_join_pairs`), out
@@ -1227,6 +1272,7 @@ def _pad_to_capacity(
         shift_raw=shift_raw,
         lattice=lattice,
         periodic_axes=periodic_axes,
+        build_real_mask=build_real_mask,
     )
 
 
@@ -1239,6 +1285,7 @@ def _neighbor_list(
     shift_raw: Tensor | None = None,
     lattice: Tensor | None = None,
     periodic_axes: Tensor | None = None,
+    build_real_mask: Tensor | None = None,
 ) -> NeighborList:
     """
     A :class:`NeighborList` from pairs already padded to their capacity.
@@ -1315,6 +1362,7 @@ def _neighbor_list(
         shift=shift,
         mask=mask,
         build_positions=build_positions,
+        build_real_mask=build_real_mask,
         cutoff=cutoff,
         skin=skin,
         overflow=overflow,
@@ -1556,6 +1604,19 @@ def _ghost_pool(
     )
 
 
+def _tile_screen_cutoff(cutoff: float, dtype: torch.dtype) -> float:
+    """A conservative radius for the tile screen preceding the pair filter.
+
+    The first squared-threshold margin matches the pair filter. A second
+    covers rounding in its squared-distance sum, which the tile-box test
+    evaluates at higher precision. ``nextafter`` keeps the square-root
+    round trip from rounding the screen back below that threshold.
+    """
+    pair_cutoff = math.sqrt(squared_threshold(cutoff, dtype))
+    screen_cutoff = math.sqrt(squared_threshold(pair_cutoff, dtype))
+    return math.nextafter(screen_cutoff, math.inf)
+
+
 def _search_molecules(
     positions: Tensor,
     thresholds: tuple[float, ...],
@@ -1601,7 +1662,10 @@ def _search_molecules(
             )
 
     with stage("tile pairs"):
-        tile_a, tile_b = tile_pairs(tiles, search_cutoff)
+        # Keep the pruning screen at least as permissive as the exact
+        # pair filter below, including its dtype-specific cutoff slack.
+        tile_cutoff = _tile_screen_cutoff(search_cutoff, positions.dtype)
+        tile_a, tile_b = tile_pairs(tiles, tile_cutoff)
 
     with stage("pair filter"):
         return _atom_pairs_within_thresholds(
@@ -1691,9 +1755,10 @@ def _search_cells(
             )
 
     with stage("tile pairs"):
+        tile_cutoff = _tile_screen_cutoff(search_cutoff, positions.dtype)
         tile_a, tile_b = tile_pairs(
             tiles,
-            search_cutoff,
+            tile_cutoff,
             anchors=_tiles_holding_primary(tiles, is_primary),
         )
 
@@ -1812,7 +1877,14 @@ def _build_single_neighborlists(
             )
             with stage("finalize"):
                 return tuple(
-                    _neighbor_list(pairs, cutoff, skin, positions, dd)
+                    _neighbor_list(
+                        pairs,
+                        cutoff,
+                        skin,
+                        positions,
+                        dd,
+                        build_real_mask=is_real,
+                    )
                     for cutoff, pairs in zip(cutoffs, per_threshold_pairs)
                 )
 
@@ -1839,6 +1911,7 @@ def _build_single_neighborlists(
                     capacity,
                     positions,
                     dd,
+                    build_real_mask=is_real,
                 )
                 for cutoff, pairs in zip(cutoffs, per_threshold_pairs)
             )
@@ -1872,6 +1945,7 @@ def _build_single_neighborlists(
                 shift_raw=shift,
                 lattice=structure.lattice,
                 periodic_axes=structure.periodic,
+                build_real_mask=is_real,
             )
             for cutoff, (pairs, shift) in zip(cutoffs, per_threshold_cell_pairs)
         )
@@ -1994,6 +2068,7 @@ def _build_batched_neighborlists(
                 shift_raw=shift,
                 lattice=structure.lattice,
                 periodic_axes=structure.periodic,
+                build_real_mask=is_real,
             )
             for cutoff, (fragments_i, fragments_j, shift) in zip(
                 cutoffs, per_threshold_pairs

@@ -405,6 +405,19 @@ def tile_pairs(
         empty = torch.zeros(0, dtype=torch.long, device=tiles.lo.device)
         return empty, empty
 
+    # Batched searches translate each system apart before binning. The
+    # translated coordinates can be much larger than the physical cutoff,
+    # so subtracting two nearby tile bounds can lose a few low bits even
+    # when their dtype is float64. Expand both the stencil and its final
+    # box-distance screen by a bound on that absolute roundoff.
+    if tiles.lo.dtype == torch.float64:
+        coordinate_scale = torch.maximum(
+            tiles.lo.abs().amax(), tiles.hi.abs().amax()
+        )
+        cutoff += (
+            float(coordinate_scale) * torch.finfo(tiles.lo.dtype).eps * 8.0
+        )
+
     # Two tiles whose bins are `k` apart along an axis are separated
     # along that axis by at least `(k - 1) * width`, not `k * width`,
     # because a tile can sit anywhere inside its own bin. `width` is
