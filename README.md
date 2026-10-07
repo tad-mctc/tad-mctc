@@ -164,7 +164,7 @@ The following dependencies are required
 | 2.11.0           | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: |
 | 2.12.1           | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: |
 | 2.13.0           | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: |
-| 2.14.0           | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
+| 2.14.1           | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 
 :white_check_mark: tested in CI &nbsp;&nbsp; :heavy_check_mark: supported, but not tested in CI (should still work) &nbsp;&nbsp; :x: not supported
 
