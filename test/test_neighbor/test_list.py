@@ -100,20 +100,29 @@ def batched_neighborlist_pair_set(
     return pairs
 
 
+def _skip_baddbmm_off_cpu(distance_kernel: str) -> None:
+    """`baddbmm` is only applicable on CPU; forcing it elsewhere raises."""
+    if distance_kernel == "baddbmm" and DEVICE is not None:
+        if DEVICE.type != "cpu":
+            pytest.skip("distance_kernel='baddbmm' is CPU-only")
+
+
 @pytest.mark.parametrize("distance_kernel", ["broadcast", "baddbmm"])
 def test_batched_pair_set_is_independent_of_tile_width(
     distance_kernel: str,
 ) -> None:
     """Changing tile width must not change which batched pairs are kept."""
+    _skip_baddbmm_off_cpu(distance_kernel)
     one_system = torch.tensor(
         [
             [7.204627990722656, 76.56523895263672, 39.61363983154297],
             [6.2777299880981445, 76.33467864990234, 39.317493438964844],
         ],
         dtype=torch.float32,
+        device=DEVICE,
     )
     structure = Structure(
-        numbers=torch.ones((4, 2), dtype=torch.long),
+        numbers=torch.ones((4, 2), dtype=torch.long, device=DEVICE),
         positions=one_system.unsqueeze(0).expand(4, -1, -1).clone(),
     )
 
@@ -138,15 +147,19 @@ def test_batched_double_cutoff_pairs_survive_tile_screen(
     distance_kernel: str,
 ) -> None:
     """Separated-system binning must retain double pairs at the cutoff."""
+    _skip_baddbmm_off_cpu(distance_kernel)
+
+    # Draw on the CPU so every device sees the same systems, then move.
+    cpu: DD = {"device": torch.device("cpu"), "dtype": torch.double}
     generator = torch.Generator().manual_seed(742)
     n_systems = 4096
-    direction = torch.randn(
-        (n_systems, 3), dtype=torch.double, generator=generator
-    )
+    direction = torch.randn((n_systems, 3), **cpu, generator=generator)
     direction /= torch.linalg.vector_norm(direction, dim=-1, keepdim=True)
 
-    ulp_offset = torch.randint(-8, 9, (n_systems,), generator=generator)
-    radius = torch.ones(n_systems, dtype=torch.double)
+    ulp_offset = torch.randint(
+        -8, 9, (n_systems,), generator=generator, device=cpu["device"]
+    )
+    radius = torch.ones(n_systems, **cpu)
     for _ in range(8):
         radius = torch.where(
             ulp_offset > 0,
@@ -160,13 +173,11 @@ def test_batched_double_cutoff_pairs_survive_tile_screen(
         )
         ulp_offset = ulp_offset.sign() * (ulp_offset.abs() - 1).clamp_min(0)
 
-    origin = (
-        torch.rand((n_systems, 3), dtype=torch.double, generator=generator)
-        * 100.0
-    )
+    origin = torch.rand((n_systems, 3), **cpu, generator=generator) * 100.0
     positions = torch.stack((origin, origin + direction * radius[:, None]), 1)
+    positions = positions.to(DEVICE)
     structure = Structure(
-        numbers=torch.ones((n_systems, 2), dtype=torch.long),
+        numbers=torch.ones((n_systems, 2), dtype=torch.long, device=DEVICE),
         positions=positions,
     )
     dense_distance_squared = ((positions[:, 1] - positions[:, 0]) ** 2).sum(-1)
@@ -321,6 +332,72 @@ def test_stale_with_zero_skin_is_always_true() -> None:
 
     nbl = build_neighborlist(hydrogens(positions), cutoff=3.0, tile=8, skin=0.0)
     assert bool(nbl.stale(hydrogens(positions)))
+
+
+def test_build_real_mask_must_be_bool() -> None:
+    """A non-boolean `build_real_mask` is rejected on construction."""
+    positions = torch.rand(5, 3, dtype=torch.double)
+    nbl = build_neighborlist(hydrogens(positions), cutoff=3.0, tile=8)
+
+    with pytest.raises(ValueError, match="dtype `bool`"):
+        nbl.replace(build_real_mask=torch.ones(5, dtype=torch.long))
+
+
+def test_build_real_mask_must_match_numbers_shape() -> None:
+    """A `build_real_mask` of the wrong shape is rejected on construction."""
+    positions = torch.rand(5, 3, dtype=torch.double)
+    nbl = build_neighborlist(hydrogens(positions), cutoff=3.0, tile=8)
+
+    with pytest.raises(ValueError, match="shape does not match"):
+        nbl.replace(build_real_mask=torch.ones(4, dtype=torch.bool))
+
+
+def test_stale_with_different_atom_count_is_true() -> None:
+    """A structure with another number of atoms than at build time is
+    stale, without comparing any positions."""
+    positions = torch.rand(6, 3, dtype=torch.double)
+    nbl = build_neighborlist(hydrogens(positions), cutoff=3.0, tile=8, skin=2.0)
+
+    assert bool(nbl.stale(hydrogens(positions[:5])))
+
+
+def test_stale_sees_padding_change() -> None:
+    """Turning a real atom into padding at the same position makes the
+    list stale, although nothing moved."""
+    positions = torch.rand(6, 3, dtype=torch.double)
+    nbl = build_neighborlist(hydrogens(positions), cutoff=3.0, tile=8, skin=2.0)
+
+    padded = hydrogens(positions)
+    numbers = padded.numbers.clone()
+    numbers[-1] = 0
+    assert bool(nbl.stale(padded.replace(numbers=numbers)))
+
+
+def test_stale_without_build_real_mask_only_checks_drift() -> None:
+    """A list created without a build-time mask skips the padding check."""
+    positions = torch.rand(6, 3, dtype=torch.double)
+    nbl = build_neighborlist(hydrogens(positions), cutoff=3.0, tile=8, skin=2.0)
+    nbl = nbl.replace(build_real_mask=None)
+
+    padded = hydrogens(positions)
+    numbers = padded.numbers.clone()
+    numbers[-1] = 0
+    assert not bool(nbl.stale(padded.replace(numbers=numbers)))
+
+
+def test_stale_under_vmap_skips_the_padding_comparison() -> None:
+    """Under `vmap` the real-atom mask is a wrapped tensor whose values
+    cannot be read, so only the drift is compared."""
+    positions = torch.rand(6, 3, dtype=torch.double)
+    structure = hydrogens(positions)
+    nbl = build_neighborlist(structure, cutoff=3.0, tile=8, skin=2.0)
+
+    batch = structure.numbers.unsqueeze(0).expand(2, -1).clone()
+    result = torch.func.vmap(
+        lambda numbers: nbl.stale(structure.replace(numbers=numbers))
+    )(batch)
+
+    assert not result.any()
 
 
 def test_stale_reacts_to_drift_past_half_the_skin() -> None:
@@ -561,6 +638,7 @@ def test_images_exactly_at_the_cutoff_are_kept_by_every_kernel(
     rounds above or below the squared cutoff depends on the arithmetic of the
     kernel (the `baddbmm` expansion vs. the broadcast difference), so the
     list keeps them with a few ulps of slack, for all kernels alike."""
+    _skip_baddbmm_off_cpu(kernel)
     edge = 4.0
     cutoff = 5 * edge
     positions = torch.tensor(
