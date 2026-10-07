@@ -116,6 +116,23 @@ def test_compile_fullgraph() -> None:
 
 @requires_compile
 @pytest.mark.usefixtures("reset_dynamo")
+def test_compile_fullgraph_default_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without `backend`, `get_compile_backend()` chooses it."""
+    monkeypatch.setattr(
+        compile_module, "get_compile_backend", lambda: "aot_eager"
+    )
+
+    def f(x: torch.Tensor) -> torch.Tensor:
+        return torch.sin(x) * 2.0
+
+    x = torch.linspace(0.0, 1.0, 5)
+    assert torch.equal(compile_fullgraph(f)(x), f(x))
+
+
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
 def test_compile_fullgraph_graph_break() -> None:
     def f(x: torch.Tensor) -> torch.Tensor:
         torch._dynamo.graph_break()
