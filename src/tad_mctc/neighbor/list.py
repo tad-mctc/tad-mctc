@@ -110,6 +110,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "NeighborList",
+    "StageHook",
     "build_neighborlist",
     "build_neighborlists",
     "estimate_neighborlist_memory",
@@ -134,9 +135,9 @@ _CAPACITY_BUCKET = 4096
 _PAIRS_PER_CELL_SEARCH = 2_000_000
 
 
-class _StageHook(Protocol):
+class StageHook(Protocol):
     """Context manager factory entered around one labelled step of a
-    neighbour-list build (see :func:`_build_neighborlists`)."""
+    neighbour-list build (see :func:`build_neighborlists`)."""
 
     def __call__(
         self, label: str
@@ -1562,7 +1563,7 @@ def _search_molecules(
     *,
     tile: int,
     distance_kernel: DistanceKernelName | None,
-    stage: _StageHook,
+    stage: StageHook,
     system: Tensor | None = None,
     padding: _Padding | None = None,
 ) -> list[_Pairs]:
@@ -1578,8 +1579,8 @@ def _search_molecules(
         One cutoff (already including any skin) per requested list.
     tile, distance_kernel
         See :func:`build_neighborlists`.
-    stage : _StageHook
-        Wraps each step of the search, see :func:`_build_neighborlists`.
+    stage : StageHook
+        Wraps each step of the search, see :func:`build_neighborlists`.
     system : Tensor | None, optional
         ``(nat,)``, the system owning each atom. ``None`` (default) treats
         ``positions`` as one system.
@@ -1624,7 +1625,7 @@ def _search_cells(
     *,
     tile: int,
     distance_kernel: DistanceKernelName | None,
-    stage: _StageHook,
+    stage: StageHook,
     padding: _Padding | None = None,
 ) -> list[tuple[_Pairs, Tensor]]:
     """
@@ -1646,8 +1647,8 @@ def _search_cells(
         One cutoff (already including any skin) per requested list.
     tile, distance_kernel
         See :func:`build_neighborlists`.
-    stage : _StageHook
-        Wraps each step of the search, see :func:`_build_neighborlists`.
+    stage : StageHook
+        Wraps each step of the search, see :func:`build_neighborlists`.
     padding : _Padding | None, optional
         When given, the pairs and shifts of every list are returned
         already padded to its capacity, a padded slot holding
@@ -1701,6 +1702,7 @@ def _search_cells(
     # Mapped to the phantom atom with a zero shift below, its padded slots
     # come out as those of the final list, which is so written only once.
     n_ghost = ghost_positions.shape[0]
+
     # The ghost pairs are written as `_IDX_DTYPE`, padding value included.
     _check_index_range(n_ghost, "ghost pool")
     ghost_padding = (
@@ -1742,6 +1744,7 @@ def _search_cells(
             )
             pairs = _Pairs(idx_i, idx_j, ghost_pairs.n_found)
             per_threshold_pairs.append((pairs, shift))
+
         return per_threshold_pairs
 
 
@@ -1752,9 +1755,11 @@ def _check_search_arguments(
     atom."""
     if skin < 0:
         raise ValueError(f"`skin` must be non-negative, got {skin}.")
+
     for cutoff in cutoffs:
         if cutoff < 0:
             raise ValueError(f"`cutoff` must be non-negative, got {cutoff}.")
+
     if tile < 1:
         raise ValueError(f"`tile` must be at least 1, got {tile}.")
 
@@ -1784,11 +1789,11 @@ def _build_single_neighborlists(
     skin: float,
     capacity: int | None,
     distance_kernel: DistanceKernelName | None,
-    stage: _StageHook,
+    stage: StageHook,
 ) -> tuple[NeighborList, ...]:
     """
     :func:`build_neighborlists` for a single-system ``structure``, see
-    :func:`_build_neighborlists` for the arguments.
+    :func:`build_neighborlists` for the arguments.
     """
     positions = structure.positions
     nat = positions.shape[0]
@@ -1845,6 +1850,7 @@ def _build_single_neighborlists(
 
     # `Structure` fills in a mask whenever it has a lattice.
     assert structure.periodic is not None
+
     # A singular cell would fail its inversion in `wrap_to_central_cell`
     # with an opaque linear-algebra error.
     _validate_lattice_periodic(structure.lattice, structure.periodic)
@@ -1861,6 +1867,7 @@ def _build_single_neighborlists(
         stage=stage,
         padding=_Padding(capacity, nat),
     )
+
     with stage("finalize"):
         return tuple(
             _neighbor_list(
@@ -1885,13 +1892,13 @@ def _build_batched_neighborlists(
     skin: float,
     capacity: int | None,
     distance_kernel: DistanceKernelName | None,
-    stage: _StageHook,
+    stage: StageHook,
 ) -> tuple[NeighborList, ...]:
     """
     :func:`build_neighborlists` for a batched ``structure``: search its
     real atoms, number every pair in the padded, flattened layout
     ``b * nat + i``, and pad the result to one capacity. See
-    :func:`_build_neighborlists` for the arguments.
+    :func:`build_neighborlists` for the arguments.
     """
     nat = structure.numbers.shape[-1]
     numbers = structure.numbers.reshape(-1, nat)  # (B, nat)
@@ -1962,7 +1969,7 @@ def _build_batched_neighborlists(
                 stage=stage,
             )
             # The chunk numbers its atoms from zero. `idx + offset` stays in
-            # `_IDX_DTYPE`, which cannot wrap: `_build_neighborlists` has
+            # `_IDX_DTYPE`, which cannot wrap: `build_neighborlists` has
             # checked that the flattened atom count fits it.
             offset = first * nat
             for chunks, (pairs, shift) in zip(per_threshold_chunks, searched):
@@ -2092,60 +2099,6 @@ def _outside_transforms(structure: Structure) -> Generator[Structure]:
 
 @torch.compiler.disable
 @torch.no_grad()
-def _build_neighborlists(
-    structure: Structure,
-    cutoffs: tuple[float, ...],
-    *,
-    tile: int = 32,
-    skin: float = 0.0,
-    capacity: int | None = None,
-    distance_kernel: DistanceKernelName | None = None,
-    stage: _StageHook = _no_stage_hook,
-) -> tuple[NeighborList, ...]:
-    """
-    :func:`build_neighborlists` with a ``stage`` hook around each step.
-
-    ``stage(label)`` is entered around every step of the build, labelled
-    ``"tiles"``, ``"tile pairs"``, ``"pair filter"`` and so on, so that a
-    profiling tool (the ``tad_mctc --timing`` command line) can time the
-    steps of the one real build instead of re-assembling it. The default
-    does nothing.
-
-    Parameters
-    ----------
-    structure, cutoffs, tile, skin, capacity, distance_kernel
-        See :func:`build_neighborlists`.
-    stage : _StageHook, optional
-        Context manager factory entered around each step of the build.
-
-    Returns
-    -------
-    tuple[NeighborList, ...]
-        One list per entry of ``cutoffs``, in the same order.
-    """
-    _check_search_arguments(cutoffs, skin, tile)
-    # The largest stored index is the phantom of the padded slots, the
-    # flattened (batched) atom count, so one check covers every offset and
-    # lookup table of the build.
-    _check_index_range(math.prod(structure.numbers.shape))
-
-    with _outside_transforms(structure) as plain:
-        build = (
-            _build_batched_neighborlists
-            if plain.numbers.ndim > 1
-            else _build_single_neighborlists
-        )
-        return build(
-            plain,
-            cutoffs,
-            tile=tile,
-            skin=skin,
-            capacity=capacity,
-            distance_kernel=distance_kernel,
-            stage=stage,
-        )
-
-
 def build_neighborlists(
     structure: Structure,
     cutoffs: tuple[float, ...],
@@ -2154,6 +2107,7 @@ def build_neighborlists(
     skin: float = 0.0,
     capacity: int | None = None,
     distance_kernel: DistanceKernelName | None = None,
+    stage: StageHook = _no_stage_hook,
 ) -> tuple[NeighborList, ...]:
     """
     Build one :class:`.NeighborList` per cutoff in ``cutoffs``, sharing a
@@ -2214,6 +2168,13 @@ def build_neighborlists(
         automatic choice; raises ``ValueError`` if the named kernel is
         not applicable on this device/dtype rather than silently using
         a different one. See :func:`._distance_kernels.select_kernel`.
+    stage : StageHook, optional
+        Context manager factory entered around each step of the build,
+        labelled ``"tiles"``, ``"tile pairs"``, ``"pair filter"`` and so
+        on, so that a profiling tool (the ``tad_mctc --timing`` command
+        line) can time the steps of the one real build instead of
+        re-assembling it. The default does nothing.
+
     Returns
     -------
     tuple[NeighborList, ...]
@@ -2234,14 +2195,27 @@ def build_neighborlists(
         PyTorch returns an all-zero gradient for ``torch.compile(jacrev(f))``
         when ``f`` has any graph break; use ``grad``, or build outside.
     """
-    return _build_neighborlists(
-        structure,
-        cutoffs,  # pyright: ignore[reportCallIssue]
-        tile=tile,
-        skin=skin,
-        capacity=capacity,
-        distance_kernel=distance_kernel,
-    )
+    _check_search_arguments(cutoffs, skin, tile)
+    # The largest stored index is the phantom of the padded slots, the
+    # flattened (batched) atom count, so one check covers every offset and
+    # lookup table of the build.
+    _check_index_range(math.prod(structure.numbers.shape))
+
+    with _outside_transforms(structure) as plain:
+        build = (
+            _build_batched_neighborlists
+            if plain.numbers.ndim > 1
+            else _build_single_neighborlists
+        )
+        return build(
+            plain,
+            cutoffs,
+            tile=tile,
+            skin=skin,
+            capacity=capacity,
+            distance_kernel=distance_kernel,
+            stage=stage,
+        )
 
 
 def build_neighborlist(

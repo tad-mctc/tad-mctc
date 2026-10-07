@@ -38,7 +38,7 @@ from ..io.structure import Structure
 from ..ncoord.common import CNModel
 from ..neighbor import _native
 from ..neighbor.images import build_periodic_shifts
-from ..neighbor.list import NeighborList, _build_neighborlists
+from ..neighbor.list import NeighborList, build_neighborlists
 from ..typing import Tensor
 from ._args import CN_MODELS, DTYPES, build_parser
 from ._output import (
@@ -60,7 +60,7 @@ def _build_neighborlist(
     def nlist_stage(label: str) -> contextlib.AbstractContextManager[None]:
         return timings.stage(f"nlist: {label}")
 
-    (nbl,) = _build_neighborlists(
+    (nbl,) = build_neighborlists(
         structure,
         (cutoff,),  # pyright: ignore[reportCallIssue]
         stage=nlist_stage,

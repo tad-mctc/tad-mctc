@@ -6,7 +6,7 @@ and `cn_eeq`, and its own `--small` run showed `build` dominating: 2512 ms vs.
 which part of `build` that 73% actually is.
 
 The steps of `build_neighborlist` are timed through the builder's private
-`stage` hook (`tad_mctc.neighbor.list._build_neighborlists`), the same one
+`stage` hook (`tad_mctc.neighbor.list.build_neighborlists`), the same one
 `tad_mctc --timing` uses: it wraps the tile build ("tiles"), the tile-pair
 screen ("tile pairs"), the exact distance filter ("pair filter") and the
 padding into the final list ("finalize"). Timing the steps of the real
@@ -36,7 +36,7 @@ from torch.profiler import ProfilerActivity, profile, record_function
 
 from tad_mctc.data.structures import get_structure, list_records
 from tad_mctc.ncoord import cn_eeq
-from tad_mctc.neighbor.list import _build_neighborlists, build_neighborlist
+from tad_mctc.neighbor.list import build_neighborlist, build_neighborlists
 
 T = TypeVar("T")
 
@@ -173,7 +173,7 @@ for record in records:
     per_rep_times: list[StageTimes] = []
     for _ in range(reps):
         times = StageTimes()
-        (nbl,) = _build_neighborlists(structure, (cutoff,), stage=times)
+        (nbl,) = build_neighborlists(structure, (cutoff,), stage=times)
         per_rep_times.append(times)
     step_ms = {
         step: 1e3 * statistics.median(t.seconds[step] for t in per_rep_times)
