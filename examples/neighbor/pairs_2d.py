@@ -63,9 +63,9 @@ tile_size = 3
 nbl = build_neighborlist(structure, cutoff=cutoff, tile=tile_size)
 tiles = Tiles(positions, tile=tile_size)
 tile_a, tile_b = tile_pairs(tiles, cutoff)
-candidate_tile_pairs = {
-    pair for pair in zip(tile_a.tolist(), tile_b.tolist())
-} | {(b, a) for a, b in zip(tile_a.tolist(), tile_b.tolist())}
+candidate_tile_pairs = {*zip(tile_a.tolist(), tile_b.tolist())} | {
+    (b, a) for a, b in zip(tile_a.tolist(), tile_b.tolist())
+}
 
 centre_atom = 4
 reference_tile = next(
