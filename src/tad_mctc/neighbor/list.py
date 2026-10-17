@@ -95,7 +95,7 @@ from ..batch import real_atoms
 from ..tree import Node, child, context
 from ..typing import DD, Tensor
 from . import _distance_kernels, _native
-from ._distance_kernels import DistanceKernelName, squared_threshold
+from ._distance_kernels import squared_threshold
 from ._tiles import Tiles, _integer_box, _is_forward, _ragged_runs, tile_pairs
 from .images import (
     _image_rings,
@@ -110,11 +110,21 @@ if TYPE_CHECKING:
 
 __all__ = [
     "NeighborList",
+    "SearchKernelName",
     "StageHook",
     "build_neighborlist",
     "build_neighborlists",
     "estimate_neighborlist_memory",
 ]
+
+
+SearchKernelName = Literal["native", "triton", "baddbmm", "broadcast"]
+"""
+The kernels a neighbour-list build can be told to use with its
+``distance_kernel`` argument: the native CPU extension (see
+:mod:`._native`) or one of the distance kernels of the pure-Python path
+(:data:`._distance_kernels.DistanceKernelName`).
+"""
 
 
 # Pair counts are rounded up to a multiple of this many slots, so that a
@@ -172,7 +182,7 @@ class NeighborList(Node):
 
     Padding atoms (``numbers == 0``) have no pairs, in a single structure
     as in a batch. A list for a batched structure (``numbers`` of shape
-    ``(..., nat)``) indexes its padded atoms flattened: atom ``i`` of
+    ``(batch, nat)``) indexes its padded atoms flattened: atom ``i`` of
     system ``b`` is ``b * nat + i``, and a consumer finds the system of a
     pair as ``idx_i // nat``.
 
@@ -220,7 +230,7 @@ class NeighborList(Node):
     periodic_axes : Tensor | None
         Boolean mask of the axes the list was built periodic along, the
         structure's own ``periodic`` (``(3,)`` or per system
-        ``(..., 3)``), ``None`` for a molecular list. The pairs' ``shift`` already
+        ``(batch, 3)``), ``None`` for a molecular list. The pairs' ``shift`` already
         encodes these axes (including the fold into the central cell), so
         the list only describes a structure with exactly this mask.
     cutoff : float
@@ -230,7 +240,7 @@ class NeighborList(Node):
         ``positions`` does not immediately invalidate the list.
     numbers_shape : tuple[int, ...]
         Shape of the ``numbers`` of the structure the list was built
-        from, ``(nat,)`` or ``(..., nat)`` for a batch. A plain Python
+        from, ``(nat,)`` or ``(batch, nat)`` for a batch. A plain Python
         tuple, so :meth:`check_compatible` compares it under any
         transform.
     build_real_mask : Tensor | None
@@ -966,7 +976,7 @@ def _atom_pairs_within_thresholds(
     reference_positions: Tensor,
     thresholds: tuple[float, ...],
     max_block: int = 2_000_000,
-    distance_kernel: DistanceKernelName | None = None,
+    distance_kernel: SearchKernelName | None = None,
     pair_filter: Literal["native", "python"] | None = None,
     anchor_atoms: Tensor | None = None,
     padding: _Padding | None = None,
@@ -1018,22 +1028,25 @@ def _atom_pairs_within_thresholds(
         steeply below it with the number of chunks. On a CPU the path is
         only the fallback for a missing native extension, and smaller
         chunks run faster there.
-    distance_kernel : DistanceKernelName | None, optional
+    distance_kernel : SearchKernelName | None, optional
         Force a specific :class:`._distance_kernels.DistanceKernel` by
         name (``"triton"``, ``"baddbmm"``, ``"broadcast"``) instead of
-        the automatic, device-based choice. ``None``
+        the automatic, device-based choice, or the native extension
+        (``"native"``, the same as ``pair_filter="native"``). ``None``
         (default) is the automatic choice; see
-        :func:`._distance_kernels.select_kernel`. Only consulted when the
-        Python implementation actually runs; see ``pair_filter`` for how
-        that is decided.
+        :func:`._distance_kernels.select_kernel`. A distance kernel is
+        only consulted when the Python implementation actually runs; see
+        ``pair_filter`` for how that is decided.
     pair_filter : Literal["native", "python"] | None, optional
         Force which implementation performs the filter-and-compact step,
         instead of the automatic, CPU/availability-based choice. ``None``
-        (default) is the automatic choice. ``"python"`` forces the
-        pure-Python path without ever probing native availability (so it
-        never pays that extension's first-use JIT-compile cost).
-        ``"native"`` forces the native path and raises ``ValueError`` if
-        it is not applicable -- off CPU, for positions of a dtype other
+        (default) is the automatic choice: the native path if the
+        extension is requested and loads (see :mod:`._native`), else the
+        pure-Python path. ``"python"`` forces the pure-Python path without
+        ever probing native availability. ``"native"`` selects the native
+        path, compiling the extension if need be, and raises
+        ``ValueError`` if it is disabled or did not load, or if it is not
+        applicable -- off CPU, for positions of a dtype other
         than float32 or float64, or combined with an explicit
         ``distance_kernel``, which the native path has no way to honour
         since it computes distances itself rather than going through
@@ -1041,8 +1054,9 @@ def _atom_pairs_within_thresholds(
         the other, mirroring how :func:`._distance_kernels.select_kernel`
         already refuses an inapplicable ``force`` rather than picking a
         different kernel. Private in practice (no public caller passes
-        it): for tests that need both implementations' output in the same
-        process, e.g. to assert they agree.
+        it; they select ``distance_kernel="native"``): for tests that need
+        both implementations' output in the same process, e.g. to assert
+        they agree.
     anchor_atoms : Tensor | None, optional
         ``(n,)``, boolean. When given, only pairs with at least one anchor
         atom are returned. A periodic search passes the primary-cell atoms
@@ -1061,15 +1075,23 @@ def _atom_pairs_within_thresholds(
     Raises
     ------
     ValueError
-        If ``pair_filter="native"`` is combined with an explicit
-        ``distance_kernel``, or is not applicable (off CPU, positions not
-        float32 or float64, or the native extension failed to load).
+        If the native path is selected together with a distance kernel or
+        with ``pair_filter="python"``, or is not applicable (off CPU,
+        positions not float32 or float64, or the native extension is
+        disabled or failed to load).
     """
+    if distance_kernel == "native":
+        if pair_filter == "python":
+            raise ValueError(
+                "distance_kernel='native' cannot be combined with "
+                "pair_filter='python'."
+            )
+        pair_filter, distance_kernel = "native", None
     if pair_filter == "native" and distance_kernel is not None:
         raise ValueError(
-            "pair_filter='native' cannot be combined with an explicit "
-            "distance_kernel: the native path computes distances itself "
-            "and has no way to honour a requested formula."
+            "The native path cannot be combined with an explicit "
+            "distance_kernel: it computes distances itself and has no way "
+            "to honour a requested formula."
         )
 
     native_applicable = (
@@ -1091,19 +1113,23 @@ def _atom_pairs_within_thresholds(
             anchor_atoms,
             padding,
             _CAPACITY_BUCKET,
+            selected=pair_filter == "native",
         )
         if native_result is not None:
             return [_Pairs(*pairs) for pairs in native_result]
         if pair_filter == "native":
+            info = _native.build_info(selected=True)
             raise ValueError(
-                "pair_filter='native' requested but the native extension "
-                "failed to load; check "
-                "tad_mctc.neighbor._native.is_available()."
+                "The native neighbour search was selected, but it is "
+                f"{info.origin}"
+                + (f" ({info.error})" if info.error else "")
+                + "; see tad_mctc.neighbor._native.build_info(selected=True)."
             )
     elif pair_filter == "native":
         raise ValueError(
-            "pair_filter='native' requested but is not applicable: native "
-            "support is CPU-only and needs float32 or float64 positions, "
+            "The native neighbour search was selected, but is not "
+            "applicable: it is CPU-only and needs float32 or float64 "
+            "positions, "
             f"got {reference_positions.device.type} and "
             f"{reference_positions.dtype}."
         )
@@ -1623,7 +1649,7 @@ def _search_molecules(
     thresholds: tuple[float, ...],
     *,
     tile: int,
-    distance_kernel: DistanceKernelName | None,
+    distance_kernel: SearchKernelName | None,
     stage: StageHook,
     system: Tensor | None = None,
     padding: _Padding | None = None,
@@ -1688,7 +1714,7 @@ def _search_cells(
     thresholds: tuple[float, ...],
     *,
     tile: int,
-    distance_kernel: DistanceKernelName | None,
+    distance_kernel: SearchKernelName | None,
     stage: StageHook,
     padding: _Padding | None = None,
 ) -> list[tuple[_Pairs, Tensor]]:
@@ -1853,7 +1879,7 @@ def _build_single_neighborlists(
     tile: int,
     skin: float,
     capacity: int | None,
-    distance_kernel: DistanceKernelName | None,
+    distance_kernel: SearchKernelName | None,
     stage: StageHook,
 ) -> tuple[NeighborList, ...]:
     """
@@ -1965,7 +1991,7 @@ def _build_batched_neighborlists(
     tile: int,
     skin: float,
     capacity: int | None,
-    distance_kernel: DistanceKernelName | None,
+    distance_kernel: SearchKernelName | None,
     stage: StageHook,
 ) -> tuple[NeighborList, ...]:
     """
@@ -2181,7 +2207,7 @@ def build_neighborlists(
     tile: int = 32,
     skin: float = 0.0,
     capacity: int | None = None,
-    distance_kernel: DistanceKernelName | None = None,
+    distance_kernel: SearchKernelName | None = None,
     stage: StageHook = _no_stage_hook,
 ) -> tuple[NeighborList, ...]:
     """
@@ -2213,7 +2239,7 @@ def build_neighborlists(
     its wrapped equivalent. The list is built periodic along exactly
     ``structure.periodic``.
 
-    A batched ``structure`` (``numbers`` of shape ``(..., nat)``) gives
+    A batched ``structure`` (``numbers`` of shape ``(batch, nat)``) gives
     one list over its padded atoms, flattened: atom ``i`` of system ``b``
     is index ``b * nat + i`` (see :class:`.NeighborList`). A batch of
     molecules is searched at once, and so is a batch of cells, each with
@@ -2223,7 +2249,7 @@ def build_neighborlists(
     ----------
     structure : Structure
         One system, ``numbers`` of shape ``(nat,)``, or a batch,
-        ``(..., nat)``, with ``0`` marking padding atoms in either. Its
+        ``(batch, nat)``, with ``0`` marking padding atoms in either. Its
         ``positions``, ``lattice`` and ``periodic`` are read.
     cutoffs : tuple[float, ...]
         Real-space cutoffs, one :class:`.NeighborList` returned per
@@ -2235,14 +2261,20 @@ def build_neighborlists(
     capacity : int | None, optional
         Fixed capacity for every returned list. ``None`` (default) rounds
         each list's own pair count up to a multiple of 4096 instead.
-    distance_kernel : DistanceKernelName | None, optional
-        Force the exact-distance filter to use one named kernel
-        (``"triton"``, ``"baddbmm"`` or ``"broadcast"``) instead of the
-        automatic, device/dtype/tile-based choice -- for comparing
-        kernels directly, e.g. in a benchmark. ``None`` (default) is the
-        automatic choice; raises ``ValueError`` if the named kernel is
-        not applicable on this device/dtype rather than silently using
-        a different one. See :func:`._distance_kernels.select_kernel`.
+    distance_kernel : SearchKernelName | None, optional
+        Force the exact-distance filter to use one named kernel instead
+        of the automatic, device/dtype/tile-based choice: one of the
+        pure-Python path (``"triton"``, ``"baddbmm"`` or ``"broadcast"``,
+        see :func:`._distance_kernels.select_kernel`), e.g. to compare
+        kernels in a benchmark, or the native CPU extension
+        (``"native"``), which is then compiled on first use if need be,
+        without ``TAD_MCTC_NATIVE`` (see :mod:`._native`). ``None``
+        (default) is the automatic choice: the native extension if it is
+        requested by the environment or a pre-built module, else the
+        pure-Python path. Raises ``ValueError`` if the named kernel is
+        not applicable on this device/dtype, or the native extension is
+        disabled or does not load, rather than silently using a different
+        one.
     stage : StageHook, optional
         Context manager factory entered around each step of the build,
         labelled ``"tiles"``, ``"tile pairs"``, ``"pair filter"`` and so
@@ -2258,7 +2290,8 @@ def build_neighborlists(
     Raises
     ------
     ValueError
-        A cutoff or ``skin`` is negative; ``tile < 1``; or a batched
+        ``structure`` has more than one batch dimension; a cutoff or
+        ``skin`` is negative; ``tile < 1``; or a batched
         ``structure`` is searched with ``max(cutoffs) + skin == 0``.
     RuntimeError
         ``structure`` is batched by ``torch.func.vmap``. Inside ``jacrev``,
@@ -2271,6 +2304,11 @@ def build_neighborlists(
         when ``f`` has any graph break; use ``grad``, or build outside.
     """
     _check_search_arguments(cutoffs, skin, tile)
+    if structure.numbers.ndim > 2:
+        raise ValueError(
+            "A structure has at most one batch dimension, got `numbers` of "
+            f"shape {tuple(structure.numbers.shape)}."
+        )
     # The largest stored index is the phantom of the padded slots, the
     # flattened (batched) atom count, so one check covers every offset and
     # lookup table of the build.
@@ -2300,7 +2338,7 @@ def build_neighborlist(
     tile: int = 32,
     skin: float = 0.0,
     capacity: int | None = None,
-    distance_kernel: DistanceKernelName | None = None,
+    distance_kernel: SearchKernelName | None = None,
 ) -> NeighborList:
     """
     Build a :class:`.NeighborList` for a single cutoff.
@@ -2323,9 +2361,10 @@ def build_neighborlist(
     capacity : int | None, optional
         Fixed capacity. ``None`` (default) rounds the pair count up to a
         multiple of 4096 instead.
-    distance_kernel : DistanceKernelName | None, optional
-        Force the exact-distance filter to use one named kernel instead
-        of the automatic choice; see :func:`build_neighborlists`.
+    distance_kernel : SearchKernelName | None, optional
+        Force the exact-distance filter to use one named kernel, including
+        the native extension (``"native"``), instead of the automatic
+        choice; see :func:`build_neighborlists`.
     Returns
     -------
     NeighborList

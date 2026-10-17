@@ -497,7 +497,7 @@ def _image_translation(shift: Tensor, cell: Tensor) -> Tensor:
 # Before PyTorch 2.8 they thread it through `gather`, which raises
 # `gather(): Expected dtype int64 for index`. A plain Python constant, read
 # when a consumer runs, so it never becomes part of a traced graph.
-_INT32_INDEX_BACKWARD = __tversion__ >= (2, 8, 0)
+_INT32_INDEX_BACKWARD = __tversion__ >= "2.8.0"
 
 
 # `torch.compile(torch.func.jacrev(f))` returns wrong gradients (every output
@@ -505,7 +505,7 @@ _INT32_INDEX_BACKWARD = __tversion__ >= (2, 8, 0)
 # calls `Tensor.index_select`, on PyTorch 2.5 to 2.13 (2.14 is correct). Plain
 # `torch.compile`, eager `jacrev` and `jacfwd` are fine, and so is `table[idx]`.
 # Read when a consumer runs, like `_INT32_INDEX_BACKWARD`.
-_COMPILED_INDEX_SELECT_JACREV_BUG = __tversion__ < (2, 14, 0)
+_COMPILED_INDEX_SELECT_JACREV_BUG = __tversion__ < "2.14.0"
 
 
 def gather_rows(table: Tensor, index: Tensor) -> Tensor:

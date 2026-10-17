@@ -377,6 +377,11 @@ def test_system_info_lists_charge_and_uhf_of_every_frame(
             ["compiler", "flags", "ninja", "error"],
         ),
         (
+            _native.BuildInfo("off"),
+            ["not requested (set TAD_MCTC_NATIVE=1), pure Python"],
+            ["library", "compiler", "ninja"],
+        ),
+        (
             _native.BuildInfo("disabled"),
             ["disabled by TAD_MCTC_DISABLE_NATIVE, pure Python"],
             ["library", "compiler", "ninja"],
@@ -411,6 +416,7 @@ def test_system_info_lists_charge_and_uhf_of_every_frame(
     ],
     ids=[
         "precompiled",
+        "off",
         "disabled",
         "unavailable",
         "jit-compiled",

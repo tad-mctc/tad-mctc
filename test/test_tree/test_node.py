@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import functools
 import pickle
 
 import pytest
@@ -148,6 +149,37 @@ def test_value_error_mixed_devices() -> None:
 def test_keep_dtype_accepted() -> None:
     obj = _sub(uhf=torch.zeros(1, dtype=torch.float32))
     assert obj.uhf is not None and obj.uhf.dtype == torch.float32
+
+
+def test_value_error_mixed_float_dtypes_in_child_nodes() -> None:
+    """The dtype check spans child nodes, also inside containers."""
+    with pytest.raises(TypeError, match="different dtypes"):
+        Holder(
+            system=_sub(torch.float32),
+            extra={"a": torch.zeros(2, dtype=torch.float64)},
+        )
+
+    class Pair(Node):
+        systems: tuple[Node, ...] = child()
+
+    with pytest.raises(TypeError, match="different dtypes"):
+        Pair(systems=(_sub(torch.float32), _sub(torch.float64)))
+
+
+def test_keep_dtype_in_child_nodes() -> None:
+    """`keep_dtype` exempts fields of child nodes and child nodes in them."""
+    holder = Holder(
+        system=_sub(uhf=torch.zeros(1, dtype=torch.float32)),
+        extra={"a": torch.zeros(2, dtype=torch.float64)},
+    )
+    assert holder.dtype == torch.float64
+
+    class Kept(Node):
+        main: torch.Tensor = child()
+        other: Node = child(keep_dtype=True)
+
+    kept = Kept(main=torch.zeros(1), other=_sub(torch.float64))
+    assert kept.to(dtype=torch.float16).other.dtype == torch.float64
 
 
 def test_static_child_value() -> None:
@@ -425,3 +457,38 @@ def test_value_checks_are_skipped_while_compiling(
         charge=torch.zeros(1, dtype=torch.float32),
     )
     assert obj.charge is not None
+
+
+class _Cached(Node):
+    x: torch.Tensor = child()
+    table: object = context(default=None)
+
+    @functools.cached_property
+    def doubled(self) -> torch.Tensor:
+        return 2 * self.x
+
+
+def test_cached_property_is_not_copied() -> None:
+    """Copies compute a cached value from their own fields."""
+    obj = _Cached(x=torch.ones(2, dtype=torch.float64))
+    assert torch.equal(obj.doubled, torch.full((2,), 2.0, dtype=torch.float64))
+
+    converted = obj.to(dtype=torch.float32)
+    assert "doubled" not in vars(converted)
+    assert converted.doubled.dtype == torch.float32
+
+    replaced = obj.replace(x=torch.zeros(2, dtype=torch.float64))
+    assert torch.equal(replaced.doubled, torch.zeros(2, dtype=torch.float64))
+
+    leaves, spec = pytree.tree_flatten(obj)
+    assert "doubled" not in vars(pytree.tree_unflatten(leaves, spec))
+
+
+def test_identity_context_is_shared_by_copies() -> None:
+    """A context value hashed by identity passes through unchanged."""
+    table = object()
+    obj = _Cached(x=torch.ones(2), table=table)
+    leaves, spec = pytree.tree_flatten(obj)
+    assert pytree.tree_unflatten(leaves, spec).table is table
+    assert obj.to(dtype=torch.float64).table is table
+    assert obj.replace(x=torch.zeros(2)).table is table

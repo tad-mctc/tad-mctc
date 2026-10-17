@@ -22,6 +22,7 @@ Frozen tensor containers that work under ``torch.func`` transforms and
 ``torch.compile``.
 """
 
+from .function import *
 from .module import *
 from .node import *
 from .utils import *

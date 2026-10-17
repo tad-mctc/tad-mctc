@@ -49,11 +49,13 @@ DTYPES: dict[str, torch.dtype] = {
 line."""
 
 _EPILOG = """\
-The native CPU neighbour search compiles with extra flags from the
+The native CPU neighbour search is opt-in: TAD_MCTC_NATIVE=1 compiles it
+on first use, unless the package was installed with
+TAD_MCTC_BUILD_NATIVE=1. It compiles with extra flags from the
 TAD_MCTC_NATIVE_CFLAGS environment variable, e.g.
-TAD_MCTC_NATIVE_CFLAGS=-mavx2 tad_mctc structure.xyz. A build with them
-runs only on CPUs that support them. The "Native extension" section of
-the output lists the flags of the build in use.
+TAD_MCTC_NATIVE=1 TAD_MCTC_NATIVE_CFLAGS=-mavx2 tad_mctc structure.xyz. A
+build with them runs only on CPUs that support them. The "Native
+extension" section of the output lists the flags of the build in use.
 """
 
 

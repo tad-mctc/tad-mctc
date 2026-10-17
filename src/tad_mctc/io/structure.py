@@ -50,6 +50,17 @@ set, the same way stacking a batch of dicts requires the same key set
 in each one. Mixing, say, one structure with `lattice` and one without in
 the same batched call is not supported.
 
+Batches
+-------
+A batch of structures has one leading dimension: ``numbers`` of shape
+``(batch, nat)``, zero-padded to the largest structure (see
+:func:`pack_structures`). There is never more than one batch dimension; the
+constructor rejects more, and so does every function that handles a batch
+itself. Several batch dimensions would only move bookkeeping into each of
+these functions; flatten them into one instead. :func:`tad_mctc.tree.stack`
+and unflattening run no checks, so stacking batched structures assembles one
+with two batch dimensions anyway, but no function accepts it.
+
 Example
 -------
 >>> import torch
@@ -98,28 +109,28 @@ class Structure(Node):
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system, shape ``(..., nat)``.
+        Atomic numbers for all atoms in the system, shape ``([batch,] nat)``.
     positions : Tensor
-        Cartesian coordinates of all atoms, shape ``(..., nat, 3)``.
+        Cartesian coordinates of all atoms, shape ``([batch,] nat, 3)``.
     charge : Tensor | None, optional
         Total charge. Absent (``None``, the default) means neutral,
         mctc-lib's own default.
     uhf : Tensor | None, optional
         Number of unpaired electrons. Absent means closed-shell.
     lattice : Tensor | None, optional
-        Lattice vectors as rows, shape ``(..., 3, 3)``, in Bohr. Absent
+        Lattice vectors as rows, shape ``([batch,] 3, 3)``, in Bohr. Absent
         means a non-periodic structure.
     periodic : Tensor | None, optional
-        Boolean mask, shape ``(3,)`` or the lattice's ``(..., 3)``, marking
+        Boolean mask, shape ``(3,)`` or the lattice's ``(batch, 3)``, marking
         which lattice axes are periodic. Requires ``lattice``. Absent
         alongside a lattice means periodic along every axis, and is filled
         in on construction, as in mctc-lib's ``new_structure``; so a
         structure with a lattice always has a mask.
     bonds : Tensor | None, optional
         Atom-index pairs describing bond connectivity, shape
-        ``(..., nbond, 2)``. Absent means no connectivity information.
+        ``([batch,] nbond, 2)``. Absent means no connectivity information.
     bond_orders : Tensor | None, optional
-        Bond order per entry in ``bonds``, shape ``(..., nbond)``. Only
+        Bond order per entry in ``bonds``, shape ``([batch,] nbond)``. Only
         meaningful alongside ``bonds``.
 
     Raises

@@ -22,7 +22,7 @@ import runpy
 from setuptools import setup
 
 # Building the optional native CPU neighbour-list extension ahead of time
-# (rather than letting it JIT-compile on first use, see
+# (rather than compiling it just-in-time with `TAD_MCTC_NATIVE=1`, see
 # `tad_mctc.neighbor._native`) is opt-in via this environment variable, not
 # a `pip install` extra: `extras_require` only changes which *dependencies*
 # get pulled in, it cannot change what a build step does, and this changes
