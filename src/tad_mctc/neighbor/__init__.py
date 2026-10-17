@@ -36,4 +36,5 @@ from ._distance_kernels import (
 )
 from .images import *
 from .list import *
+from .radii import *
 from .triples import *

@@ -52,8 +52,9 @@ the value checks; ``_validate()``. Unflattening (used by ``vmap``, ``jacrev``,
 
 The value checks verify that context fields hold no tensor or node and are
 hashable, that containers in child fields hold only tensors and nodes, that
-static child values are hashable, that all floating-point tensors in child
-fields share one dtype (except fields declared with ``keep_dtype=True``), and
+static child values are hashable, that all floating-point tensors of the
+object and its child nodes share one dtype (except those in fields declared
+with ``keep_dtype=True``, which also exempts a child node in such a field), and
 that the tensors of the object and its child nodes are all on one device.
 
 ``_validate()`` may read only metadata: types, dtypes, devices, shapes and
@@ -79,12 +80,27 @@ The value checks are skipped inside compiled code (``torch.compile``);
 
 Equality and hashing are by identity (``eq=False``).
 
+Values derived from the fields can be cached with
+``functools.cached_property`` (not annotated, so not a field). Copies made
+by ``.to``, ``replace`` and unflattening do not carry the cache over and
+compute the value again from their own fields, so it never goes stale.
+Static data that should be shared by all copies instead, e.g. a large table
+or a cache that only depends on static values, belongs in a context field:
+context values pass through flattening unchanged. An object without value
+equality (hashed by identity) may be one. ``torch.compile`` then guards on
+its identity, and ``vmap`` and ``stack`` over several objects need the same
+one.
+
+Arguments of custom autograd functions must not hide tensors inside a Node,
+as ``torch.autograd.Function`` loses their gradients; see
+:class:`~tad_mctc.tree.NodeFunction`.
+
 Subclasses must not define ``__init__``, ``__post_init__`` or ``__setattr__``,
 must not use the field names ``to``, ``type``, ``replace``, ``dtype``,
-``device``, ``dd`` or ``_node_leaf_fields``, must not use field names starting with two underscores
-and must not have annotated class attributes that are not fields (except
-``ClassVar``). Violations raise :class:`NodeLayoutError` when the class is
-defined.
+``device``, ``dd`` or ``_node_leaf_fields``, must not use field names
+starting with two underscores and must not have annotated class attributes
+that are not fields (except ``ClassVar``). Violations raise
+:class:`NodeLayoutError` when the class is defined.
 """
 
 from __future__ import annotations
@@ -590,12 +606,7 @@ def _check_values(node: Node) -> None:
         elif not isinstance(value, (Tensor, Node)) and value is not None:
             _require_hashable(cls_name, name, value)
 
-    tensors: list[Tensor] = []
-    for name in node._child_names:
-        if name not in node._keep_dtype_names:
-            _collect(getattr(node, name), Tensor, tensors)
-
-    floating = {t.dtype for t in tensors if t.is_floating_point()}
+    floating = _checked_dtypes(node)
     if len(floating) > 1:
         raise TypeError(
             f"{cls_name}: floating-point tensors have different dtypes "
@@ -614,6 +625,29 @@ def _check_values(node: Node) -> None:
             f"{cls_name}: tensors are on different devices "
             f"{sorted(str(d) for d in devices)}."
         )
+
+
+def _checked_dtypes(node: Node) -> set[torch.dtype]:
+    """
+    Floating-point dtypes under the dtype check: those in the fields not
+    declared with ``keep_dtype=True``, including those of child nodes.
+    """
+    values = [
+        getattr(node, name)
+        for name in node._child_names
+        if name not in node._keep_dtype_names
+    ]
+
+    tensors: list[Tensor] = []
+    _collect(values, Tensor, tensors)
+    dtypes = {t.dtype for t in tensors if t.is_floating_point()}
+
+    nodes: list[Node] = []
+    _collect(values, Node, nodes)
+    for sub in nodes:
+        dtypes |= _checked_dtypes(sub)
+
+    return dtypes
 
 
 def _require_hashable(cls_name: str, name: str, value: Any) -> None:

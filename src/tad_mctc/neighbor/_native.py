@@ -42,40 +42,49 @@ that are stitched together afterwards, the kernel here counts the pairs
 of every candidate tile pair first and then writes them straight into
 the output (see the comment at the top of :file:`_native_pairs.cpp`).
 
-Why it is optional, not a runtime dependency
-----------------------------------------------
-This library has no compiled dependency at runtime, and this module keeps
-that true for anyone who never triggers it: by default, the C++ source is compiled just-in-time, on first use, via
-:func:`torch.utils.cpp_extension.load`, and any failure at all -- no C++
-compiler, no OpenMP support, a build-toolchain quirk, whatever -- is
-caught in :func:`_load` and simply turns native support off;
-:func:`tad_mctc.neighbor.list._atom_pairs_within_thresholds` falls back to
-the pure-Python path. The same path handles positions of a dtype the kernel
-is not compiled for (see :data:`SUPPORTED_DTYPES`). Installing or importing
-``tad_mctc`` never requires a compiler. Set the ``TAD_MCTC_DISABLE_NATIVE``
-environment variable (any non-empty value) to force that fallback even when
-the extension would otherwise load, e.g. to reproduce a result independent
-of whether native support happened to be available.
+Why it is opt-in, not a runtime dependency
+------------------------------------------
+This library has no compiled dependency at runtime, and the neighbour
+search uses the pure-Python path unless the extension is asked for, in one
+of three ways:
 
-That JIT compile happens once per environment, not once per process: the
-first real invocation after a fresh install, a wiped cache, or a new
-container pays a one-off compile-and-link cost (measured at ~13.5s) before
-:func:`torch.utils.cpp_extension.load` finds its own on-disk build cache
-and every subsequent process just loads the cached ``.so``. On a
-long-lived machine that is a one-time tax; on something rebuilt often
-(CI, an ephemeral container image), it recurs. For that case,
-``TAD_MCTC_BUILD_NATIVE=1 pip install --no-build-isolation .`` builds
-``tad_mctc.neighbor._native_pairs_ext`` ahead of time, against the
-installed torch, as a normal compiled extension module installed
-alongside the package, via
-``setup.py``'s ``ext_modules``/``cmdclass`` (gated on that same
-environment variable, so a plain ``pip install .`` still needs no
-compiler). :func:`_load` tries importing that pre-built module first and
-only falls back to the JIT path if it is not there, does not load, or was
-built from another source than the installed one (as after editing
-:file:`_native_pairs.cpp` in an editable install) -- so a
-``TAD_MCTC_BUILD_NATIVE=1`` install never pays the first-run tax at all,
-while the default install needs no compiler and compiles on first use.
+- ``TAD_MCTC_NATIVE=1`` (any non-empty value) at runtime compiles the C++
+  source just-in-time, on first use, via
+  :func:`torch.utils.cpp_extension.load`.
+- ``distance_kernel="native"`` selects it for one neighbour-list build
+  (:func:`tad_mctc.neighbor.build_neighborlist` and the functions built on
+  it), compiling it just-in-time if need be. A caller that selects it gets
+  an error instead of the pure-Python path if it cannot be used.
+- ``TAD_MCTC_BUILD_NATIVE=1 pip install --no-build-isolation .`` builds
+  ``tad_mctc.neighbor._native_pairs_ext`` ahead of time, against the
+  installed torch, as a normal compiled extension module installed
+  alongside the package, via ``setup.py``'s ``ext_modules``/``cmdclass``.
+  Building it is the request, so it is used without ``TAD_MCTC_NATIVE``.
+
+Since the extension was asked for, any failure at all -- no C++ compiler,
+no OpenMP support, a build-toolchain quirk, whatever -- is reported with a
+warning by :func:`_load_with_info`, and native support is off;
+:func:`tad_mctc.neighbor.list._atom_pairs_within_thresholds` falls back to
+the pure-Python path, or raises for an explicit ``distance_kernel="native"``.
+The pure-Python path also handles positions of a dtype the kernel is not
+compiled for (see :data:`SUPPORTED_DTYPES`). Installing or importing
+``tad_mctc`` never requires a compiler. Set the ``TAD_MCTC_DISABLE_NATIVE``
+environment variable (any non-empty value) to force the pure-Python path
+even with a pre-built module installed, e.g. to reproduce a result
+independent of the extension; an explicit ``distance_kernel="native"`` then
+raises.
+
+The JIT compile happens once per environment, not once per process: the
+first run with ``TAD_MCTC_NATIVE`` after a fresh install, a wiped cache, or
+in a new container pays a one-off compile-and-link cost (measured at
+~13.5s) before :func:`torch.utils.cpp_extension.load` finds its own on-disk
+build cache and every subsequent process just loads the cached ``.so``. On
+something rebuilt often (CI, an ephemeral container image), the pre-built
+module avoids that cost. :func:`_load_with_info` tries importing it first.
+If it is not there, does not load, or was built from another source than
+the installed one (as after editing :file:`_native_pairs.cpp` in an
+editable install), the JIT build replaces it with ``TAD_MCTC_NATIVE``, and
+the pure-Python path without.
 
 Whether the JIT build is reused is decided by ``ninja``, the first one on
 ``PATH``. Two ``ninja`` versions with different build-log formats (1.11
@@ -141,8 +150,8 @@ pairs, so this order is observable, not an internal detail:
   threshold therefore lands on the same side in both paths. The Python
   path's automatic CPU kernel, ``"baddbmm"``, computes the distance by
   another formula, so it can disagree with both for a pair within
-  rounding of a threshold; it only runs when the native extension is
-  unavailable.
+  rounding of a threshold; it runs whenever the native extension is not
+  in use, which is the default.
 
 - Global order matches ``torch.nonzero``'s row-major ``(block, row,
   col)`` walk over ``(tile_a, tile_b)``'s candidates, exactly as the
@@ -209,12 +218,14 @@ SUPPORTED_DTYPES = (torch.float32, torch.float64)
 class BuildInfo(NamedTuple):
     """How this process obtained the native extension."""
 
-    origin: Literal["precompiled", "jit", "disabled", "unavailable"]
+    origin: Literal["precompiled", "jit", "off", "disabled", "unavailable"]
     """
     ``"precompiled"``: the ``TAD_MCTC_BUILD_NATIVE=1`` install's module.
     ``"jit"``: compiled from source by :func:`torch.utils.cpp_extension.load`.
+    ``"off"``: not requested, neither by ``TAD_MCTC_NATIVE`` nor by a
+    pre-built module (the default).
     ``"disabled"``: ``TAD_MCTC_DISABLE_NATIVE`` is set.
-    ``"unavailable"``: loading or compiling failed. The last two use the
+    ``"unavailable"``: loading or compiling failed. The last three use the
     pure-Python path.
     """
 
@@ -279,36 +290,65 @@ def _source_digest() -> str | None:
         return None
 
 
-@functools.lru_cache(maxsize=1)
-def _load_with_info() -> tuple[Any | None, BuildInfo]:
+def _jit_requested() -> bool:
+    """Whether ``TAD_MCTC_NATIVE`` asks for the just-in-time build."""
+    return bool(os.environ.get("TAD_MCTC_NATIVE"))
+
+
+def _not_requested(selected: bool = False) -> BuildInfo | None:
     """
-    Load the native extension, once per process.
+    Why the pure-Python path is used without trying to load the extension,
+    or ``None`` if the extension is requested: by ``TAD_MCTC_NATIVE``, by a
+    pre-built module or, with ``selected``, by a caller that selects it
+    explicitly (see the module docstring). ``TAD_MCTC_DISABLE_NATIVE`` wins
+    over all of them. Read on every call, so that the environment variables
+    take effect at any time; only loading is done once.
+    """
+    if os.environ.get("TAD_MCTC_DISABLE_NATIVE"):
+        return BuildInfo("disabled")
+    if (
+        selected
+        or _jit_requested()
+        or importlib.util.find_spec(_PRECOMPILED) is not None
+    ):
+        return None
+    return BuildInfo("off")
+
+
+@functools.lru_cache(maxsize=2)
+def _load_with_info(jit: bool) -> tuple[Any | None, BuildInfo]:
+    """
+    Load the requested native extension, once per process (and value of
+    ``jit``).
 
     Tries the ahead-of-time-compiled ``_native_pairs_ext`` module first
     (present only when the package was installed with
     ``TAD_MCTC_BUILD_NATIVE=1``, see the module docstring) so that install
-    never pays any JIT compile cost; otherwise falls back to compiling the
-    same source just-in-time via :func:`torch.utils.cpp_extension.load`.
-    A pre-built module that is installed but does not import, or that was
+    never pays any JIT compile cost; otherwise, with ``jit``
+    (``TAD_MCTC_NATIVE`` or an explicit selection), compiles the same
+    source just-in-time via :func:`torch.utils.cpp_extension.load`. A
+    pre-built module that is installed but does not import, or that was
     built from another source than the installed one (its
-    ``source_digest``), is replaced by the JIT build as well, with a
-    warning, and :attr:`BuildInfo.error` says why.
+    ``source_digest``), is replaced by the JIT build, or without ``jit`` by
+    the pure-Python path. Both, and a failed JIT build, come with a
+    warning, since the extension was asked for, and
+    :attr:`BuildInfo.error` says why.
 
     Returns the loaded module, or ``None`` on any failure (missing
-    compiler, missing OpenMP, a disabled-by-request environment variable,
-    or any other compile/load error), and how it was obtained. Never
-    raises, since a failure here must always mean "fall back to the
-    pure-Python path", not a crash for a user who has no C++ toolchain at
-    all.
+    compiler, missing OpenMP, or any other compile/load error), and how it
+    was obtained. Never raises: the caller decides whether a failure falls
+    back to the pure-Python path or is an error.
     """
-    if os.environ.get("TAD_MCTC_DISABLE_NATIVE"):
-        return None, BuildInfo("disabled")
-
-    # Without a pre-built module, the JIT build is the ordinary way. A
-    # pre-built module that does not load, such as one built with `icpx`
+    # A pre-built module that does not load, such as one built with `icpx`
     # whose runtime libraries are not on the library path, is reported, and
     # so is one built from another source, such as that of an editable
     # install before the source was edited.
+    fallback = (
+        "it is compiled just-in-time instead"
+        if jit
+        else "the pure-Python path is used instead"
+    )
+    module: Any  # the pre-built or the just-in-time compiled extension
     precompiled_error = None
     if importlib.util.find_spec(_PRECOMPILED) is not None:
         try:
@@ -317,7 +357,7 @@ def _load_with_info() -> tuple[Any | None, BuildInfo]:
             precompiled_error = f"pre-built module: {_error_summary(error)}"
             warnings.warn(
                 f"The pre-built native neighbour search did not load, so "
-                f"it is compiled just-in-time instead:\n{error}",
+                f"{fallback}:\n{error}",
                 stacklevel=2,
             )
         else:
@@ -334,11 +374,13 @@ def _load_with_info() -> tuple[Any | None, BuildInfo]:
             warnings.warn(
                 f"The pre-built native neighbour search "
                 f"({module.__file__}) was built from another "
-                f"{_SOURCE_NAME} than the installed one, so it is compiled "
-                f"just-in-time instead. Reinstall with "
-                f"TAD_MCTC_BUILD_NATIVE=1 to update it.",
+                f"{_SOURCE_NAME} than the installed one, so {fallback}. "
+                f"Reinstall with TAD_MCTC_BUILD_NATIVE=1 to update it.",
                 stacklevel=2,
             )
+
+    if not jit:
+        return None, BuildInfo("unavailable", error=precompiled_error)
 
     compiler = _with_version(_compiler() or shutil.which("c++"))
     ninja = _with_version(shutil.which("ninja"))
@@ -349,7 +391,7 @@ def _load_with_info() -> tuple[Any | None, BuildInfo]:
 
         started = time.time()
         with _without_wrong_compiler_warning():
-            module: Any = load(
+            module = load(
                 name=_jit_name(compiler, ninja, cflags),
                 sources=[_SOURCE],
                 extra_cflags=list(cflags),
@@ -357,16 +399,16 @@ def _load_with_info() -> tuple[Any | None, BuildInfo]:
                 verbose=False,
             )
     except Exception as error:
-        # Without added flags, a failure is the ordinary case of a machine
-        # without a C++ toolchain. With them, it is most likely a flag the
-        # compiler rejects, which the user should hear about.
-        if extra:
-            warnings.warn(
-                f"The native neighbour search did not build with "
-                f"TAD_MCTC_NATIVE_CFLAGS={' '.join(extra)!r}, so the "
-                f"pure-Python path is used instead:\n{error}",
-                stacklevel=2,
-            )
+        # The build was asked for, so its failure is reported. With added
+        # flags, it is most likely a flag the compiler rejects.
+        flags = (
+            f" with TAD_MCTC_NATIVE_CFLAGS={' '.join(extra)!r}" if extra else ""
+        )
+        warnings.warn(
+            f"The native neighbour search did not build{flags}, so the "
+            f"pure-Python path is used instead:\n{error}",
+            stacklevel=2,
+        )
         return None, BuildInfo(
             "unavailable", cflags=cflags, error=_error_summary(error)
         )
@@ -444,21 +486,31 @@ def _with_version(program: str | None) -> str | None:
     return f"{program} ({lines[0]})" if lines else program
 
 
-def _load() -> Any | None:
-    """The native extension, or ``None`` (see :func:`_load_with_info`)."""
-    module, _ = _load_with_info()
+def _load(selected: bool = False) -> Any | None:
+    """The native extension if it is requested (also by ``selected``) and
+    loads, else ``None`` (see :func:`_not_requested` and
+    :func:`_load_with_info`)."""
+    if _not_requested(selected) is not None:
+        return None
+    module, _ = _load_with_info(selected or _jit_requested())
     return module
 
 
 def is_available() -> bool:
-    """Whether the native CPU extension compiled and loaded successfully."""
+    """Whether the native CPU extension is requested and loaded
+    successfully."""
     return _load() is not None
 
 
-def build_info() -> BuildInfo:
-    """How this process obtained the native extension. Loads it (and may
-    compile it) if that has not happened yet."""
-    _, info = _load_with_info()
+def build_info(selected: bool = False) -> BuildInfo:
+    """How this process obtained the native extension, or why it does not
+    use it; with ``selected``, for a caller that selects it explicitly.
+    Loads it (and may compile it) if it is requested and that has not
+    happened yet."""
+    reason = _not_requested(selected)
+    if reason is not None:
+        return reason
+    _, info = _load_with_info(selected or _jit_requested())
     return info
 
 
@@ -472,6 +524,7 @@ def atom_pairs_within_thresholds_native(
     anchor_atoms: Tensor | None = None,
     padding: tuple[int | None, int] | None = None,
     capacity_bucket: int = 1,
+    selected: bool = False,
 ) -> list[tuple[Tensor, Tensor, int]] | None:
     """
     Native (OpenMP, CPU-only) equivalent of the exact-pair filter inside
@@ -481,7 +534,8 @@ def atom_pairs_within_thresholds_native(
     ``tile_a``, ``tile_b``, ``reference_positions``, ``thresholds`` and
     ``anchor_atoms``. ``padding`` is ``(capacity, value)``, as in that
     function's ``_Padding``, and ``capacity_bucket`` is the multiple a
-    ``None`` capacity is rounded up to.
+    ``None`` capacity is rounded up to. ``selected`` requests the extension
+    for a caller that selects it explicitly (see :func:`_not_requested`).
 
     Returns
     -------
@@ -490,10 +544,11 @@ def atom_pairs_within_thresholds_native(
         ``thresholds``: 1D ``torch.int32`` tensors (the stored index
         dtype of :class:`.NeighborList`), padded to their capacity
         when ``padding`` is given, and the number of pairs found -- or
-        ``None`` if the native extension is unavailable (see the module
-        docstring); the caller then falls back to the pure-Python path.
+        ``None`` if the native extension is not requested or did not load
+        (see the module docstring); the caller then falls back to the
+        pure-Python path.
     """
-    module = _load()
+    module = _load(selected)
     if module is None:
         return None
 

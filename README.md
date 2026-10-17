@@ -133,11 +133,14 @@ pip install .
 ```
 
 An optional, OpenMP-parallel C++ extension accelerates the CPU neighbour
-list for very large systems. By default it compiles lazily, on first use
-(no compiler needed just to install); set `TAD_MCTC_BUILD_NATIVE=1` before
-`pip install .` to build it ahead of time instead, so the first real run
-never pays that one-off compile cost. The extension is built against the
-installed torch, so turn off pip's isolated build environment:
+list for very large systems. It is opt-in; by default, the neighbour search
+runs in pure Python and nothing is compiled. Set `TAD_MCTC_NATIVE=1` to
+compile it just-in-time on first use (a C++ compiler with OpenMP is
+needed), or set `TAD_MCTC_BUILD_NATIVE=1` before `pip install .` to build
+it ahead of time instead, so no run pays that one-off compile cost; such an
+install uses the extension without `TAD_MCTC_NATIVE`. The extension is
+built against the installed torch, so turn off pip's isolated build
+environment:
 
 ```sh
 TAD_MCTC_BUILD_NATIVE=1 pip install --no-build-isolation .

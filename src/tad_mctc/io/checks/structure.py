@@ -421,26 +421,26 @@ def structure_check(
     Parameters
     ----------
     numbers : Tensor
-        Atomic numbers for all atoms in the system of shape ``(..., nat)``.
+        Atomic numbers for all atoms in the system of shape ``([batch,] nat)``.
     positions : Tensor
-        Cartesian coordinates of all atoms (shape: ``(..., nat, 3)``).
+        Cartesian coordinates of all atoms (shape: ``([batch,] nat, 3)``).
     charge : Tensor | None, optional
-        Total charge, shape ``(...,)`` or scalar. Not checked if ``None``.
+        Total charge, shape ``(batch,)`` or scalar. Not checked if ``None``.
     uhf : Tensor | None, optional
-        Number of unpaired electrons, shape ``(...,)`` or scalar. Not
+        Number of unpaired electrons, shape ``(batch,)`` or scalar. Not
         checked if ``None``.
     lattice : Tensor | None, optional
-        Lattice vectors as rows, shape ``(..., 3, 3)``. Not checked (the
+        Lattice vectors as rows, shape ``([batch,] 3, 3)``. Not checked (the
         structure is not periodic) if ``None``.
     periodic : Tensor | None, optional
         Boolean mask marking periodic lattice axes, shape ``(3,)`` or the
-        lattice's ``(..., 3)``. Requires ``lattice``. Not checked if
+        lattice's ``(batch, 3)``. Requires ``lattice``. Not checked if
         ``None``.
     bonds : Tensor | None, optional
         Atom-index pairs describing bond connectivity, shape
-        ``(..., nbond, 2)``. Not checked if ``None``.
+        ``([batch,] nbond, 2)``. Not checked if ``None``.
     bond_orders : Tensor | None, optional
-        Bond order per entry in ``bonds``, shape ``(..., nbond)``. Only
+        Bond order per entry in ``bonds``, shape ``([batch,] nbond)``. Only
         meaningful alongside ``bonds`` -- giving one without the other is
         an error, since a bond order without the atom pair it belongs to
         is meaningless.

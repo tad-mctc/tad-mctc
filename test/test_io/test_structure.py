@@ -37,7 +37,9 @@ from torch.utils._pytree import tree_flatten
 
 from tad_mctc.exceptions import DtypeError
 from tad_mctc.io.structure import Structure, pack_structures
+from tad_mctc.neighbor import build_neighborlist
 from tad_mctc.tools.testing import requires_compile
+from tad_mctc.tree import stack
 from tad_mctc.typing import Tensor
 
 from ..utils import (
@@ -129,6 +131,27 @@ def test_construction_runs_structure_check() -> None:
         Structure(
             numbers=numbers, positions=positions, periodic=wrong_dtype_periodic
         )
+
+
+def test_at_most_one_batch_dimension() -> None:
+    """A batch has one leading dimension; the constructor rejects two, and
+    the neighbour search rejects the structure that stacking batches
+    assembles without checks."""
+    numbers, positions = _water()
+    batch = Structure(
+        numbers=numbers.expand(2, -1), positions=positions.expand(2, -1, -1)
+    )
+
+    with pytest.raises(RuntimeError, match="exceed"):
+        Structure(
+            numbers=numbers.expand(2, 2, -1),
+            positions=positions.expand(2, 2, -1, -1),
+        )
+
+    stacked = stack([batch, batch])
+    assert stacked.numbers.shape == (2, 2, 3)
+    with pytest.raises(ValueError, match="at most one batch dimension"):
+        build_neighborlist(stacked, 5.0)
 
 
 ##############################################################################

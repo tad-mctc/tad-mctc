@@ -187,11 +187,11 @@ def _run(args: argparse.Namespace) -> None:
     with timings.stage("read structure"):
         structure = read_structure(args.structure, dtype=DTYPES[args.dtype])
 
-    # A neighbour search on the CPU runs through the native extension, and
-    # so does the optional check on the structure just read, unless it is a
-    # small molecule compared densely. Loading the extension can mean
-    # compiling it, so it is its own step rather than part of whichever
-    # search happens to come first.
+    # A neighbour search on the CPU runs through the native extension if it
+    # is requested, and so does the optional check on the structure just
+    # read, unless it is a small molecule compared densely. Loading the
+    # extension can mean compiling it, so it is its own step rather than
+    # part of whichever search happens to come first.
     checks_with_native = args.coldfusion_check and (
         _coldfusion_uses_neighborlist(structure)
     )

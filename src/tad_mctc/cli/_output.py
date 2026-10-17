@@ -94,6 +94,7 @@ def print_native_build(info: _native.BuildInfo) -> None:
     else:
         origin = {
             "precompiled": "precompiled (TAD_MCTC_BUILD_NATIVE=1 install)",
+            "off": "not requested (set TAD_MCTC_NATIVE=1), pure Python",
             "disabled": "disabled by TAD_MCTC_DISABLE_NATIVE, pure Python",
             "unavailable": "failed to load or compile, pure Python",
         }[info.origin]

@@ -157,7 +157,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers",
-        "native: mark test that require the optional, JIT-compiled "
+        "native: mark test that opt in to the optional, JIT-compiled "
         "native CPU neighbour-list extension (a C++ compiler and "
         "OpenMP).",
     )
@@ -185,12 +185,25 @@ def pytest_runtest_setup(item: pytest.Function) -> None:
                 "(`pip install tad_mctc[triton]`)."
             )
 
-    for _ in item.iter_markers(name="native"):
-        from tad_mctc.neighbor import _native
 
-        if not _native.is_available():
-            pytest.skip(
-                "Native CPU neighbour-list extension did not compile "
-                "(no C++ compiler, no OpenMP, or TAD_MCTC_DISABLE_NATIVE "
-                "is set)."
-            )
+@pytest.fixture(autouse=True)
+def opt_in_to_native(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Tests marked ``native`` opt in to the native CPU neighbour-list
+    extension (``TAD_MCTC_NATIVE``) and are skipped if it does not compile.
+    All other tests run as by default, without it.
+    """
+    if request.node.get_closest_marker("native") is None:
+        return
+
+    from tad_mctc.neighbor import _native
+
+    monkeypatch.setenv("TAD_MCTC_NATIVE", "1")
+    if not _native.is_available():
+        pytest.skip(
+            "Native CPU neighbour-list extension did not compile "
+            "(no C++ compiler, no OpenMP, or TAD_MCTC_DISABLE_NATIVE "
+            "is set)."
+        )

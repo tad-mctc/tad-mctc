@@ -5,5 +5,6 @@
 .. toctree::
 
    node
+   function
    utils
    module

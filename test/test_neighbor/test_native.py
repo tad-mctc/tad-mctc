@@ -37,6 +37,7 @@ from typing import Any
 
 import pytest
 import torch
+import torch.utils.cpp_extension
 
 from tad_mctc.neighbor import _native, _native_flags
 from tad_mctc.neighbor._tiles import Tiles, tile_pairs
@@ -149,6 +150,71 @@ def test_error_summary_prefers_the_compiler_error() -> None:
     )
     assert _native._error_summary(error) == (
         "c++: error: unrecognized command-line option '-mfancy'"
+    )
+
+
+def _must_not_load(*args: Any, **kwargs: Any) -> Any:
+    raise AssertionError("the native extension must not be loaded")
+
+
+def test_the_extension_is_off_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without `TAD_MCTC_NATIVE` and without a pre-built module, nothing is
+    loaded or compiled, and the neighbour search runs in pure Python."""
+    find_spec = importlib.util.find_spec
+
+    def no_precompiled_module(name: str, *args: Any) -> Any:
+        if name == _native._PRECOMPILED:
+            return None
+        return find_spec(name, *args)
+
+    monkeypatch.delenv("TAD_MCTC_NATIVE", raising=False)
+    monkeypatch.delenv("TAD_MCTC_DISABLE_NATIVE", raising=False)
+    monkeypatch.setattr(importlib.util, "find_spec", no_precompiled_module)
+    monkeypatch.setattr(_native, "_load_with_info", _must_not_load)
+
+    assert _native.build_info() == _native.BuildInfo("off")
+    assert not _native.is_available()
+
+    positions = torch.rand(20, 3, dtype=torch.float64) * 5.0
+    neighbors = build_neighborlist(hydrogens(positions), 3.0)
+    assert bool(neighbors.mask.any())
+
+
+def test_a_precompiled_module_that_does_not_load_without_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without `TAD_MCTC_NATIVE`, a pre-built module that does not load is
+    replaced by the pure-Python path, not by a JIT build."""
+    find_spec = importlib.util.find_spec
+    import_module = importlib.import_module
+
+    def find_a_precompiled_module(name: str, *args: Any) -> Any:
+        if name == _native._PRECOMPILED:
+            return object()
+        return find_spec(name, *args)
+
+    def fail_to_load_it(name: str, *args: Any) -> Any:
+        if name == _native._PRECOMPILED:
+            raise ImportError("libiomp5.so: cannot open shared object file")
+        return import_module(name, *args)
+
+    monkeypatch.delenv("TAD_MCTC_NATIVE", raising=False)
+    monkeypatch.delenv("TAD_MCTC_DISABLE_NATIVE", raising=False)
+    monkeypatch.setattr(importlib.util, "find_spec", find_a_precompiled_module)
+    monkeypatch.setattr(importlib, "import_module", fail_to_load_it)
+    monkeypatch.setattr(torch.utils.cpp_extension, "load", _must_not_load)
+    _native._load_with_info.cache_clear()
+    try:
+        with pytest.warns(UserWarning, match="pure-Python path"):
+            info = _native.build_info()
+    finally:
+        _native._load_with_info.cache_clear()
+
+    assert info.origin == "unavailable"
+    assert info.error == (
+        "pre-built module: libiomp5.so: cannot open shared object file"
     )
 
 
@@ -267,7 +333,7 @@ def test_a_precompiled_module_of_the_installed_source_is_used(
     monkeypatch.setattr(importlib, "import_module", load_the_current_module)
     _native._load_with_info.cache_clear()
     try:
-        module, info = _native._load_with_info()
+        module, info = _native._load_with_info(False)
     finally:
         _native._load_with_info.cache_clear()
 
@@ -631,7 +697,7 @@ def test_pair_filter_native_conflicts_with_distance_kernel() -> None:
     tiles = Tiles(positions, tile=8)
     tile_a, tile_b = tile_pairs(tiles, 3.0)
 
-    with pytest.raises(ValueError, match="pair_filter='native'"):
+    with pytest.raises(ValueError, match="explicit distance_kernel"):
         _atom_pairs_within_thresholds(
             tiles,
             tile_a,
@@ -652,7 +718,7 @@ def test_pair_filter_native_not_applicable_off_cpu() -> None:
     tiles = Tiles(positions, tile=8)
     tile_a, tile_b = tile_pairs(tiles, 3.0)
 
-    with pytest.raises(ValueError, match="pair_filter='native'"):
+    with pytest.raises(ValueError, match="not applicable"):
         _atom_pairs_within_thresholds(
             tiles, tile_a, tile_b, positions, (3.0,), pair_filter="native"
         )
@@ -780,7 +846,7 @@ def test_pair_filter_native_without_the_extension_raises(
     tiles = Tiles(positions, tile=8)
     tile_a, tile_b = tile_pairs(tiles, 3.0)
 
-    with pytest.raises(ValueError, match="failed to load"):
+    with pytest.raises(ValueError, match="selected, but it is disabled"):
         _atom_pairs_within_thresholds(
             tiles, tile_a, tile_b, positions, (3.0,), pair_filter="native"
         )
@@ -813,17 +879,17 @@ def _fail_to_compile(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cpp_extension, "load", fail)
 
 
-def test_a_failed_build_is_reported_without_a_warning(
+def test_a_failed_build_is_reported_with_a_warning(
     monkeypatch: pytest.MonkeyPatch, fresh_load: None
 ) -> None:
-    """No toolchain is the ordinary case, so it is quiet: the build info
-    carries the reason."""
+    """The build was asked for, so its failure warns; the build info
+    carries the reason, and the pure-Python path is used."""
+    monkeypatch.setenv("TAD_MCTC_NATIVE", "1")
     monkeypatch.delenv("TAD_MCTC_NATIVE_CFLAGS", raising=False)
     monkeypatch.delenv("TAD_MCTC_DISABLE_NATIVE", raising=False)
     _fail_to_compile(monkeypatch)
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
+    with pytest.warns(UserWarning, match="did not build, so the pure-Python"):
         info = _native.build_info()
 
     assert info.origin == "unavailable"
@@ -831,10 +897,61 @@ def test_a_failed_build_is_reported_without_a_warning(
     assert not _native.is_available()
 
 
+def _structure_and_cutoff() -> tuple[Any, float]:
+    positions = torch.rand(60, 3, dtype=torch.float64) * 8.0
+    return hydrogens(positions), 3.0
+
+
+def test_selecting_the_native_kernel_opts_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`distance_kernel="native"` uses the extension without
+    `TAD_MCTC_NATIVE`, compiling it if need be, with the pairs of the
+    pure-Python path."""
+    monkeypatch.delenv("TAD_MCTC_NATIVE", raising=False)
+    monkeypatch.delenv("TAD_MCTC_DISABLE_NATIVE", raising=False)
+    if _native.build_info(selected=True).origin not in ("jit", "precompiled"):
+        pytest.skip("Native CPU neighbour-list extension did not compile.")
+
+    structure, cutoff = _structure_and_cutoff()
+    native = build_neighborlist(structure, cutoff, distance_kernel="native")
+    python = build_neighborlist(structure, cutoff, distance_kernel="broadcast")
+    assert torch.equal(native.idx_i, python.idx_i)
+    assert torch.equal(native.idx_j, python.idx_j)
+
+
+def test_selecting_the_native_kernel_when_disabled_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`TAD_MCTC_DISABLE_NATIVE` wins over a selection, which then fails
+    instead of using the pure-Python path."""
+    monkeypatch.setenv("TAD_MCTC_DISABLE_NATIVE", "1")
+    structure, cutoff = _structure_and_cutoff()
+    with pytest.raises(ValueError, match="selected, but it is disabled"):
+        build_neighborlist(structure, cutoff, distance_kernel="native")
+
+
+def test_selecting_a_native_kernel_that_does_not_build_raises(
+    monkeypatch: pytest.MonkeyPatch, fresh_load: None
+) -> None:
+    """A selected extension that does not build is an error naming the
+    reason, not a silent fallback."""
+    monkeypatch.delenv("TAD_MCTC_NATIVE", raising=False)
+    monkeypatch.delenv("TAD_MCTC_NATIVE_CFLAGS", raising=False)
+    monkeypatch.delenv("TAD_MCTC_DISABLE_NATIVE", raising=False)
+    _fail_to_compile(monkeypatch)
+    structure, cutoff = _structure_and_cutoff()
+
+    with pytest.warns(UserWarning, match="did not build"):
+        with pytest.raises(ValueError, match="no such compiler"):
+            build_neighborlist(structure, cutoff, distance_kernel="native")
+
+
 def test_a_failed_build_with_added_flags_warns(
     monkeypatch: pytest.MonkeyPatch, fresh_load: None
 ) -> None:
     """With flags the user added, a failure is likely theirs to fix."""
+    monkeypatch.setenv("TAD_MCTC_NATIVE", "1")
     monkeypatch.delenv("TAD_MCTC_DISABLE_NATIVE", raising=False)
     monkeypatch.setenv("TAD_MCTC_NATIVE_CFLAGS", "-mno-such-flag")
     _fail_to_compile(monkeypatch)
