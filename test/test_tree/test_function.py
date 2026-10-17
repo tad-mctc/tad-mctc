@@ -20,11 +20,13 @@ Test `NodeFunction`: custom autograd functions with `Node` arguments.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 import torch
 from torch.func import grad, jacfwd, jacrev, vmap
+from torch.utils import _pytree as pytree
 
 from tad_mctc.tools.testing import requires_compile
 from tad_mctc.tree import Node, NodeFunction, child, context
@@ -123,6 +125,34 @@ class NoJvpProduct(NodeFunction):
     def backward(ctx: Any, g: torch.Tensor) -> Any:
         (pair,) = NodeFunction.saved(ctx)
         return {"x": g * pair.y, "y": g * pair.x}
+
+
+@dataclass(frozen=True)
+class Slot:
+    """A pytree key of its own kind, as other libraries may register"""
+
+    name: str
+
+    def get(self, parent: Any) -> Any:
+        return parent.values[self.name]
+
+
+class Slots:
+    """A container registered with `Slot` keys"""
+
+    def __init__(self, **values: Any) -> None:
+        self.values = values
+
+
+pytree.register_pytree_node(
+    Slots,
+    lambda s: (list(s.values.values()), list(s.values)),
+    lambda children, names: Slots(**dict(zip(names, children))),
+    flatten_with_keys_fn=lambda s: (
+        [(Slot(name), value) for name, value in s.values.items()],
+        list(s.values),
+    ),
+)
 
 
 def _values() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -233,6 +263,68 @@ def test_nested_nodes_and_containers() -> None:
     assert x.grad is not None and w.grad is not None and y.grad is None
     assert torch.allclose(x.grad, w.detach())
     assert torch.allclose(w.grad, x.detach())
+
+
+def test_containers_with_their_own_keys() -> None:
+    """Gradients of a container with its own key type keep its structure."""
+
+    class Weighted(NodeFunction):
+        @staticmethod
+        def forward(slots: Slots) -> torch.Tensor:
+            return (slots.values["a"] * slots.values["b"]).sum()
+
+        @staticmethod
+        def setup_context(
+            ctx: Any, inputs: tuple[Any, ...], output: Any
+        ) -> None:
+            NodeFunction.save(ctx, inputs[0])
+
+        @staticmethod
+        def backward(ctx: Any, g: torch.Tensor) -> Any:
+            (slots,) = NodeFunction.saved(ctx)
+            return Slots(a=g * slots.values["b"], b=None)
+
+    a, b, _ = _values()
+    a = a.clone().requires_grad_()
+    Weighted.apply(Slots(a=a, b=b)).backward()
+    assert a.grad is not None and torch.allclose(a.grad, b)
+
+
+def test_forward_skips_a_leading_context() -> None:
+    """Dynamo may pass the context first (PyTorch 2.14, without gradients)."""
+    x, y, z = _values()
+    leaves, spec = pytree.tree_flatten((_pair(x, y), z))
+    function = Product._function  # pylint: disable=protected-access
+    out = function.forward(None, spec, *leaves)
+    assert torch.allclose(out, _reference(x, y, z))
+
+
+def test_custom_jvp_breaks_the_graph_only_with_gradients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    The check breaks the graph only while compiling and recording gradients
+    of a leaf. Dynamo traces this code without running it, so it is called
+    with compilation faked here.
+    """
+    messages: list[str] = []
+    monkeypatch.setattr(function_module, "is_compiling", lambda: True)
+    monkeypatch.setattr(
+        torch._dynamo,  # pylint: disable=protected-access
+        "graph_break",
+        lambda msg="": messages.append(msg),
+    )
+    x, y, z = _values()
+
+    function_module._check_compiled_jvp(Product, [x, y, z])
+    with torch.no_grad():
+        function_module._check_compiled_jvp(Product, [x.requires_grad_(), y])
+    assert not messages
+
+    function_module._check_compiled_jvp(Product, [x, y, z])
+    assert (
+        len(messages) == 1 and "Product defines a custom `jvp`" in messages[0]
+    )
 
 
 def test_other_arguments_pass_through() -> None:

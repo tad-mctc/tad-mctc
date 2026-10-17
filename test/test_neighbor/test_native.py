@@ -709,6 +709,25 @@ def test_pair_filter_native_conflicts_with_distance_kernel() -> None:
         )
 
 
+def test_native_distance_kernel_conflicts_with_python_pair_filter() -> None:
+    """`distance_kernel="native"` selects the native pair filter, so it
+    cannot be combined with `pair_filter="python"`."""
+    positions = torch.randn(20, 3)
+    tiles = Tiles(positions, tile=8)
+    tile_a, tile_b = tile_pairs(tiles, 3.0)
+
+    with pytest.raises(ValueError, match="pair_filter='python'"):
+        _atom_pairs_within_thresholds(
+            tiles,
+            tile_a,
+            tile_b,
+            positions,
+            (3.0,),
+            distance_kernel="native",
+            pair_filter="python",
+        )
+
+
 @pytest.mark.cuda
 def test_pair_filter_native_not_applicable_off_cpu() -> None:
     """`pair_filter="native"` is CPU-only; requesting it on another device
