@@ -65,6 +65,7 @@ import torch
 
 from ..autograd.unwrap import unwrap_gradtracking
 from ..typing import Tensor
+from ._distance_kernels import pair_distance_squared, split_lattice
 from .list import SearchKernelName, _outside_transforms, build_neighborlist
 
 if TYPE_CHECKING:
@@ -124,36 +125,10 @@ def pairs_within_radii(
     """
     if structure.lattice is not None:
         raise ValueError("Periodic structures are not supported.")
-    if radii.shape != structure.numbers.shape:
-        raise ValueError(
-            f"Expected one radius per atom, shape "
-            f"{tuple(structure.numbers.shape)}, got {tuple(radii.shape)}."
-        )
-
-    radii = unwrap_gradtracking(radii)
-    real_radii = radii[structure.numbers != 0]
-    if not torch.all(torch.isfinite(real_radii) & (real_radii >= 0)):
-        raise ValueError("Radii must be finite and non-negative.")
-
-    # Everything below runs outside the transforms: in older PyTorch (2.7),
-    # operations on plain tensors inside `jacrev` return wrapped ones.
-    with _outside_transforms(structure) as plain:
-        if real_radii.numel() == 0 or real_radii.max() == 0:
-            no_pairs = torch.zeros(0, dtype=torch.long, device=radii.device)
-            return no_pairs, no_pairs
-
-        # no pair is further apart than sqrt(2) times the largest radius
-        cutoff = math.sqrt(2.0) * real_radii.max().item()
-        neighbors = build_neighborlist(
-            plain, cutoff, tile=tile, distance_kernel=distance_kernel
-        )
-        i, j = (idx.long() for idx in neighbors.real_entries()[:2])
-
-        positions = plain.positions.reshape(-1, 3)
-        distance2 = (positions[i] - positions[j]).pow(2).sum(-1)
-        radii2 = radii.reshape(-1) ** 2
-        within = distance2 <= radii2[i] + radii2[j]
-        return i[within], j[within]
+    i, j, _ = _pairs_within_radii(
+        structure, radii, tile=tile, distance_kernel=distance_kernel
+    )
+    return i, j
 
 
 @torch.compiler.disable
@@ -222,6 +197,22 @@ def periodic_pairs_within_radii(
             "The structure is not periodic (no `lattice`); use "
             "`pairs_within_radii`."
         )
+    return _pairs_within_radii(
+        structure, radii, tile=tile, distance_kernel=distance_kernel
+    )
+
+
+def _pairs_within_radii(
+    structure: Structure,
+    radii: Tensor,
+    *,
+    tile: int,
+    distance_kernel: SearchKernelName | None,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """
+    Pairs of atoms within their radii and the image shift of the second
+    atom (zero for a molecule)
+    """
     if radii.shape != structure.numbers.shape:
         raise ValueError(
             f"Expected one radius per atom, shape "
@@ -233,6 +224,8 @@ def periodic_pairs_within_radii(
     if not torch.all(torch.isfinite(real_radii) & (real_radii >= 0)):
         raise ValueError("Radii must be finite and non-negative.")
 
+    # Everything below runs outside the transforms: in older PyTorch (2.7),
+    # operations on plain tensors inside `jacrev` return wrapped ones.
     with _outside_transforms(structure) as plain:
         if real_radii.numel() == 0 or real_radii.max() == 0:
             no_pairs = torch.zeros(0, dtype=torch.long, device=radii.device)
@@ -246,20 +239,18 @@ def periodic_pairs_within_radii(
         neighbors = build_neighborlist(
             plain, cutoff, tile=tile, distance_kernel=distance_kernel
         )
-        idx_i, idx_j, shift = neighbors.real_entries()
-        i, j, shift = idx_i.long(), idx_j.long(), shift.long()
+        i, j, shift = (idx.long() for idx in neighbors.real_entries())
 
-        # the lattice of each pair's structure
-        lattice = plain.lattice
-        assert lattice is not None
-        if lattice.ndim == 3:
-            lattice = lattice[i // plain.numbers.shape[-1]]
-        translation = (shift.to(lattice.dtype).unsqueeze(-2) @ lattice).squeeze(
-            -2
+        shared_lattice, system_lattices = split_lattice(plain.lattice)
+        distance2 = pair_distance_squared(
+            i,
+            j,
+            shift,
+            plain.positions.reshape(-1, 3),
+            shared_lattice=shared_lattice,
+            system_lattices=system_lattices,
+            atoms_per_system=plain.numbers.shape[-1],
         )
-
-        positions = plain.positions.reshape(-1, 3)
-        distance2 = (positions[j] + translation - positions[i]).pow(2).sum(-1)
         radii2 = radii.reshape(-1) ** 2
         within = distance2 <= radii2[i] + radii2[j]
         return i[within], j[within], shift[within]
