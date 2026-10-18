@@ -114,6 +114,7 @@ from . import (
     data,
     exceptions,
     io,
+    kpoints,
     math,
     ncoord,
     neighbor,

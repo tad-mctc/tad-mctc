@@ -13,6 +13,7 @@ The following modules are contained with `tad_mctc`.
    data/index
    exceptions/index
    io/index
+   kpoints/index
    math/index
    ncoord/index
    neighbor/index
