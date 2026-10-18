@@ -34,16 +34,11 @@ from tad_mctc.kpoints import (
     to_cartesian,
     to_fractional,
 )
-from tad_mctc.typing import DD, Tensor
+from tad_mctc.typing import Tensor
 
-from ..conftest import DEVICE
 from ..utils import compile_fullgraph
+from .samples import LATTICE, dd
 
-dd: DD = {"device": DEVICE, "dtype": torch.float64}
-
-LATTICE = torch.tensor(
-    [[5.5, 0.0, 0.0], [1.0, 6.0, 0.0], [0.5, -0.7, 6.5]], **dd
-)
 
 
 def _points(nk: int, seed: int) -> Tensor:
@@ -122,12 +117,13 @@ def test_vmap() -> None:
         return (kpts.weights * kpts.mask * kpts.points.sum(-1)).sum()
 
     result = vmap(masked_sum)(batch)
+    assert batch.weights is not None and batch.mask is not None
     expected = torch.stack(
         [
             masked_sum(KPoints(points=p, weights=w, mask=m))
             for p, w, m in zip(batch.points, batch.weights, batch.mask)
         ]
-    )  # type: ignore[arg-type]
+    )
     assert torch.allclose(result, expected)
 
 

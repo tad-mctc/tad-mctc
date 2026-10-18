@@ -26,16 +26,11 @@ import torch
 from torch.func import jacfwd, jacrev, vmap
 
 from tad_mctc.kpoints import make_kpoints, to_fractional
-from tad_mctc.typing import DD, Tensor
+from tad_mctc.typing import Tensor
 
-from ..conftest import DEVICE
 from ..utils import compile_fullgraph
+from .samples import LATTICE, dd
 
-dd: DD = {"device": DEVICE, "dtype": torch.float64}
-
-LATTICE = torch.tensor(
-    [[5.5, 0.0, 0.0], [1.0, 6.0, 0.0], [0.5, -0.7, 6.5]], **dd
-)
 
 
 @pytest.mark.parametrize("mesh", [(1, 1, 1), (2, 3, 1), (3, 2, 4)])
