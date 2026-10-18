@@ -11,6 +11,7 @@ The following modules are contained with `tad_mctc`.
    batch/index
    convert/index
    data/index
+   ewald/index
    exceptions/index
    io/index
    kpoints/index

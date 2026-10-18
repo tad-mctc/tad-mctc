@@ -38,3 +38,4 @@ from .images import *
 from .list import *
 from .radii import *
 from .triples import *
+from .wignerseitz import *
