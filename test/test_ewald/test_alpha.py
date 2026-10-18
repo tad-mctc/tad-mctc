@@ -30,6 +30,8 @@ from torch.func import vmap
 from tad_mctc.autograd import no_vmap_fallback
 from tad_mctc.data.structures import get_structure
 from tad_mctc.ewald import get_alpha
+from tad_mctc.tools.compile import compile_fullgraph
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
@@ -164,4 +166,16 @@ def test_vmap() -> None:
     )
     with no_vmap_fallback():
         alpha = vmap(get_alpha)(lattices)
+    assert torch.equal(alpha, get_alpha(lattices))
+
+
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
+def test_compile() -> None:
+    """The compiled search takes the same exact steps (a compiled power of
+    two need not be exact, see the ladder in `get_alpha`)."""
+    lattices = torch.stack(
+        [get_structure(*cell, **dd).lattice for cell in CELLS]  # type: ignore[misc]
+    )
+    alpha = compile_fullgraph(get_alpha)(lattices)
     assert torch.equal(alpha, get_alpha(lattices))

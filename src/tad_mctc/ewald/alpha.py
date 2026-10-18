@@ -141,8 +141,13 @@ def get_alpha(lattice: Tensor) -> Tensor:
 
     # The doublings are exact, so all of them are evaluated at once: the
     # `k`-th is `_ALPHA0 * 2**k`, as after `k` steps of the Fortran loop.
-    steps = torch.arange(_DOUBLINGS, dtype=torch.float64, device=lat.device)
-    ladder = _ALPHA0 * 2.0**steps  # (n,)
+    # Python floats, since a compiled `2.0**k` is not exact on all devices.
+    ladder = torch.tensor(
+        [_ALPHA0 * 2.0**k for k in range(_DOUBLINGS)],
+        dtype=torch.float64,
+        device=lat.device,
+    )  # (n,)
+    steps = torch.arange(_DOUBLINGS, device=lat.device)
     diffs = _decline_difference(
         ladder, rlen[..., None], dlen[..., None], volume[..., None]
     )  # (..., n)
@@ -158,10 +163,10 @@ def get_alpha(lattice: Tensor) -> Tensor:
     failed = (lower == 0) | (lower == _DOUBLINGS) | (upper == _DOUBLINGS)
 
     def at(index: Tensor) -> Tensor:
-        # the same exact power of two as `ladder`, without indexing it by
-        # a tensor (not batchable under `vmap`)
-        step = index.clamp(0, _DOUBLINGS - 1).to(torch.float64)
-        return _ALPHA0 * 2.0**step
+        # Selects the entry exactly, without indexing by a tensor, which
+        # is not batchable under `vmap`.
+        hit = steps == index.clamp(0, _DOUBLINGS - 1)[..., None]
+        return torch.where(hit, ladder, 0.0).sum(-1)
 
     alpl = at(lower - 1)
     alpr = at(upper)
