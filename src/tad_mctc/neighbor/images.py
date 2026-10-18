@@ -71,6 +71,7 @@ tensor([2, 2, 2])
 
 from __future__ import annotations
 
+import itertools
 from typing import TYPE_CHECKING
 
 import torch
@@ -661,14 +662,10 @@ def lattice_shifts_mctclib(
             [ 0, -1,  1],
             [ 0, -1, -1]])
     """
-    shifts: list[tuple[int, int, int]] = []
-    for ix in range(rep[0] + 1):
-        for iy in range(rep[1] + 1):
-            for iz in range(rep[2] + 1):
-                if not origin and ix == iy == iz == 0:
-                    continue
-                for jx in (1, -1) if ix > 0 else (1,):
-                    for jy in (1, -1) if iy > 0 else (1,):
-                        for jz in (1, -1) if iz > 0 else (1,):
-                            shifts.append((ix * jx, iy * jy, iz * jz))
+    shifts: list[tuple[int, ...]] = []
+    for n in itertools.product(*(range(r + 1) for r in rep)):
+        if not origin and not any(n):
+            continue
+        for signs in itertools.product(*((1, -1) if k else (1,) for k in n)):
+            shifts.append(tuple(k * sign for k, sign in zip(n, signs)))
     return torch.tensor(shifts, dtype=torch.long, device=device).reshape(-1, 3)

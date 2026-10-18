@@ -39,6 +39,7 @@ from tad_mctc.neighbor import (
 from tad_mctc.typing import DD, Tensor
 
 from ..conftest import DEVICE
+from ..utils import load_batch
 
 dd: DD = {"device": DEVICE, "dtype": torch.float64}
 
@@ -232,19 +233,18 @@ def test_wrap_invariant() -> None:
 
 
 def test_batch() -> None:
-    structures = [get_structure(*cell, **dd) for cell in CELLS[:2]]
-    nat = max(s.positions.shape[0] for s in structures)
-    positions = torch.zeros(len(structures), nat, 3, **dd)
-    for b, s in enumerate(structures):
-        positions[b, : s.positions.shape[0]] = s.positions
-    lattices = torch.stack([s.lattice for s in structures])  # type: ignore[misc]
+    structure = load_batch(CELLS[:2], dd)
+    assert structure.lattice is not None
+    wsc = wignerseitz_cell(
+        structure.positions, structure.lattice, PERIODIC.expand(2, 3)
+    )
 
-    wsc = wignerseitz_cell(positions, lattices, PERIODIC.expand(2, 3))
-    for b, s in enumerate(structures):
-        n = s.positions.shape[0]
-        assert s.lattice is not None
-        single = wignerseitz_cell(s.positions, s.lattice, PERIODIC)
-        assert torch.equal(wsc.weights[b, :n, :n], single.weights)
+    for b, cell in enumerate(CELLS[:2]):
+        single = get_structure(*cell, **dd)
+        assert single.lattice is not None
+        n = single.positions.shape[0]
+        expected = wignerseitz_cell(single.positions, single.lattice, PERIODIC)
+        assert torch.equal(wsc.weights[b, :n, :n], expected.weights)
 
 
 def test_vmap() -> None:

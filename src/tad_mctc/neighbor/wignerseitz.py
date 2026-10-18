@@ -158,7 +158,7 @@ def wignerseitz_cell(
     selected = candidate & (delta <= _TOLERANCE)
 
     # A nearer image than the reference (only at a tie) has weight one.
-    x = torch.where(selected, delta / _TOLERANCE, 0.0).clamp(0.0, 1.0)
+    x = (delta / _TOLERANCE).clamp(min=0.0)
     shape = torch.where(selected, _switch(x), 0.0)
 
     # The reference has weight one, unless the pair has no image at all.

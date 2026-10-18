@@ -42,6 +42,7 @@ tensor(0.2936, dtype=torch.float64)
 from __future__ import annotations
 
 import math
+from typing import Callable
 
 import torch
 
@@ -69,32 +70,30 @@ _FALLBACK = 0.25
 """Splitting parameter if the search fails."""
 
 
-def _real_term(r: Tensor, alpha: Tensor) -> Tensor:
-    """Largest real-space term at distance ``r``"""
-    return torch.erfc(alpha * r) / r
-
-
-def _reciprocal_term(g: Tensor, alpha: Tensor, volume: Tensor) -> Tensor:
-    """Largest reciprocal-space term at reciprocal vector length ``g``"""
-    return (
-        4.0 * math.pi * (torch.exp(-0.25 * g * g / alpha**2) / (volume * g * g))
-    )
-
-
 def _decline_difference(
-    alpha: Tensor, rlen: Tensor, dlen: Tensor, volume: Tensor
-) -> Tensor:
+    rlen: Tensor, dlen: Tensor, volume: Tensor
+) -> Callable[[Tensor], Tensor]:
     """
     Difference of the decline of the reciprocal-space terms (from four to
     five times the shortest reciprocal vector) and the real-space terms
-    (from two to three times the shortest lattice vector). The real-space
-    sum is the shorter one.
+    (from two to three times the shortest lattice vector), as a function of
+    :math:`\\alpha`. The real-space sum is the shorter one.
+
+    The terms that do not depend on :math:`\\alpha` are evaluated once.
     """
-    rec = _reciprocal_term(4 * rlen, alpha, volume) - _reciprocal_term(
-        5 * rlen, alpha, volume
-    )
-    real = _real_term(2 * dlen, alpha) - _real_term(3 * dlen, alpha)
-    return rec - real
+    g4, g5 = 4 * rlen, 5 * rlen
+    exponent4, exponent5 = -0.25 * g4 * g4, -0.25 * g5 * g5
+    norm4, norm5 = volume * g4 * g4, volume * g5 * g5
+    r2, r3 = 2 * dlen, 3 * dlen
+
+    def difference(alpha: Tensor) -> Tensor:
+        alpha2 = alpha**2
+        rec = 4.0 * math.pi * (torch.exp(exponent4 / alpha2) / norm4)
+        rec = rec - 4.0 * math.pi * (torch.exp(exponent5 / alpha2) / norm5)
+        real = torch.erfc(alpha * r2) / r2 - torch.erfc(alpha * r3) / r3
+        return rec - real
+
+    return difference
 
 
 def _first(condition: Tensor) -> Tensor:
@@ -136,8 +135,7 @@ def get_alpha(lattice: Tensor) -> Tensor:
     rlen = reciprocal_lattice(lat).norm(dim=-1).amin(-1)
     dlen = lat.norm(dim=-1).amin(-1)
 
-    def decline_difference(alpha: Tensor) -> Tensor:
-        return _decline_difference(alpha, rlen, dlen, volume)
+    decline_difference = _decline_difference(rlen, dlen, volume)
 
     # The doublings are exact, so all of them are evaluated at once: the
     # `k`-th is `_ALPHA0 * 2**k`, as after `k` steps of the Fortran loop.
@@ -149,8 +147,8 @@ def get_alpha(lattice: Tensor) -> Tensor:
     )  # (n,)
     steps = torch.arange(_DOUBLINGS, device=lat.device)
     diffs = _decline_difference(
-        ladder, rlen[..., None], dlen[..., None], volume[..., None]
-    )  # (..., n)
+        rlen[..., None], dlen[..., None], volume[..., None]
+    )(ladder)  # (..., n)
 
     # First loop: double while the real-space terms decline faster.
     lower = _first(diffs >= -_TOLERANCE)
