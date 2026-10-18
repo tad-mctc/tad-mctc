@@ -42,7 +42,7 @@ tensor(0.2936, dtype=torch.float64)
 from __future__ import annotations
 
 import math
-from typing import Callable
+from collections.abc import Callable
 
 import torch
 
@@ -148,7 +148,9 @@ def get_alpha(lattice: Tensor) -> Tensor:
     steps = torch.arange(_DOUBLINGS, device=lat.device)
     diffs = _decline_difference(
         rlen[..., None], dlen[..., None], volume[..., None]
-    )(ladder)  # (..., n)
+    )(
+        ladder
+    )  # (..., n)
 
     # First loop: double while the real-space terms decline faster.
     lower = _first(diffs >= -_TOLERANCE)
