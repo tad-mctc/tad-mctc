@@ -23,5 +23,5 @@ dependencies:
   - numpy
   - opt_einsum
   - python>=3.10
-  - pytorch>=2.4.0,<3
+  - pytorch>=2.7.0,<3
   - typing_extensions

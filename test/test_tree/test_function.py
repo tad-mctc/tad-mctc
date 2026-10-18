@@ -32,6 +32,7 @@ from tad_mctc.tools.testing import requires_compile
 from tad_mctc.tree import Node, NodeFunction, child, context
 from tad_mctc.tree import function as function_module
 
+from ..conftest import DEVICE
 from ..utils import COMPILE_BACKEND, compile_fullgraph
 
 DTYPE = torch.float64
@@ -158,7 +159,8 @@ pytree.register_pytree_node(
 def _values() -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     gen = torch.Generator().manual_seed(0)
     return tuple(  # type: ignore[return-value]
-        torch.rand(4, dtype=DTYPE, generator=gen) for _ in range(3)
+        torch.rand(4, dtype=DTYPE, generator=gen, device="cpu").to(DEVICE)
+        for _ in range(3)
     )
 
 
@@ -447,9 +449,8 @@ def test_compile_with_backward() -> None:
 
 @requires_compile
 @pytest.mark.skipif(
-    not function_module._explains_compiled_jvp(),
-    reason="this PyTorch version traces custom `jvp` methods, or its "
-    "graph breaks take no explanation",
+    not function_module._COMPILE_FAILS_WITH_CUSTOM_JVP,
+    reason="this PyTorch version traces custom `jvp` methods",
 )
 def test_compile_with_backward_and_jvp_explains() -> None:
     """The PyTorch limitation is reported with an explanation."""

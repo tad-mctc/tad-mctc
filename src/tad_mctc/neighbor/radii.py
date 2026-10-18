@@ -34,7 +34,7 @@ Example
 -------
 >>> import torch
 >>> from tad_mctc.io.structure import Structure
->>> from tad_mctc.neighbor import pairs_within_radii
+>>> from tad_mctc.neighbor import pairs_within_radii, periodic_pairs_within_radii
 >>> structure = Structure(
 ...     numbers=torch.tensor([1, 1, 1]),
 ...     positions=torch.tensor([[0.0, 0, 0], [0, 0, 1.4], [0, 0, 4.0]]),
@@ -42,6 +42,18 @@ Example
 >>> i, j = pairs_within_radii(structure, torch.tensor([1.0, 1.0, 3.0]))
 >>> sorted(sorted(pair) for pair in zip(i.tolist(), j.tolist()))
 [[0, 1], [1, 2]]
+
+In a periodic structure, the pairs are between an atom and the images of the
+others (and of itself), each with its integer image shift:
+
+>>> cell = Structure(
+...     numbers=torch.tensor([1]),
+...     positions=torch.zeros((1, 3)),
+...     lattice=3.0 * torch.eye(3),
+... )
+>>> i, j, shift = periodic_pairs_within_radii(cell, torch.tensor([2.5]))
+>>> sorted(shift.abs().tolist())  # one of the images n and -n each
+[[0, 0, 1], [0, 1, 0], [1, 0, 0]]
 """
 
 from __future__ import annotations
@@ -53,12 +65,13 @@ import torch
 
 from ..autograd.unwrap import unwrap_gradtracking
 from ..typing import Tensor
+from ._distance_kernels import pair_distance_squared, split_lattice
 from .list import SearchKernelName, _outside_transforms, build_neighborlist
 
 if TYPE_CHECKING:
     from ..io.structure import Structure  # circular import at runtime
 
-__all__ = ["pairs_within_radii"]
+__all__ = ["pairs_within_radii", "periodic_pairs_within_radii"]
 
 
 @torch.compiler.disable
@@ -112,6 +125,94 @@ def pairs_within_radii(
     """
     if structure.lattice is not None:
         raise ValueError("Periodic structures are not supported.")
+    i, j, _ = _pairs_within_radii(
+        structure, radii, tile=tile, distance_kernel=distance_kernel
+    )
+    return i, j
+
+
+@torch.compiler.disable
+@torch.no_grad()
+def periodic_pairs_within_radii(
+    structure: Structure,
+    radii: Tensor,
+    *,
+    tile: int = 32,
+    distance_kernel: SearchKernelName | None = None,
+) -> tuple[Tensor, Tensor, Tensor]:
+    r"""
+    Pairs of an atom :math:`i` and a periodic image of an atom :math:`j`
+    within their radii added in quadrature,
+    :math:`|\mathbf{R}_j + \mathbf{n} \mathbf{A} - \mathbf{R}_i|^2 \le
+    r_i^2 + r_j^2`, with the lattice vectors :math:`\mathbf{A}` as rows.
+
+    The periodic counterpart of :func:`pairs_within_radii`, with the same
+    neighbour search (:func:`.build_neighborlist`, at :math:`\sqrt{2}
+    \max r`), along the periodic axes of each structure only. Like the
+    neighbour search, this is construction-side code: the number of pairs
+    depends on the data, it reads the values of the tensors (also inside
+    ``jacrev`` and friends) and carries no gradient.
+
+    As in :class:`.NeighborList`, each pair stands for both directions,
+    :math:`(i, j, \mathbf{n})` and :math:`(j, i, -\mathbf{n})`, and occurs
+    once. This includes the images of an atom itself (:math:`i = j`,
+    :math:`\mathbf{n} \ne 0`): of :math:`\mathbf{n}` and
+    :math:`-\mathbf{n}`, only one occurs. The atom itself
+    (:math:`i = j`, :math:`\mathbf{n} = 0`) does not occur.
+
+    Parameters
+    ----------
+    structure : Structure
+        One periodic structure, ``numbers`` of shape ``(nat,)``, or a
+        batch, ``(batch, nat)``, with ``0`` marking padding atoms.
+    radii : Tensor
+        Radius of every atom, shape of ``numbers``. Ignored for padding.
+    tile : int, optional
+        Maximum atoms per tile of the neighbour search.
+    distance_kernel : SearchKernelName | None, optional
+        Kernel of the neighbour search, e.g. ``"native"`` for the native
+        CPU extension; see :func:`.build_neighborlists`.
+
+    Returns
+    -------
+    tuple[Tensor, Tensor, Tensor]
+        First and second atom of each pair, both ``(npairs,)`` and
+        ``torch.long``, and the integer image shift :math:`\mathbf{n}` of
+        the second atom, ``(npairs, 3)`` and ``torch.long``, in no
+        particular order. The shifts refer to the given positions (not
+        folded into the cell). Atoms of a batch are numbered flattened,
+        ``b * nat + i``, as in :class:`.NeighborList`.
+
+    Raises
+    ------
+    ValueError
+        If the structure is not periodic (has no ``lattice``), ``radii``
+        does not have the shape of ``numbers``, or a radius of a real atom
+        is negative or not finite.
+    RuntimeError
+        If ``structure`` is batched by ``torch.func.vmap``.
+    """
+    if structure.lattice is None:
+        raise ValueError(
+            "The structure is not periodic (no `lattice`); use "
+            "`pairs_within_radii`."
+        )
+    return _pairs_within_radii(
+        structure, radii, tile=tile, distance_kernel=distance_kernel
+    )
+
+
+def _pairs_within_radii(
+    structure: Structure,
+    radii: Tensor,
+    *,
+    tile: int,
+    distance_kernel: SearchKernelName | None,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """
+    Pairs of atoms within their radii and the image shift of the second
+    atom (zero for a molecule)
+    """
     if radii.shape != structure.numbers.shape:
         raise ValueError(
             f"Expected one radius per atom, shape "
@@ -128,17 +229,28 @@ def pairs_within_radii(
     with _outside_transforms(structure) as plain:
         if real_radii.numel() == 0 or real_radii.max() == 0:
             no_pairs = torch.zeros(0, dtype=torch.long, device=radii.device)
-            return no_pairs, no_pairs
+            no_shifts = torch.zeros(
+                (0, 3), dtype=torch.long, device=radii.device
+            )
+            return no_pairs, no_pairs, no_shifts
 
         # no pair is further apart than sqrt(2) times the largest radius
         cutoff = math.sqrt(2.0) * real_radii.max().item()
         neighbors = build_neighborlist(
             plain, cutoff, tile=tile, distance_kernel=distance_kernel
         )
-        i, j = (idx.long() for idx in neighbors.real_entries()[:2])
+        i, j, shift = (idx.long() for idx in neighbors.real_entries())
 
-        positions = plain.positions.reshape(-1, 3)
-        distance2 = (positions[i] - positions[j]).pow(2).sum(-1)
+        shared_lattice, system_lattices = split_lattice(plain.lattice)
+        distance2 = pair_distance_squared(
+            i,
+            j,
+            shift,
+            plain.positions.reshape(-1, 3),
+            shared_lattice=shared_lattice,
+            system_lattices=system_lattices,
+            atoms_per_system=plain.numbers.shape[-1],
+        )
         radii2 = radii.reshape(-1) ** 2
         within = distance2 <= radii2[i] + radii2[j]
-        return i[within], j[within]
+        return i[within], j[within], shift[within]
