@@ -79,6 +79,14 @@ def test_monkhorst_pack() -> None:
     assert torch.allclose(fractional[:, 1:], torch.zeros(4, 2, **dd))
 
 
+def test_wrap_around() -> None:
+    """Wrapped fractions lie in [-1/2, 1/2), in the order of the grid."""
+    kpts = make_kpoints(LATTICE, (4, 1, 1), wrap_around=True)
+    fractional = to_fractional(kpts.points, LATTICE)
+    expected = torch.tensor([0, 1, -2, -1], **dd) / 4
+    assert torch.allclose(fractional[:, 0], expected)
+
+
 def test_low_dimensional() -> None:
     """Non-periodic axes take one point at zero, and nothing else."""
     periodic = torch.tensor([True, False, True])

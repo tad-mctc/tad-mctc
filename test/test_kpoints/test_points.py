@@ -72,8 +72,8 @@ def test_invalid() -> None:
     """Wrong shapes and dtypes are rejected."""
     with pytest.raises(RuntimeError, match="points"):
         KPoints(points=torch.zeros(4, 2, **dd))
-    with pytest.raises(RuntimeError, match="points"):
-        KPoints(points=torch.zeros(3, dtype=torch.long))
+    with pytest.raises(RuntimeError, match="floating-point"):
+        KPoints(points=torch.zeros(4, 3, dtype=torch.long))
     with pytest.raises(RuntimeError, match="weights"):
         KPoints(points=_points(4, seed=2), weights=torch.ones(3, **dd))
     with pytest.raises(RuntimeError, match="mask"):
