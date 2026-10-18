@@ -22,13 +22,21 @@ The nearest periodic image(s) of every pair of atoms, i.e., the images
 inside the Wigner-Seitz cell around the first atom of the pair. A lattice
 sum truncated at a fixed number of cells (as the Ewald sums of
 multicharge and tblite) is centred on these images, so that the
-truncation is the same for every pair. An image on the boundary of the
-Wigner-Seitz cell is as near as another one, and all of them are averaged
-with equal weights.
+truncation is the same for every pair.
 
-Port of ``new_wignerseitz_cell`` of tblite (``src/tblite/wignerseitz.f90``).
-The image search is discrete: the weights are piecewise constant in the
-positions and the lattice and carry no gradient, as in the Fortran code.
+Images that compete for the nearest one are averaged with smooth weights:
+an image whose squared distance exceeds the nearest one by :math:`\\Delta`
+gets the weight :math:`f(\\Delta / \\tau)`, with the C2 switching function
+:math:`f(x) = 1 - 10 x^3 + 15 x^4 - 6 x^5` and :math:`\\tau = 0.3` Bohr²,
+normalised over the images. Images on the boundary of the Wigner-Seitz
+cell have equal weights, and an image enters or leaves with zero weight,
+so the weights are continuous in the positions and the lattice and
+differentiable (autograd gives ``dwdr`` and ``dwdL`` of the Fortran
+code).
+
+Port of ``new_wignerseitz_cell`` and ``get_wignerseitz_weights`` of
+mctc-lib (``src/mctc/wignerseitz.f90``). Unlike mctc-lib, a shift along an
+axis that is not periodic is never an image.
 
 Example
 -------
@@ -61,11 +69,11 @@ __all__ = ["WignerSeitzCell", "wignerseitz_cell"]
 
 _THRESHOLD = math.sqrt(torch.finfo(torch.float64).eps)
 """Squared distance below which an image is the atom itself, and not a
-neighbour (``thr`` of tblite's ``wignerseitz.f90``)."""
+neighbour (``thr`` of mctc-lib's ``wignerseitz.f90``)."""
 
-_TOLERANCE = 0.01
-"""Squared-distance tolerance within which two images are equally near
-(``tol`` of tblite's ``wignerseitz.f90``)."""
+_TOLERANCE = 0.3
+"""Squared-distance interval, in Bohr², over which the weight of a
+competing image goes to zero (``tol`` of mctc-lib's ``wignerseitz.f90``)."""
 
 
 class WignerSeitzCell(NamedTuple):
@@ -76,17 +84,22 @@ class WignerSeitzCell(NamedTuple):
     in the order of :func:`.lattice_shifts_mctclib`."""
 
     weights: Tensor
-    """Weight of each shift for pair ``(i, j)``, shape
-    ``(..., nat, nat, 27)``: ``1 / n`` for each of the ``n`` nearest
-    images ``x_j - x_i + shift @ lattice``, zero for the others."""
+    """Weight of each shift for pair ``(i, j)``, i.e., of the image
+    ``x_j - x_i + shift @ lattice``, shape ``(..., nat, nat, 27)``. The
+    weights of a pair sum to one."""
 
 
-@torch.no_grad()
+def _switch(x: Tensor) -> Tensor:
+    """C2 switching function from one at ``x = 0`` to zero at ``x = 1``"""
+    return 1.0 - x**3 * (10.0 - 15.0 * x + 6.0 * x * x)
+
+
 def wignerseitz_cell(
     positions: Tensor, lattice: Tensor, periodic: Tensor
 ) -> WignerSeitzCell:
     """
-    Find the nearest periodic images of every pair of atoms.
+    Find the nearest periodic images of every pair of atoms and weight
+    them.
 
     The images are searched among the cell and its neighbouring cells,
     shifts ``-1`` to ``1`` along every axis, so ``positions`` should lie
@@ -94,6 +107,11 @@ def wignerseitz_cell(
     :func:`~tad_mctc.neighbor.images.wrap_to_central_cell`). An atom is not
     its own neighbour, but its images at a non-zero shift are. A shift
     along an axis that is not periodic is never an image.
+
+    The weights are differentiable in ``positions`` and ``lattice``. The
+    squared distances are measured from the first nearest image in the
+    order of ``shifts``, as in mctc-lib, which also fixes the derivative
+    where two images are exactly equally near.
 
     Padding atoms are treated as any other atom, the consumer masks their
     pairs.
@@ -130,11 +148,20 @@ def wignerseitz_cell(
     exists = ~open_axis.any(-1)[..., None, None, :]  # (..., 1, 1, 27)
 
     candidate = exists & (distance_squared >= _THRESHOLD)
-    nearest = torch.where(candidate, distance_squared, math.inf).amin(
-        -1, keepdim=True
-    )
-    selected = candidate & (distance_squared - nearest <= _TOLERANCE)
 
-    count = selected.sum(-1, keepdim=True).clamp(min=1)
-    weights = selected.to(positions.dtype) / count
+    # The first nearest image is the reference, `tridx(1)` in Fortran.
+    masked = torch.where(candidate, distance_squared, math.inf)
+    nearest = masked.argmin(-1, keepdim=True)
+    reference = torch.take_along_dim(distance_squared, nearest, dim=-1)
+
+    delta = distance_squared - reference
+    selected = candidate & (delta <= _TOLERANCE)
+
+    # A nearer image than the reference (only at a tie) has weight one.
+    x = torch.where(selected, delta / _TOLERANCE, 0.0).clamp(0.0, 1.0)
+    shape = torch.where(selected, _switch(x), 0.0)
+
+    # The reference has weight one, unless the pair has no image at all.
+    total = shape.sum(-1, keepdim=True)
+    weights = shape / torch.where(total > 0, total, 1.0)
     return WignerSeitzCell(shifts=shifts, weights=weights)

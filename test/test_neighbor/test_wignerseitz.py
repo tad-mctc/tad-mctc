@@ -15,20 +15,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Test the Wigner-Seitz cell against a line-by-line port of tblite's
-`get_pairs` (`wignerseitz.f90`), and the mctc-lib order of the lattice
-shifts.
+Test the Wigner-Seitz cell against a line-by-line port of mctc-lib's
+`get_pairs` and `get_wignerseitz_weights` (`wignerseitz.f90`), weights and
+derivatives, and the mctc-lib order of the lattice shifts.
 """
 
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 import pytest
 import torch
 from torch.func import vmap
 
-from tad_mctc.autograd import no_vmap_fallback
+from tad_mctc.autograd import dgradcheck, dgradgradcheck, no_vmap_fallback
 from tad_mctc.data.structures import get_structure
 from tad_mctc.neighbor import (
     lattice_shifts_mctclib,
@@ -44,6 +45,9 @@ dd: DD = {"device": DEVICE, "dtype": torch.float64}
 CELLS = [("x23", "CO2"), ("x23", "formamide"), ("ice10", "vi")]
 
 PERIODIC = torch.tensor([True, True, True], device=DEVICE)
+
+THR = math.sqrt(torch.finfo(torch.float64).eps)
+TOL = 0.3
 
 
 def _fortran_order(rep: tuple[int, int, int], origin: bool) -> list[list[int]]:
@@ -61,27 +65,79 @@ def _fortran_order(rep: tuple[int, int, int], origin: bool) -> list[list[int]]:
     return out
 
 
-def _fortran_weights(positions: Tensor, lattice: Tensor) -> Tensor:
-    """`new_wignerseitz_cell` of tblite, with Python loops"""
-    thr = math.sqrt(torch.finfo(torch.float64).eps)
-    tol = 0.01
+def _fortran_pairs(rij: Tensor, trans: Tensor) -> list[int]:
+    """`get_pairs` of mctc-lib: the nearest image first, then the images
+    within `tol` of it by distance"""
+    dist, index = [], []
+    for itr in range(len(trans)):
+        r2 = ((rij - trans[itr]) ** 2).sum().item()
+        if r2 < THR:
+            continue
+        dist.append(r2)
+        index.append(itr)
+    if not dist:
+        return []
+    order = sorted(range(len(dist)), key=lambda k: dist[k])  # stable
+    return [index[k] for k in order if dist[k] - dist[order[0]] <= TOL]
+
+
+def _switch(x: float) -> float:
+    return max(0.0, 1.0 - 10.0 * x**3 + 15.0 * x**4 - 6.0 * x**5)
+
+
+def _switch_derivative(x: float) -> float:
+    return -30.0 * x * x * (1.0 - x) ** 2 / TOL
+
+
+def _fortran_weights(
+    rij: Tensor, trans: Tensor, list_: list[int]
+) -> tuple[list[float], list[Tensor]]:
+    """`get_wignerseitz_weights` of mctc-lib: weights and `dwdr`"""
+    refvec = rij - trans[list_[0]]
+    shapes, dshapes, ddeltas = [], [], []
+    for idx in list_:
+        vec = rij - trans[idx]
+        delta = max(0.0, (vec @ vec - refvec @ refvec).item())
+        x = min(1.0, delta / TOL)
+        shapes.append(_switch(x))
+        dshapes.append(_switch_derivative(x))
+        ddeltas.append(2.0 * (vec - refvec))
+    total = sum(shapes)
+    weights = [w / total for w in shapes]
+    sum_dr = sum(d * dd for d, dd in zip(dshapes, ddeltas))
+    dwdr = [
+        (d * dd - w * sum_dr) / total
+        for d, dd, w in zip(dshapes, ddeltas, weights)
+    ]
+    return weights, dwdr
+
+
+def _fortran_cell(positions: Tensor, lattice: Tensor) -> Tensor:
+    """`new_wignerseitz_cell` and `get_wignerseitz_weights` of mctc-lib,
+    with Python loops"""
     trans = torch.tensor(_fortran_order((1, 1, 1), True), **dd) @ lattice
     nat = positions.shape[0]
     weights = torch.zeros(nat, nat, len(trans), **dd)
     for i in range(nat):
         for j in range(nat):
             rij = positions[i] - positions[j]
-            dist, index = [], []
-            for itr in range(len(trans)):
-                r2 = ((rij - trans[itr]) ** 2).sum().item()
-                if r2 < thr:
-                    continue
-                dist.append(r2)
-                index.append(itr)
-            nearest = min(dist)
-            images = [k for d, k in zip(dist, index) if d - nearest <= tol]
-            weights[i, j, images] = 1.0 / len(images)
+            list_ = _fortran_pairs(rij, trans)
+            w, _ = _fortran_weights(rij, trans, list_)
+            weights[i, j, list_] = torch.tensor(w, **dd)
     return weights
+
+
+def _near_tie() -> tuple[Tensor, Tensor]:
+    """A cubic cell with an atom just off the face of the Wigner-Seitz
+    cell of another, so that two images compete within `TOL`, and a third
+    atom in general position"""
+    lattice = torch.tensor(
+        [[4.0, 0.0, 0.0], [0.1, 4.2, 0.0], [0.0, -0.2, 4.4]], **dd
+    )
+    positions = torch.tensor(
+        [[0.0, 0.0, 0.0], [2.03, 0.02, -0.01], [0.7, 2.06, 1.3]], **dd
+    )
+    return positions, lattice
 
 
 @pytest.mark.parametrize("rep", [(1, 1, 1), (2, 2, 2), (0, 1, 2)])
@@ -103,8 +159,8 @@ def test_matches_fortran(cell: tuple[str, str]) -> None:
     wsc = wignerseitz_cell(structure.positions, structure.lattice, PERIODIC)
 
     assert wsc.shifts.tolist() == _fortran_order((1, 1, 1), True)
-    ref = _fortran_weights(structure.positions, structure.lattice)
-    assert torch.equal(wsc.weights, ref)
+    ref = _fortran_cell(structure.positions, structure.lattice)
+    assert torch.allclose(wsc.weights, ref, atol=1e-12, rtol=0)
     assert torch.allclose(wsc.weights.sum(-1), torch.ones_like(ref[..., 0]))
 
 
@@ -207,9 +263,64 @@ def test_vmap() -> None:
     assert torch.equal(batched, torch.stack([weights(p) for p in batch]))
 
 
-def test_no_gradient() -> None:
-    structure = get_structure("x23", "CO2", **dd)
-    assert structure.lattice is not None
-    positions = structure.positions.clone().requires_grad_(True)
-    wsc = wignerseitz_cell(positions, structure.lattice, PERIODIC)
-    assert not wsc.weights.requires_grad
+def test_near_tie() -> None:
+    """Competing images get smooth weights, as in mctc-lib."""
+    positions, lattice = _near_tie()
+    wsc = wignerseitz_cell(positions, lattice, PERIODIC)
+
+    ref = _fortran_cell(positions, lattice)
+    assert torch.allclose(wsc.weights, ref, atol=1e-12, rtol=0)
+
+    # two images of atom 1 compete, neither at full weight
+    pair = wsc.weights[0, 1][wsc.weights[0, 1] > 0]
+    assert len(pair) == 2 and (pair < 1.0).all()
+
+
+def test_derivative_matches_fortran() -> None:
+    """Autograd gives `dwdr` of mctc-lib, also where the reference image
+    matters."""
+    positions, lattice = _near_tie()
+    trans = torch.tensor(_fortran_order((1, 1, 1), True), **dd) @ lattice
+    nat = positions.shape[0]
+
+    def weights(x: Tensor) -> Tensor:
+        return wignerseitz_cell(x, lattice, PERIODIC).weights
+
+    # (nat, nat, 27, nat, 3)
+    jac = torch.autograd.functional.jacobian(weights, positions)
+
+    for i in range(nat):
+        for j in range(nat):
+            if i == j:
+                continue
+            rij = positions[i] - positions[j]
+            list_ = _fortran_pairs(rij, trans)
+            _, dwdr = _fortran_weights(rij, trans, list_)
+            for idx, d in zip(list_, dwdr):
+                # `rij = x_i - x_j`
+                assert torch.allclose(jac[i, j, idx, i], d, atol=1e-12)
+                assert torch.allclose(jac[i, j, idx, j], -d, atol=1e-12)
+
+
+def test_continuous() -> None:
+    """Crossing the face of the Wigner-Seitz cell changes the weights
+    smoothly."""
+    lattice = 4.0 * torch.eye(3, **dd)
+    weights = []
+    for x in (2.0 - 1e-7, 2.0 + 1e-7):
+        positions = torch.tensor([[0.0, 0.0, 0.0], [x, 0.3, 0.0]], **dd)
+        weights.append(wignerseitz_cell(positions, lattice, PERIODIC).weights)
+    assert torch.allclose(weights[0], weights[1], atol=1e-6)
+
+
+@pytest.mark.parametrize("check", [dgradcheck, dgradgradcheck])
+@pytest.mark.parametrize("wrt", ["positions", "lattice"])
+def test_gradcheck(check: Callable[..., bool], wrt: str) -> None:
+    positions, lattice = _near_tie()
+    inputs = {"positions": positions, "lattice": lattice}
+    value = inputs.pop(wrt).clone().requires_grad_(True)
+
+    def func(x: Tensor) -> Tensor:
+        return wignerseitz_cell(**{wrt: x}, **inputs, periodic=PERIODIC).weights
+
+    assert check(func, value)
