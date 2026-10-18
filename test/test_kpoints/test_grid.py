@@ -32,7 +32,6 @@ from ..utils import compile_fullgraph
 from .samples import LATTICE, dd
 
 
-
 @pytest.mark.parametrize("mesh", [(1, 1, 1), (2, 3, 1), (3, 2, 4)])
 @pytest.mark.parametrize("with_gamma_point", [True, False])
 @pytest.mark.parametrize("wrap_around", [False, True])
@@ -67,7 +66,6 @@ def test_pyscf(
         scaled_center=scaled_center,
     )
     assert torch.allclose(kpts.points.cpu(), torch.from_numpy(ref), atol=1e-12)
-    assert kpts.weights is not None
     nk = mesh[0] * mesh[1] * mesh[2]
     assert torch.allclose(kpts.weights, torch.full((nk,), 1 / nk, **dd))
 
@@ -97,6 +95,16 @@ def test_low_dimensional() -> None:
             periodic=[True, False, True],
             scaled_center=(0.0, 0.5, 0.0),
         )
+
+
+def test_low_dimensional_batch() -> None:
+    """In a batch, an axis is non-periodic if it is in any structure."""
+    lattice = torch.stack([LATTICE, 1.1 * LATTICE])
+    periodic = torch.tensor([[True, True, True], [True, True, False]])
+    kpts = make_kpoints(lattice, (2, 3, 1), periodic=periodic)
+    assert kpts.points.shape == (2, 6, 3)
+    with pytest.raises(ValueError, match="Axis 2 is not periodic"):
+        make_kpoints(lattice, (1, 1, 2), periodic=periodic)
 
 
 def test_invalid() -> None:

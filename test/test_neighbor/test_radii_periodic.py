@@ -96,13 +96,19 @@ def _cell(
 ) -> tuple[Structure, Tensor]:
     """Random atoms in (and somewhat outside) a cell, random radii"""
     gen = torch.Generator().manual_seed(seed)
-    fractional = 1.4 * torch.rand(nat, 3, generator=gen, dtype=torch.float64)
-    radii = radius * (0.3 + torch.rand(nat, generator=gen, dtype=torch.float64))
+    fractional = 1.4 * torch.rand(
+        nat, 3, generator=gen, dtype=torch.float64, device="cpu"
+    )
+    radii = radius * (
+        0.3 + torch.rand(nat, generator=gen, dtype=torch.float64, device="cpu")
+    )
     structure = Structure(
-        numbers=torch.randint(1, 10, (nat,), generator=gen),
-        positions=(fractional - 0.2) @ lattice,
-        lattice=lattice,
-        periodic=None if periodic is None else torch.tensor(periodic),
+        numbers=torch.randint(1, 10, (nat,), generator=gen, device="cpu"),
+        positions=(fractional - 0.2) @ lattice.cpu(),
+        lattice=lattice.cpu(),
+        periodic=(
+            None if periodic is None else torch.tensor(periodic, device="cpu")
+        ),
     ).to(**dd)
     return structure, radii.to(**dd)
 

@@ -5,7 +5,7 @@
     <td>Compatibility:</td>
     <td>
       <img src="https://img.shields.io/badge/Python-3.10%20|%203.11%20|%203.12|%203.13%20|%203.14%20-blue.svg" alt="Python Versions"/>
-      <img src="https://img.shields.io/badge/PyTorch-%3E=2.6.0-blue.svg" alt="PyTorch Versions"/>
+      <img src="https://img.shields.io/badge/PyTorch-%3E=2.7.0-blue.svg" alt="PyTorch Versions"/>
     </td>
   </tr>
   <tr>
@@ -159,7 +159,6 @@ The following dependencies are required
 
 | PyTorch \ Python | 3.10               | 3.11               | 3.12               | 3.13               | 3.14               |
 | ---------------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
-| 2.6.0            | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: | :x:                |
 | 2.7.1            | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: | :x:                |
 | 2.8.0            | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: | :x:                |
 | 2.9.1            | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :white_check_mark: |

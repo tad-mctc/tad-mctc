@@ -35,9 +35,13 @@ dd: DD = {"device": DEVICE, "dtype": torch.float64}
 def _molecule(nat: int, seed: int) -> tuple[Structure, Tensor]:
     """Random atoms in a box and random radii between 0.5 and 3"""
     gen = torch.Generator().manual_seed(seed)
-    positions = 12.0 * torch.rand(nat, 3, generator=gen, dtype=torch.float64)
-    radii = 0.5 + 2.5 * torch.rand(nat, generator=gen, dtype=torch.float64)
-    numbers = torch.randint(1, 10, (nat,), generator=gen)
+    positions = 12.0 * torch.rand(
+        nat, 3, generator=gen, dtype=torch.float64, device="cpu"
+    )
+    radii = 0.5 + 2.5 * torch.rand(
+        nat, generator=gen, dtype=torch.float64, device="cpu"
+    )
+    numbers = torch.randint(1, 10, (nat,), generator=gen, device="cpu")
     structure = Structure(numbers=numbers, positions=positions).to(**dd)
     return structure, radii.to(**dd)
 

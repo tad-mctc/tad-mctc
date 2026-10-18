@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from typing import cast
 
 import torch
 
@@ -69,9 +70,9 @@ class KPoints(Node):
     A set of k-points of one structure, or one set per structure of a batch.
 
     On construction, absent ``weights`` are filled in as uniform weights
-    ``1/nk``, as in PySCF, and an absent ``mask`` as all ``True``. A
-    ``weights`` tensor with another floating-point dtype than ``points`` is
-    cast to the dtype of ``points``.
+    ``1/nk``, as in PySCF, and an absent ``mask`` as all ``True``, so both
+    are always tensors afterwards. A ``weights`` tensor with another
+    floating-point dtype than ``points`` is cast to the dtype of ``points``.
 
     Parameters
     ----------
@@ -92,24 +93,23 @@ class KPoints(Node):
     """
 
     points: Tensor = child()
-    weights: Tensor | None = child(default=None)
-    mask: Tensor | None = child(default=None)
+    # `None` (absent) only until `_normalize` fills them in
+    weights: Tensor = child(default=None)
+    mask: Tensor = child(default=None)
 
     def _normalize(self) -> dict[str, Tensor]:
         updates: dict[str, Tensor] = {}
         shape = self.points.shape[:-1]
         dd: DD = {"device": self.points.device, "dtype": self.points.dtype}
 
-        if self.weights is None:
+        weights = cast("Tensor | None", self.weights)
+        if weights is None:
             nk = max(shape[-1], 1) if len(shape) > 0 else 1
             updates["weights"] = torch.full(shape, 1.0 / nk, **dd)
-        elif (
-            self.weights.is_floating_point()
-            and self.weights.dtype != self.points.dtype
-        ):
-            updates["weights"] = self.weights.to(dtype=self.points.dtype)
+        elif weights.is_floating_point() and weights.dtype != self.points.dtype:
+            updates["weights"] = weights.to(dtype=self.points.dtype)
 
-        if self.mask is None:
+        if cast("Tensor | None", self.mask) is None:
             updates["mask"] = torch.ones(
                 shape, dtype=torch.bool, device=self.points.device
             )
@@ -129,12 +129,12 @@ class KPoints(Node):
         shape = self.points.shape[:-1]
         for name in ("weights", "mask"):
             value = getattr(self, name)
-            if value is not None and value.shape != shape:
+            if value.shape != shape:
                 raise RuntimeError(
                     f"`{name}` must be of shape {tuple(shape)} (one entry "
                     f"per k-point), but shape is {tuple(value.shape)}."
                 )
-        if self.mask is not None and self.mask.dtype != torch.bool:
+        if self.mask.dtype != torch.bool:
             raise RuntimeError(
                 "`mask` must be a `torch.bool` tensor, but dtype is "
                 f"'{self.mask.dtype}'."
@@ -176,15 +176,10 @@ def pack_kpoints(kpoints: Sequence[KPoints]) -> KPoints:
     if any(k.points.ndim != 2 for k in kpoints):
         raise ValueError("Only unbatched k-point sets can be packed.")
 
-    # filled in on construction (see `KPoints`)
-    weights = [k.weights for k in kpoints]
-    masks = [k.mask for k in kpoints]
-    assert all(w is not None for w in weights)
-    assert all(m is not None for m in masks)
     return KPoints(
         points=pack([k.points for k in kpoints]),
-        weights=pack(weights),  # type: ignore[arg-type]
-        mask=pack(masks, value=False),  # type: ignore[arg-type]
+        weights=pack([k.weights for k in kpoints]),
+        mask=pack([k.mask for k in kpoints], value=False),
     )
 
 

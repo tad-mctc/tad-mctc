@@ -81,10 +81,13 @@ def make_kpoints(
     mesh : Sequence[int]
         Number of points along each lattice axis.
     periodic : Sequence[bool] | Tensor | None, optional
-        Which axes are periodic, e.g. ``structure.periodic``. The mesh must
-        have one point along a non-periodic axis, and ``scaled_center`` no
-        component. Its values are read, so pass it only outside transforms
-        and compiled code. Defaults to every axis periodic (no check).
+        Which axes are periodic, e.g. ``structure.periodic``, also of a
+        batch, ``(batch, 3)``. The mesh must have one point along a
+        non-periodic axis, and ``scaled_center`` no component; in a batch,
+        which shares the mesh, along an axis that is not periodic in any one
+        of the structures. Its values are read, so pass it only outside
+        transforms and compiled code. Defaults to every axis periodic (no
+        check).
     with_gamma_point : bool, optional
         Γ-centred grid (``i/n``), or the original Monkhorst-Pack grid
         (``(2i + 1 - n)/(2n)``). Defaults to ``True``, as in PySCF.
@@ -123,7 +126,7 @@ def make_kpoints(
 
     if periodic is not None:
         if isinstance(periodic, Tensor):
-            axes = periodic.reshape(-1, 3).any(0).tolist()
+            axes = periodic.reshape(-1, 3).all(0).tolist()
         else:
             axes = [bool(p) for p in periodic]
         for axis, (n, c, p) in enumerate(zip(mesh, center, axes)):

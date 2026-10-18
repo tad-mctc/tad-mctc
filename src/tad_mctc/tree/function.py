@@ -98,10 +98,6 @@ __all__ = ["NodeFunction"]
 # constant, read when `apply` runs, so it never becomes part of a graph.
 _COMPILE_FAILS_WITH_CUSTOM_JVP = __tversion__ < "2.15.0"
 
-# `torch._dynamo.graph_break` takes the explanation from PyTorch 2.7 on.
-# Before, Dynamo's own graph break ("NYI - User defind jvp") is kept.
-_GRAPH_BREAK_TAKES_MESSAGE = __tversion__ >= "2.7.0"
-
 _TENSOR = object()
 """Placeholder for a saved tensor (see `NodeFunction.save`)."""
 
@@ -141,7 +137,7 @@ class NodeFunction:
             The output of ``forward``.
         """
         leaves, spec = pytree.tree_flatten(args)
-        if _explains_compiled_jvp() and _defines(cls, "jvp"):
+        if _COMPILE_FAILS_WITH_CUSTOM_JVP and _defines(cls, "jvp"):
             _check_compiled_jvp(cls, leaves)
         return cls._function.apply(spec, *leaves)
 
@@ -328,11 +324,6 @@ def _path(path: tuple[Any, ...]) -> tuple[Any, ...]:
         else:
             parts.append(key)
     return tuple(parts)
-
-
-def _explains_compiled_jvp() -> bool:
-    """Whether `apply` explains the graph break of a custom `jvp`"""
-    return _COMPILE_FAILS_WITH_CUSTOM_JVP and _GRAPH_BREAK_TAKES_MESSAGE
 
 
 def _check_compiled_jvp(cls: type[NodeFunction], leaves: list[Any]) -> None:

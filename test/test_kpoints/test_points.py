@@ -40,33 +40,32 @@ from ..utils import compile_fullgraph
 from .samples import LATTICE, dd
 
 
-
 def _points(nk: int, seed: int) -> Tensor:
     gen = torch.Generator().manual_seed(seed)
-    return torch.rand(nk, 3, generator=gen, dtype=torch.float64).to(**dd)
+    return torch.rand(
+        nk, 3, generator=gen, dtype=torch.float64, device="cpu"
+    ).to(**dd)
 
 
 def test_defaults() -> None:
     """Absent weights are uniform, an absent mask is all true."""
     kpts = KPoints(points=_points(4, seed=0))
-    assert kpts.weights is not None and kpts.mask is not None
     assert torch.equal(kpts.weights, torch.full((4,), 0.25, **dd))
     assert kpts.mask.dtype == torch.bool and bool(kpts.mask.all())
     assert kpts.nkpts == 4
 
     batch = KPoints(points=_points(6, seed=0).reshape(2, 3, 3))
-    assert batch.weights is not None
     assert torch.allclose(batch.weights, torch.full((2, 3), 1 / 3, **dd))
 
 
 def test_weights_cast() -> None:
     """Weights take the dtype of the points, also in `.to`."""
     kpts = KPoints(points=_points(2, seed=1), weights=torch.ones(2))
-    assert kpts.weights is not None and kpts.weights.dtype == torch.float64
+    assert kpts.weights.dtype == torch.float64
     single = kpts.type(torch.float32)
     assert single.points.dtype == torch.float32
-    assert single.weights is not None and single.weights.dtype == torch.float32
-    assert single.mask is not None and single.mask.dtype == torch.bool
+    assert single.weights.dtype == torch.float32
+    assert single.mask.dtype == torch.bool
 
 
 def test_invalid() -> None:
@@ -90,7 +89,6 @@ def test_pack() -> None:
     assert batch.points.shape == (2, 5, 3)
     assert torch.equal(batch.points[0, :2], small.points)
     assert torch.equal(batch.points[0, 2:], torch.zeros(3, 3, **dd))
-    assert batch.weights is not None and batch.mask is not None
     assert torch.equal(
         batch.weights[0], torch.tensor([0.5, 0.5, 0, 0, 0], **dd)
     )
@@ -98,7 +96,7 @@ def test_pack() -> None:
     expected = torch.tensor(
         [[1, 1, 0, 0, 0], [1, 1, 1, 1, 1]], dtype=torch.bool
     )
-    assert torch.equal(batch.mask.cpu(), expected)
+    assert torch.equal(batch.mask.cpu(), expected.cpu())
 
     with pytest.raises(ValueError, match="empty"):
         pack_kpoints([])
@@ -113,11 +111,9 @@ def test_vmap() -> None:
     )
 
     def masked_sum(kpts: KPoints) -> Tensor:
-        assert kpts.weights is not None and kpts.mask is not None
         return (kpts.weights * kpts.mask * kpts.points.sum(-1)).sum()
 
     result = vmap(masked_sum)(batch)
-    assert batch.weights is not None and batch.mask is not None
     expected = torch.stack(
         [
             masked_sum(KPoints(points=p, weights=w, mask=m))
