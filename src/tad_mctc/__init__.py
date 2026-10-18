@@ -112,6 +112,7 @@ from . import (
     batch,
     convert,
     data,
+    ewald,
     exceptions,
     io,
     kpoints,

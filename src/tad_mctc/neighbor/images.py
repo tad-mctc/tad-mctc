@@ -71,6 +71,7 @@ tensor([2, 2, 2])
 
 from __future__ import annotations
 
+import itertools
 from typing import TYPE_CHECKING
 
 import torch
@@ -87,6 +88,7 @@ __all__ = [
     "count_image_rings_cp2k",
     "count_image_rings_mctclib",
     "build_periodic_shifts",
+    "lattice_shifts_mctclib",
     "wrap_to_central_cell",
     "PeriodicShifts",
 ]
@@ -611,3 +613,59 @@ def build_periodic_shifts(
         periodic_axes=periodic_axes,
         cutoff=cutoff,
     )
+
+
+def lattice_shifts_mctclib(
+    rep: tuple[int, int, int],
+    *,
+    origin: bool = True,
+    device: torch.device | None = None,
+) -> Tensor:
+    """
+    Every integer lattice shift from ``-rep`` to ``rep`` per axis, in the
+    order of mctc-lib's ``get_lattice_points(lat, rep, origin, trans)``
+    (``src/mctc/cutoff.f90``).
+
+    The order is: the absolute values ``(|n1|, |n2|, |n3|)`` in row-major
+    order (the first axis varies slowest), and for each the positive before
+    the negative sign of every non-zero component. The zero shift, if
+    included, comes first. A lattice sum does not depend on the order, but
+    a port that indexes the translations of the Fortran code by position
+    does (see :func:`~tad_mctc.neighbor.wignerseitz.wignerseitz_cell`).
+
+    Parameters
+    ----------
+    rep : tuple[int, int, int]
+        Number of shifts along each lattice axis in each direction.
+    origin : bool, optional
+        Include the zero shift. Defaults to ``True``.
+    device : torch.device | None, optional
+        Device of the returned tensor. Defaults to ``None``.
+
+    Returns
+    -------
+    Tensor
+        Integer shifts, shape ``(prod(2 * rep + 1), 3)`` (one less without
+        the origin), ``torch.long``.
+
+    Example
+    -------
+    >>> from tad_mctc.neighbor.images import lattice_shifts_mctclib
+    >>> lattice_shifts_mctclib((0, 1, 1))
+    tensor([[ 0,  0,  0],
+            [ 0,  0,  1],
+            [ 0,  0, -1],
+            [ 0,  1,  0],
+            [ 0, -1,  0],
+            [ 0,  1,  1],
+            [ 0,  1, -1],
+            [ 0, -1,  1],
+            [ 0, -1, -1]])
+    """
+    shifts: list[tuple[int, ...]] = []
+    for n in itertools.product(*(range(r + 1) for r in rep)):
+        if not origin and not any(n):
+            continue
+        for signs in itertools.product(*((1, -1) if k else (1,) for k in n)):
+            shifts.append(tuple(k * sign for k, sign in zip(n, signs)))
+    return torch.tensor(shifts, dtype=torch.long, device=device).reshape(-1, 3)
