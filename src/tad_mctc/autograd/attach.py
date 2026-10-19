@@ -158,7 +158,7 @@ def attach_gradient(
             f"The gradient (shape {tuple(gradient.shape)}) must have the "
             f"shape of the input (shape {tuple(x.shape)})."
         )
-    if is_compiling():
+    if is_compiling():  # pragma: no cover - Dynamo-traced
         # Dynamo drops the derivatives of Function inputs that are graph
         # inputs themselves (see `tad_mctc.storch.linsolve`); a view avoids it.
         return _AttachGradientReverse.apply(

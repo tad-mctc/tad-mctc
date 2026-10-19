@@ -344,3 +344,19 @@ def test_compile_forward_mode_raises() -> None:
         Exception, match="Forward-mode derivatives|NotImplementedError"
     ):
         compiled(t, a0[0], c[0], m[0])
+
+
+@pytest.mark.parametrize("method", ["lu", "cholesky"])
+def test_rhs_only_derivatives(method) -> None:
+    """Derivatives with respect to the right-hand side alone."""
+    a0, _, m = _system(symmetric=True)
+    a, b = a0[0], m[0]
+    inv = torch.linalg.inv(a)
+    ones = torch.ones_like(b)
+
+    _b = b.clone().requires_grad_(True)
+    (grad,) = torch.autograd.grad(dense_solve(a, _b, method).sum(), _b)
+    assert pytest.approx((inv.mT @ ones).cpu()) == grad.cpu()
+
+    tangent = torch.func.jvp(lambda b: dense_solve(a, b, method), (b,), (ones,))
+    assert pytest.approx((inv @ ones).cpu()) == tangent[1].cpu()

@@ -220,18 +220,20 @@ class _LinearSystem:
         self, solution: Tensor, rhs: Tensor, params: tuple[Any, ...]
     ) -> Tensor:
         """Attach the implicit derivatives to a (detached) solution."""
-        if not is_compiling():
-            return _ImplicitLinearSolve.apply(solution, rhs, self, *params)
-
-        # Under `torch.compile`, `jacrev` returns zero gradients for an input
-        # of the compiled function that reaches the Function directly and is
-        # unused by its `forward` (PyTorch 2.7 to 2.14). A view avoids it.
-        reject_forward_mode("implicit_solve", rhs, *params)
-        rhs = rhs.view_as(rhs)
-        params = tuple(
-            p.view_as(p) if isinstance(p, Tensor) else p for p in params
-        )
-        return _ImplicitLinearSolveReverse.apply(solution, rhs, self, *params)
+        if is_compiling():  # pragma: no cover - Dynamo-traced
+            reject_forward_mode("implicit_solve", rhs, *params)
+            # Under `torch.compile`, `jacrev` returns zero gradients for an
+            # input of the compiled function that reaches the Function
+            # directly and is unused by its `forward` (PyTorch 2.7 to 2.14).
+            # A view avoids it.
+            rhs = rhs.view_as(rhs)
+            params = tuple(
+                p.view_as(p) if isinstance(p, Tensor) else p for p in params
+            )
+            return _ImplicitLinearSolveReverse.apply(
+                solution, rhs, self, *params
+            )
+        return _ImplicitLinearSolve.apply(solution, rhs, self, *params)
 
     def derivative(self, rhs: Tensor, params: tuple[Any, ...]) -> Tensor:
         """

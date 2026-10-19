@@ -155,7 +155,8 @@ class _DenseSolve(_DenseSolveReverse):
     ) -> Tensor:
         a, x, factor, pivots = ctx.saved_tensors
         rhs = torch.zeros_like(x) if b_dot is None else b_dot.expand_as(x)
-        if a_dot is not None:
+        # PyTorch passes zeros for a missing tangent; `None` is defensive
+        if a_dot is not None:  # pragma: no branch
             if pivots is None:
                 a_dot = _sym(a_dot)
             rhs = rhs - (a_dot.mT if ctx.transpose else a_dot) @ x
@@ -169,13 +170,14 @@ def _apply(
     pivots: Tensor | None,
     transpose: bool,
 ) -> Tensor:
-    if not is_compiling():
-        return _DenseSolve.apply(a, b, factor, pivots, transpose)
-
-    reject_forward_mode("dense_solve", a, b)
-    # Dynamo drops derivatives of graph inputs that reach a Function
-    # unused by its `forward`; a view avoids it (see `implicit_solve`).
-    return _DenseSolveReverse.apply(a.view_as(a), b, factor, pivots, transpose)
+    if is_compiling():  # pragma: no cover - Dynamo-traced
+        reject_forward_mode("dense_solve", a, b)
+        # Dynamo drops derivatives of graph inputs that reach a Function
+        # unused by its `forward`; a view avoids it (see `implicit_solve`).
+        return _DenseSolveReverse.apply(
+            a.view_as(a), b, factor, pivots, transpose
+        )
+    return _DenseSolve.apply(a, b, factor, pivots, transpose)
 
 
 def dense_solve(a: Tensor, b: Tensor, method: Method = "lu") -> Tensor:

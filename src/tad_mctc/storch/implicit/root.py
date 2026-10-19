@@ -213,16 +213,15 @@ class _Root:
         )
 
     def attach(self, root: Tensor, params: tuple[Any, ...]) -> Tensor:
-        if not is_compiling():
-            return _ImplicitRoot.apply(root, self, *params)
-
-        reject_forward_mode("implicit_root", root, *params)
-        # Dynamo drops derivatives of graph inputs that reach a Function
-        # unused by its `forward`; a view avoids it (see `implicit_solve`).
-        params = tuple(
-            p.view_as(p) if isinstance(p, Tensor) else p for p in params
-        )
-        return _ImplicitRootReverse.apply(root, self, *params)
+        if is_compiling():  # pragma: no cover - Dynamo-traced
+            reject_forward_mode("implicit_root", root, *params)
+            # Dynamo drops derivatives of graph inputs that reach a Function
+            # unused by its `forward`; a view avoids it (see `implicit_solve`).
+            params = tuple(
+                p.view_as(p) if isinstance(p, Tensor) else p for p in params
+            )
+            return _ImplicitRootReverse.apply(root, self, *params)
+        return _ImplicitRoot.apply(root, self, *params)
 
 
 def _unpack(ctx: Any) -> tuple[Tensor, tuple[Any, ...]]:
@@ -275,7 +274,7 @@ class _ImplicitRootReverse(torch.autograd.Function):
             if _is_differentiable(p) and ctx.needs_input_grad[2 + i]
         ]
         grads: list[Tensor | None] = [None] * len(params)
-        if len(index) == 0:
+        if len(index) == 0:  # pragma: no cover - the root is detached
             return (None, None, *grads)
 
         # F_z^T lambda = grad, grad_p = -F_p^T lambda
@@ -335,7 +334,7 @@ class _ImplicitRoot(_ImplicitRootReverse):
             for i, (p, t) in enumerate(zip(params, params_dot))
             if _is_differentiable(p) and t is not None
         ]
-        if len(index) == 0:
+        if len(index) == 0:  # pragma: no cover - the root is detached
             return torch.zeros_like(root)
 
         # F_z z_dot = -F_p p_dot

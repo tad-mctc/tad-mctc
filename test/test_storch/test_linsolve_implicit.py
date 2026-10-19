@@ -532,6 +532,40 @@ def test_compile_forward_mode_raises() -> None:
         compile_fullgraph(jacfwd(f))(s)
 
 
+def test_rhs_only_tangent() -> None:
+    """Forward mode with a tangent of the right-hand side alone."""
+    s, b = data(4)
+    a = build("cg", s)
+    v = torch.ones_like(b)
+    tangent = jvp(lambda b: implicit_solve(matvec, b, a).solution, (b,), (v,))
+    assert_close(tangent[1], torch.linalg.solve(a, v))
+
+    # an operator without floating point parameters
+    def scaled(x: Tensor, k: Tensor) -> Tensor:
+        return 2.0**k * x
+
+    k = torch.tensor(1)
+    _, tangent = jvp(
+        lambda b: implicit_solve(scaled, b, k).solution, (b,), (v,)
+    )
+    assert_close(tangent, v / 2)
+
+
+def test_vmap_unused_param() -> None:
+    """A `vmap`-ped parameter that the operator ignores: unbatched solution."""
+    s, b = data(4)
+    a = build("cg", s)
+    q = torch.arange(3.0, dtype=b.dtype)
+
+    def f(q: Tensor) -> Tensor:
+        op = lambda x, a, q: matvec(x, a)  # noqa: E731
+        return implicit_solve(op, b, a, q).solution
+
+    ref = torch.linalg.solve(a, b)
+    assert_close(vmap(f)(q), ref.expand(3, -1))
+    assert_close(jacrev(lambda q: vmap(f)(q).sum())(q), torch.zeros(3))
+
+
 @pytest.mark.parametrize("dtype", [torch.cdouble, torch.int64])
 def test_rejects_non_real(dtype: torch.dtype) -> None:
     a = torch.eye(2, dtype=torch.double)
