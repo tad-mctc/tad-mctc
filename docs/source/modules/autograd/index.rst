@@ -4,7 +4,9 @@
 
 .. toctree::
 
+   attach
    checks
    gradcheck
+   nested
    nonfunctorch
    unwrap

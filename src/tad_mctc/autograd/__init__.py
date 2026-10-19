@@ -23,6 +23,8 @@ includes:
 - Jacobians without function transforms (row by row)
 - gradient checks and checks for function-transformed tensors
 - unwrapping of function-transformed tensors
+- functions with a known, differentiable gradient (``attach_gradient``)
+- forward-mode rules that nest (``nested_jvp``)
 
 For Jacobians, Hessians and vectorization, use PyTorch's own function
 transforms in ``torch.func`` directly, e.g. ``jacrev(jacrev(f))`` for a
@@ -30,7 +32,9 @@ Hessian (reverse-over-reverse, which needs no forward-mode rules) or
 ``vmap`` over it for a batch.
 """
 
+from .attach import *
 from .checks import *
 from .gradcheck import *
+from .nested import *
 from .nonfunctorch import *
 from .unwrap import *

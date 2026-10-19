@@ -5,5 +5,6 @@
 .. toctree::
 
    io
+   linalg
    pytorch
    structure

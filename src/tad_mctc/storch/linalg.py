@@ -33,6 +33,7 @@ from typing import Any, Literal
 
 import torch
 
+from ..autograd.nested import nested_jvp
 from ..convert import symmetrize
 from ..typing import Callable, Tensor
 
@@ -275,7 +276,11 @@ class _SymEigBroad_V2(SymEigBroadBase):
     tensor operations), and :meth:`jvp` provides forward-mode derivatives
     for ``torch.func.jvp``/``jacfwd``. Both are built from differentiable
     operations on the saved eigenpairs, so higher-order derivatives
-    (``hessian``, ``jacrev(jacrev)``) go through them as well.
+    (``hessian``, ``jacrev(jacrev)``, ``jacfwd(jacfwd)``) go through them as
+    well; :func:`~tad_mctc.autograd.nested_jvp` makes :meth:`jvp` visible to
+    enclosing forward-mode transforms. A third forward-mode level
+    (``jacfwd(jacfwd(jacfwd))``) raises, use reverse mode for the outer
+    derivatives instead.
     """
 
     generate_vmap_rule = True
@@ -380,6 +385,7 @@ class _SymEigBroad_V2(SymEigBroadBase):
         ctx.dtype, ctx.device = a.dtype, a.device
 
     @staticmethod
+    @nested_jvp
     def jvp(  # pyright: ignore[reportIncompatibleMethodOverride]
         ctx: Any,
         a_dot: Tensor,
