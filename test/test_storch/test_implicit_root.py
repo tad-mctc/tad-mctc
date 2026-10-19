@@ -24,8 +24,9 @@ are exact in every nesting) differentiated by unrolling, and closed forms.
 from __future__ import annotations
 
 import itertools
+from collections.abc import Callable
 from functools import partial
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 import torch
