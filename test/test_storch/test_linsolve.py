@@ -29,7 +29,7 @@ import pytest
 import torch
 from torch.func import vmap
 
-from tad_mctc.exceptions import ConvergenceError
+from tad_mctc.exceptions import ConvergenceError, DtypeError
 from tad_mctc.storch import linsolve
 from tad_mctc.storch.linsolve import (
     STATUS_BREAKDOWN,
@@ -488,3 +488,18 @@ def test_gmres_invalid_restart() -> None:
     a, b = torch.eye(2, dtype=torch.double), torch.ones(2, dtype=torch.double)
     with pytest.raises(ValueError, match="restart"):
         gmres(matvec, b, a, restart=0)
+
+
+@pytest.mark.parametrize("name", SOLVERS)
+@pytest.mark.parametrize("dtype", [torch.cdouble, torch.int64])
+def test_rejects_non_real(name: str, dtype: torch.dtype) -> None:
+    a = torch.eye(2, dtype=torch.double)
+    with pytest.raises(DtypeError, match="right-hand side"):
+        SOLVERS[name](matvec, torch.ones(2, dtype=dtype), a)
+    with pytest.raises(DtypeError, match="initial guess"):
+        SOLVERS[name](
+            matvec,
+            torch.ones(2, dtype=torch.double),
+            a,
+            x0=torch.ones(2, dtype=dtype),
+        )

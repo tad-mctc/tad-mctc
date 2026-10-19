@@ -32,7 +32,7 @@ from typing import NamedTuple
 import torch
 
 from ...autograd.checks import is_vmapped
-from ...exceptions import ConvergenceError
+from ...exceptions import ConvergenceError, DtypeError
 from ...typing import Tensor
 
 __all__ = [
@@ -106,6 +106,20 @@ A relative tolerance below roundoff rejects useful solutions in low
 precision. The relative tolerance is therefore never smaller than this
 multiple of the machine epsilon of the dtype.
 """
+
+
+def require_real(name: str, tensor: Tensor | None) -> None:
+    """
+    Raise unless ``tensor`` is ``None`` or real floating point.
+
+    The solvers use real inner products and transposes, not adjoints, so
+    their values and derivatives are wrong for complex tensors.
+    """
+    if tensor is not None and not tensor.is_floating_point():
+        raise DtypeError(
+            f"The {name} must be a real floating point tensor, not "
+            f"{tensor.dtype}."
+        )
 
 
 def vdot(a: Tensor, b: Tensor, vdims: int) -> Tensor:

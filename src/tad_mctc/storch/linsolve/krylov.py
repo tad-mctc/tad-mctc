@@ -29,8 +29,13 @@ matrix ``a`` is used as ``matvec = lambda x, a: (a @ x.unsqueeze(-1)).squeeze(-1
 Every system iterates under a tensor mask. Converged, failed or padding
 systems are frozen, so the solvers are usable under ``torch.func.vmap`` and
 ``torch.compile(fullgraph=True)``, where the loop runs for the full
-``maxiter`` trips. Outside these transforms, the loop exits as soon as all
-systems are inactive.
+``maxiter`` trips, each with a product of the operator for all systems.
+Outside these transforms, the loop exits as soon as all systems are
+inactive. The default ``maxiter`` (twice the vector size) is a safety limit
+for eager mode; under ``vmap`` or ``torch.compile``, set it to the
+iteration count the (preconditioned) problem actually needs.
+
+Only real floating point tensors are supported.
 
 The solvers are ordinary PyTorch code: differentiating through them
 differentiates the iterations ("unrolling"). For derivatives of the
@@ -60,6 +65,7 @@ from .result import (
     LinearSolveResult,
     convergence_target,
     finalize,
+    require_real,
     safe_divide,
     vdot,
     vnorm,
@@ -84,6 +90,8 @@ def _setup(
     Validate the arguments, and return the initial guess, its residual and
     the number of iterations.
     """
+    require_real("right-hand side", rhs)
+    require_real("initial guess", x0)
     if vdims < 1 or vdims > rhs.ndim:
         raise ValueError(
             f"The number of vector dimensions ({vdims}) must be between 1 "
@@ -459,7 +467,6 @@ def gmres(
     def precondition(v: Tensor) -> Tensor:
         return v if preconditioner is None else preconditioner(v, *params)
 
-    dims = tuple(range(-vdims, 0))
     target = convergence_target(rhs, rtol, atol, vdims)
     norm = vnorm(residual, vdims)
     tiny = torch.finfo(rhs.dtype).tiny

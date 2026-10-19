@@ -58,12 +58,21 @@ is the identity on the detached solution (as dxtb's implicit SCF root).
 - ``jvp``: PyTorch hides a custom ``jvp`` from enclosing forward-mode
   transforms, see :func:`~tad_mctc.autograd.nested_jvp`, which fixes it.
   With the batching rule above, every nesting of ``jacfwd`` is correct.
-- ``torch.compile``: Dynamo cannot trace a Function with a custom ``jvp``
-  while gradients are recorded, so compiled code supports reverse mode only,
-  and only first derivatives. Inside compiled code, a nested derivative of a
-  Function misses the dependence of its ``backward`` on saved intermediate
-  tensors: from PyTorch 2.11 on, ``jacrev(jacrev(f))`` is silently wrong
-  there (earlier versions raise). Take higher derivatives in eager mode.
+- ``torch.compile``: only first derivatives in reverse mode are supported:
+
+  - ``torch.compile(f)`` with ``Tensor.backward`` / ``torch.autograd.grad``;
+  - ``torch.compile(jacrev(f))`` (PyTorch >= 2.11; earlier versions raise).
+
+  Forward mode inside compiled code (``torch.compile(jacfwd(f))``) raises:
+  Dynamo would ignore the ``jvp`` rule and return wrong tangents, see
+  :func:`~tad_mctc.tools.reject_forward_mode`. Transforms of a compiled
+  function (``jacrev(torch.compile(f))``, ``jacfwd(...)``) and double
+  backward raise in Dynamo or AOTAutograd. **Higher derivatives inside
+  compiled code are not supported** and cannot be rejected reliably: a
+  nested derivative of a Function misses the dependence of its
+  ``backward`` on saved intermediate tensors, so from PyTorch 2.11 on,
+  ``torch.compile(jacrev(jacrev(f)))`` is silently wrong (earlier versions
+  raise). Take higher derivatives in eager mode.
   Inputs of the compiled function are passed through a view, without which
   ``jacrev`` inside compiled code returns zero gradients for them.
 """
@@ -80,10 +89,10 @@ from torch._C._functorch import (  # pylint: disable=no-name-in-module
 )
 
 from ...autograd.nested import nested_jvp
-from ...tools.compile import is_compiling
+from ...tools.compile import is_compiling, reject_forward_mode
 from ...typing import Tensor
 from .krylov import Operator, bicgstab, cg, gmres
-from .result import STATUS_CONVERGED, LinearSolveResult
+from .result import STATUS_CONVERGED, LinearSolveResult, require_real
 
 __all__ = ["implicit_solve"]
 
@@ -217,6 +226,7 @@ class _LinearSystem:
         # Under `torch.compile`, `jacrev` returns zero gradients for an input
         # of the compiled function that reaches the Function directly and is
         # unused by its `forward` (PyTorch 2.7 to 2.14). A view avoids it.
+        reject_forward_mode("implicit_solve", rhs, *params)
         rhs = rhs.view_as(rhs)
         params = tuple(
             p.view_as(p) if isinstance(p, Tensor) else p for p in params
@@ -506,9 +516,20 @@ def implicit_solve(
     -------
     LinearSolveResult
         Differentiable solution and the diagnostics of the primal solve.
-        The primal solution is returned as is, also if it did not converge;
-        check :attr:`~LinearSolveResult.status`. Derivative solves that do
-        not converge yield NaN.
+        The primal solution is returned as is, also if it did not converge,
+        and its derivatives are then those at this inaccurate solution;
+        check :attr:`~LinearSolveResult.status` or call
+        :func:`~tad_mctc.storch.linsolve.require_convergence`. Derivative
+        solves that do not converge yield NaN.
+
+    Raises
+    ------
+    ValueError
+        Unknown method.
+    DtypeError
+        ``rhs`` or ``x0`` is not real floating point.
+    NotImplementedError
+        Forward-mode derivatives inside ``torch.compile``.
 
     Example
     -------
@@ -522,6 +543,8 @@ def implicit_solve(
     >>> torch.allclose(b.grad, torch.linalg.solve(a.T, torch.ones(2).double()))
     True
     """
+    require_real("right-hand side", rhs)
+    require_real("initial guess", x0)
     if isinstance(method, str):
         if method not in _METHODS:
             raise ValueError(

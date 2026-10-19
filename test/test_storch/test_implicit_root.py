@@ -32,13 +32,14 @@ import pytest
 import torch
 from torch.func import jacfwd, jacrev, vmap
 
-from tad_mctc._version import __tversion__
+from tad_mctc.exceptions import DtypeError
 from tad_mctc.storch.implicit import (
     implicit_argmin,
     implicit_fixed_point,
     implicit_root,
 )
 from tad_mctc.storch.linsolve import gmres
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import Tensor
 
 from ..conftest import DEVICE
@@ -306,6 +307,7 @@ def test_argmin_vmap() -> None:
 # torch.compile: first derivatives only (see `implicit_solve`)
 
 
+@requires_compile
 @pytest.mark.xfail(
     raises=Exception,
     strict=True,
@@ -321,6 +323,7 @@ def test_compile_jacrev_raises() -> None:
     compiled(P)
 
 
+@requires_compile
 def test_compile_backward() -> None:
     p = P.clone().requires_grad_(True)
     compiled = torch.compile(
@@ -328,6 +331,26 @@ def test_compile_backward() -> None:
     )
     (grad,) = torch.autograd.grad(compiled(p), p)
     assert_close(grad, jacrev(lambda p: newton(p).sum())(P))
+
+
+@requires_compile
+def test_compile_forward_mode_raises() -> None:
+    """Dynamo would ignore the `jvp` rule and return wrong tangents."""
+    compiled = torch.compile(
+        jacfwd(lambda p: root_solution(p, maxiter=8).sum()),
+        fullgraph=True,
+        backend="aot_eager",
+    )
+    with pytest.raises(
+        Exception, match="Forward-mode derivatives|NotImplementedError"
+    ):
+        compiled(P)
+
+
+@pytest.mark.parametrize("dtype", [torch.cdouble, torch.int64])
+def test_rejects_non_real(dtype: torch.dtype) -> None:
+    with pytest.raises(DtypeError, match="root"):
+        implicit_root(residual, torch.zeros(N, dtype=dtype), P)
 
 
 def test_root_vmap_unbatched_root() -> None:

@@ -30,7 +30,9 @@ import torch
 from torch.func import jacfwd, jacrev, vmap
 
 from tad_mctc._version import __tversion__
+from tad_mctc.exceptions import DtypeError
 from tad_mctc.storch.linsolve import dense_solve
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import Tensor
 
 from ..conftest import DEVICE
@@ -176,6 +178,7 @@ def _compile(f):
     return torch.compile(f, fullgraph=True, backend="aot_eager")
 
 
+@requires_compile
 def test_compile_backward() -> None:
     a0, c, m = _system(n=3)
     t = torch.tensor(0.1, **DD, requires_grad=True)
@@ -185,6 +188,7 @@ def test_compile_backward() -> None:
     assert pytest.approx(ref.cpu(), rel=1e-10) == grad.cpu()
 
 
+@requires_compile
 @pytest.mark.skipif(
     __tversion__ < (2, 11, 0), reason="jacrev under compile needs >= 2.11"
 )
@@ -196,6 +200,7 @@ def test_compile_jacrev() -> None:
     assert pytest.approx(ref.cpu(), rel=1e-10) == got.cpu()
 
 
+@requires_compile
 @pytest.mark.skipif(
     __tversion__ < (2, 11, 0), reason="raises before 2.11 (documented)"
 )
@@ -270,3 +275,72 @@ def test_unknown_method() -> None:
     a0, _, m = _system()
     with pytest.raises(ValueError, match="Unknown method"):
         dense_solve(a0, m, method="qr")  # type: ignore[arg-type]
+
+
+# Shapes as `torch.linalg.solve`: (shape of a, shape of b); `None` raises
+SHAPES = [
+    ((3, 3), (3,)),
+    ((3, 3), (3, 2)),
+    ((2, 3, 3), (3,)),
+    ((2, 3, 3), (2, 3)),
+    ((2, 3, 3), (1, 3)),
+    ((2, 3, 3), (3, 2)),
+    ((2, 3, 3), (2, 3, 2)),
+    ((2, 3, 3), (1, 3, 2)),
+    ((1, 3, 3), (2, 3)),
+    ((1, 3, 3), (4, 3, 2)),
+    ((2, 1, 3, 3), (4, 3, 1)),
+    ((2, 1, 3, 3), (3, 3)),
+]
+
+
+@pytest.mark.parametrize("method", ["lu", "cholesky"])
+@pytest.mark.parametrize("shapes", SHAPES)
+def test_shapes_as_linalg_solve(method, shapes) -> None:
+    shape_a, shape_b = shapes
+    gen = torch.Generator().manual_seed(1)
+    s = torch.randn(*shape_a, generator=gen, dtype=torch.double).to(DEVICE)
+    a = s @ s.mT + 3 * torch.eye(3, **DD)
+    b = torch.randn(*shape_b, generator=gen, dtype=torch.double).to(DEVICE)
+    try:
+        ref = torch.linalg.solve(a, b)
+    except RuntimeError:
+        with pytest.raises(RuntimeError):
+            dense_solve(a, b, method=method)
+        return
+
+    got = dense_solve(a, b, method=method)
+    assert got.shape == ref.shape
+    assert pytest.approx(ref.cpu(), rel=1e-12, abs=1e-12) == got.cpu()
+
+
+def test_vmap_shared_vector() -> None:
+    a0, c, m = _system()
+    b = m[0, :, 0]
+    got = vmap(dense_solve, in_dims=(0, None))(a0, b)
+    assert pytest.approx(torch.linalg.solve(a0, b).cpu()) == got.cpu()
+
+    # the matrix gradient through the shared vector
+    f = lambda a: dense_solve(a, b).pow(2).sum()  # noqa: E731
+    ref = jacrev(lambda a: _inv(a, b.expand(3, -1)).pow(2).sum())(a0)
+    assert pytest.approx(ref.cpu()) == jacrev(f)(a0).cpu()
+
+
+@pytest.mark.parametrize("dtype", [torch.cdouble, torch.int64])
+def test_rejects_non_real(dtype: torch.dtype) -> None:
+    a = torch.eye(2, dtype=dtype, device=DEVICE)
+    with pytest.raises(DtypeError, match="matrix"):
+        dense_solve(a, torch.ones(2, **DD))
+    with pytest.raises(DtypeError, match="right-hand side"):
+        dense_solve(torch.eye(2, **DD), torch.ones(2, dtype=dtype))
+
+
+@requires_compile
+def test_compile_forward_mode_raises() -> None:
+    a0, c, m = _system(n=3)
+    t = torch.tensor(0.1, **DD)
+    compiled = _compile(jacfwd(_f(dense_solve, False)))
+    with pytest.raises(
+        Exception, match="Forward-mode derivatives|NotImplementedError"
+    ):
+        compiled(t, a0[0], c[0], m[0])

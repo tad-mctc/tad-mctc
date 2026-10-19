@@ -48,8 +48,9 @@ from typing import Any, Literal
 import torch
 
 from ...autograd.nested import nested_jvp
-from ...tools.compile import is_compiling
+from ...tools.compile import is_compiling, reject_forward_mode
 from ...typing import Tensor
+from .result import require_real
 
 __all__ = ["dense_solve"]
 
@@ -171,6 +172,7 @@ def _apply(
     if not is_compiling():
         return _DenseSolve.apply(a, b, factor, pivots, transpose)
 
+    reject_forward_mode("dense_solve", a, b)
     # Dynamo drops derivatives of graph inputs that reach a Function
     # unused by its `forward`; a view avoids it (see `implicit_solve`).
     return _DenseSolveReverse.apply(a.view_as(a), b, factor, pivots, transpose)
@@ -185,18 +187,19 @@ def dense_solve(a: Tensor, b: Tensor, method: Method = "lu") -> Tensor:
     ``vmap``. The matrix is factorized once; all derivatives reuse the
     factors. Like ``torch.linalg.solve`` and ``torch.linalg.cholesky``, it
     raises for exactly singular (LU) or not positive definite (Cholesky)
-    matrices in eager mode.
+    matrices in eager mode. Only real floating point tensors are supported.
 
     Under ``torch.compile``, only first derivatives in reverse mode are
-    available (see :func:`~tad_mctc.storch.linsolve.implicit_solve`).
+    supported (see :func:`~tad_mctc.storch.linsolve.implicit_solve`).
 
     Parameters
     ----------
     a : Tensor
         Square matrices of shape ``(..., n, n)``.
     b : Tensor
-        Right-hand sides, ``(..., n, k)``, or vectors ``(..., n)`` if
-        ``b.shape == a.shape[:-1]`` (as in ``torch.linalg.solve``).
+        Right-hand sides, ``(..., n, k)``, or vectors if ``b`` is 1D or
+        ``b.shape == a.shape[:-1]`` (as in ``torch.linalg.solve``). Batch
+        dimensions broadcast.
     method : {"lu", "cholesky"}, optional
         Factorization. ``"cholesky"`` requires symmetric positive definite
         matrices, reads only their lower triangle and is about twice as fast.
@@ -213,6 +216,10 @@ def dense_solve(a: Tensor, b: Tensor, method: Method = "lu") -> Tensor:
     ------
     ValueError
         Unknown method.
+    DtypeError
+        ``a`` or ``b`` is not real floating point.
+    NotImplementedError
+        Forward-mode derivatives inside ``torch.compile``.
 
     Example
     -------
@@ -231,7 +238,11 @@ def dense_solve(a: Tensor, b: Tensor, method: Method = "lu") -> Tensor:
             f"Unknown method '{method}'. Choose from 'lu' or 'cholesky'."
         )
 
-    vector = b.ndim == a.ndim - 1 and b.shape == a.shape[:-1]
+    require_real("matrix", a)
+    require_real("right-hand side", b)
+
+    # the rule of `torch.linalg.solve`
+    vector = b.ndim == 1 or (b.ndim == a.ndim - 1 and b.shape == a.shape[:-1])
     if vector:
         b = b.unsqueeze(-1)
 

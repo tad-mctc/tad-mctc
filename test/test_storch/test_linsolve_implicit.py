@@ -38,6 +38,7 @@ from torch.autograd import gradcheck, gradgradcheck
 from torch.func import jacfwd, jacrev, jvp, vmap
 
 from tad_mctc._version import __tversion__
+from tad_mctc.exceptions import DtypeError
 from tad_mctc.storch.linsolve import (
     STATUS_CONVERGED,
     LinearSolveResult,
@@ -46,7 +47,7 @@ from tad_mctc.storch.linsolve import (
     implicit_solve,
 )
 from tad_mctc.tools.testing import requires_compile
-from tad_mctc.typing import DD, Tensor
+from tad_mctc.typing import Tensor
 
 from ..conftest import DEVICE
 from ..utils import compile_fullgraph
@@ -129,12 +130,10 @@ def test_first_order_matrix(method: str) -> None:
     a = build(method, s)
 
     jac = jacrev(lambda a: implicit(method, a, b))(a)
-    lu, pivots = torch.linalg.lu_factor(a)
     ref = jacrev(
         lambda a: torch.linalg.lu_solve(*torch.linalg.lu_factor(a), b[:, None])
     )(a).squeeze(1)
     assert_close(jac, ref)
-    del lu, pivots
 
 
 NESTED = {
@@ -515,6 +514,32 @@ def test_compile(method: str) -> None:
     compile_fullgraph(lambda s: f(s)[0])(_s).backward()
     assert _s.grad is not None
     assert_close(_s.grad, grad(s))
+
+
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
+def test_compile_forward_mode_raises() -> None:
+    """Dynamo would ignore the `jvp` rule and return wrong tangents."""
+    s, b = data(4)
+
+    def f(s: Tensor) -> Tensor:
+        a = build("cg", s)
+        return (implicit_solve(matvec, b, a, maxiter=8).solution ** 2).sum()
+
+    with pytest.raises(
+        Exception, match="Forward-mode derivatives|NotImplementedError"
+    ):
+        compile_fullgraph(jacfwd(f))(s)
+
+
+@pytest.mark.parametrize("dtype", [torch.cdouble, torch.int64])
+def test_rejects_non_real(dtype: torch.dtype) -> None:
+    a = torch.eye(2, dtype=torch.double)
+    with pytest.raises(DtypeError, match="right-hand side"):
+        implicit_solve(matvec, torch.ones(2, dtype=dtype), a)
+    with pytest.raises(DtypeError, match="initial guess"):
+        x0 = torch.ones(2, dtype=dtype)
+        implicit_solve(matvec, torch.ones(2, dtype=torch.double), a, x0=x0)
 
 
 ########################################################################

@@ -117,11 +117,11 @@ def attach_gradient(
     gradient of ``function`` computed from ``x`` with differentiable
     operations.
 
-    Under ``torch.compile``, only first derivatives in reverse mode are
-    correct: from PyTorch 2.11 on, nested derivatives of a Function inside
-    compiled code silently miss the dependence of its backward on saved
-    intermediate tensors (earlier versions raise). Take higher derivatives in
-    eager mode.
+    Under ``torch.compile``, only first derivatives are supported. Higher
+    derivatives inside compiled code are not: from PyTorch 2.11 on, nested
+    derivatives of a Function inside compiled code silently miss the
+    dependence of its backward on saved intermediate tensors (earlier
+    versions raise). Take higher derivatives in eager mode.
 
     Parameters
     ----------

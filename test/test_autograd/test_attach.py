@@ -29,6 +29,7 @@ from torch.func import jacfwd, jacrev, vmap
 
 from tad_mctc._version import __tversion__
 from tad_mctc.autograd import attach_gradient
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import Tensor
 
 DD = {"dtype": torch.double}
@@ -122,6 +123,7 @@ def test_shape_mismatch() -> None:
         attach_gradient(_lse, x, x[:2])
 
 
+@requires_compile
 def test_compile_backward() -> None:
     x = _point().requires_grad_(True)
     compiled = torch.compile(_attached, fullgraph=True, backend="aot_eager")
@@ -129,6 +131,7 @@ def test_compile_backward() -> None:
     assert pytest.approx(torch.softmax(x, -1).detach().numpy()) == grad
 
 
+@requires_compile
 @pytest.mark.skipif(
     __tversion__ < (2, 11, 0), reason="jacrev under compile needs >= 2.11"
 )
@@ -140,6 +143,7 @@ def test_compile_jacrev() -> None:
     assert pytest.approx(torch.softmax(x, -1).numpy()) == compiled(x).numpy()
 
 
+@requires_compile
 @pytest.mark.skipif(
     __tversion__ < (2, 11, 0), reason="raises before 2.11 (documented)"
 )

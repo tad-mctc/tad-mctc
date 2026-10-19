@@ -41,11 +41,15 @@ re-evaluate :math:`F`.
 A derivative system that does not converge gives NaN (fail-closed), never
 a silently wrong derivative.
 
+Only real floating point tensors are supported.
+
 Under ``torch.compile``, the forward pass and first derivatives through
-``Tensor.backward`` / ``torch.autograd.grad`` work. Dynamo cannot trace
-``torch.func`` transforms (``jacrev``) of these functions inside compiled
-code, since the response solve applies an ``autograd.Function`` inside
-another one's backward; this raises (PyTorch 2.7 to 2.14).
+``Tensor.backward`` / ``torch.autograd.grad`` work, if Dynamo may break the
+graph. Everything else raises: Dynamo cannot trace ``torch.func``
+transforms (``jacrev``) of these functions inside compiled code, since the
+response solve applies an ``autograd.Function`` inside another one's
+backward (PyTorch 2.7 to 2.14), and forward-mode transforms inside compiled
+code are rejected (see :func:`~tad_mctc.tools.reject_forward_mode`).
 
 The formulation follows ``jaxopt.implicit_diff`` (``custom_root``,
 ``custom_fixed_point``) and ``torchopt.diff.implicit``
@@ -64,10 +68,10 @@ from torch._C._functorch import (  # pylint: disable=no-name-in-module
 )
 
 from ...autograd.nested import nested_jvp
-from ...tools.compile import is_compiling
+from ...tools.compile import is_compiling, reject_forward_mode
 from ...typing import Tensor
 from ..linsolve.implicit import Method, implicit_solve
-from ..linsolve.result import STATUS_CONVERGED, LinearSolveResult
+from ..linsolve.result import STATUS_CONVERGED, LinearSolveResult, require_real
 
 __all__ = ["implicit_root", "implicit_fixed_point", "implicit_argmin"]
 
@@ -212,6 +216,7 @@ class _Root:
         if not is_compiling():
             return _ImplicitRoot.apply(root, self, *params)
 
+        reject_forward_mode("implicit_root", root, *params)
         # Dynamo drops derivatives of graph inputs that reach a Function
         # unused by its `forward`; a view avoids it (see `implicit_solve`).
         params = tuple(
@@ -363,8 +368,10 @@ def implicit_root(
     exact solution :math:`z^*(p)` with respect to every floating point
     tensor in ``params``, in reverse and forward mode, to any order and
     under ``vmap`` (see module docstring). The derivatives are exact if
-    ``root`` is an accurate root and :math:`F_z` is invertible there; the
-    caller is responsible for the convergence of ``root``.
+    ``root`` is an accurate root and :math:`F_z` is invertible there. The
+    caller is responsible for the convergence of ``root``: the derivatives
+    are evaluated at the given point, so an inaccurate root gives finite,
+    inaccurate derivatives. Validate the residual before calling this.
 
     Parameters
     ----------
@@ -406,6 +413,11 @@ def implicit_root(
         ``root`` with implicit derivatives. A derivative whose response
         equation did not converge is NaN.
 
+    Raises
+    ------
+    DtypeError
+        ``root`` is not real floating point.
+
     Example
     -------
     >>> import torch
@@ -418,6 +430,7 @@ def implicit_root(
     >>> print(z.item(), round(dz.item(), 6))  # 1 / (3 z**2)
     2.0 0.083333
     """
+    require_real("root", root)
     if vdims is None:
         vdims = max(root.ndim, 1)
     squeeze = root.ndim == 0
