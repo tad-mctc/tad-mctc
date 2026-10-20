@@ -32,7 +32,9 @@ from tad_mctc.autograd import attach_gradient
 from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import Tensor
 
-DD = {"dtype": torch.double}
+from ..conftest import DEVICE
+
+DD = {"dtype": torch.double, "device": DEVICE}
 
 
 def _lse(x: Tensor) -> Tensor:
@@ -59,8 +61,10 @@ def _nest(f, modes: str):
 
 
 def _point() -> Tensor:
-    gen = torch.Generator().manual_seed(0)
-    return torch.randn(4, generator=gen, **DD)
+    gen = torch.Generator(device="cpu").manual_seed(0)
+    return torch.randn(4, generator=gen, dtype=torch.double, device="cpu").to(
+        DEVICE
+    )
 
 
 def test_value() -> None:
@@ -74,7 +78,7 @@ def test_all_nestings(order: int) -> None:
     for modes in itertools.product("rf", repeat=order):
         ref = _nest(_lse, modes)(x)
         got = _nest(_attached, modes)(x)
-        assert pytest.approx(ref.numpy(), abs=1e-12) == got.numpy()
+        assert pytest.approx(ref.cpu().numpy(), abs=1e-12) == got.cpu().numpy()
 
 
 @pytest.mark.parametrize("modes", ["r", "rr", "fr", "rf", "ff", "fff", "rfr"])
@@ -82,7 +86,9 @@ def test_vmap(modes: str) -> None:
     x = torch.randn(3, 4, **DD)
     batched = vmap(_nest(_attached, modes))(x)
     looped = torch.stack([_nest(_lse, modes)(xi) for xi in x])
-    assert pytest.approx(looped.numpy(), abs=1e-12) == batched.numpy()
+    assert (
+        pytest.approx(looped.cpu().numpy(), abs=1e-12) == batched.cpu().numpy()
+    )
 
 
 def test_elementwise() -> None:
@@ -90,7 +96,7 @@ def test_elementwise() -> None:
     for modes in ("r", "rf", "fff"):
         ref = _nest(_softplus, modes)(x)
         got = _nest(_attached_elementwise, modes)(x)
-        assert pytest.approx(ref.numpy(), abs=1e-12) == got.numpy()
+        assert pytest.approx(ref.cpu().numpy(), abs=1e-12) == got.cpu().numpy()
 
 
 def test_gradcheck() -> None:
@@ -105,7 +111,9 @@ def test_plain_forward_ad() -> None:
     with forward_ad.dual_level():
         out = _attached(forward_ad.make_dual(x, t))
         tangent = forward_ad.unpack_dual(out).tangent
-    assert pytest.approx((torch.softmax(x, -1) * t).sum().item()) == tangent
+    assert (
+        pytest.approx((torch.softmax(x, -1) * t).sum().item()) == tangent.item()
+    )
 
 
 def test_function_is_not_differentiated() -> None:
@@ -114,7 +122,10 @@ def test_function_is_not_differentiated() -> None:
 
     x = _point()
     got = jacrev(lambda y: attach_gradient(broken, y, torch.softmax(y, -1)))
-    assert pytest.approx(torch.softmax(x, -1).numpy()) == got(x).numpy()
+    assert (
+        pytest.approx(torch.softmax(x, -1).cpu().numpy())
+        == got(x).cpu().numpy()
+    )
 
 
 def test_shape_mismatch() -> None:
@@ -128,7 +139,10 @@ def test_compile_backward() -> None:
     x = _point().requires_grad_(True)
     compiled = torch.compile(_attached, fullgraph=True, backend="aot_eager")
     (grad,) = torch.autograd.grad(compiled(x), x)
-    assert pytest.approx(torch.softmax(x, -1).detach().numpy()) == grad
+    assert (
+        pytest.approx(torch.softmax(x, -1).detach().cpu().numpy())
+        == grad.cpu().numpy()
+    )
 
 
 @requires_compile
@@ -140,7 +154,10 @@ def test_compile_jacrev() -> None:
     compiled = torch.compile(
         jacrev(_attached), fullgraph=True, backend="aot_eager"
     )
-    assert pytest.approx(torch.softmax(x, -1).numpy()) == compiled(x).numpy()
+    assert (
+        pytest.approx(torch.softmax(x, -1).cpu().numpy())
+        == compiled(x).cpu().numpy()
+    )
 
 
 @requires_compile
@@ -158,7 +175,9 @@ def test_compile_hessian_is_wrong() -> None:
         jacrev(jacrev(_attached)), fullgraph=True, backend="aot_eager"
     )
     ref = jacrev(jacrev(_lse))(x)
-    assert pytest.approx(ref.numpy(), abs=1e-12) == compiled(x).numpy()
+    assert (
+        pytest.approx(ref.cpu().numpy(), abs=1e-12) == compiled(x).cpu().numpy()
+    )
 
 
 def test_vmap_unbatched_gradient() -> None:
@@ -166,3 +185,24 @@ def test_vmap_unbatched_gradient() -> None:
     g = torch.softmax(x[0], dim=-1)
     out = vmap(lambda x: attach_gradient(_lse, x, g))(x)
     assert torch.equal(out, _lse(x))
+
+
+@requires_compile
+def test_compile_forward_mode_raises() -> None:
+    """
+    Dynamo would differentiate the (here detached) value instead of using
+    the attached gradient: compiled `jacfwd` gave zeros instead of `2 x`.
+    """
+
+    def f(x: Tensor) -> Tensor:
+        value = lambda t: t.detach().square().sum(-1)  # noqa: E731
+        return attach_gradient(value, x, 2 * x)
+
+    x = torch.tensor([1.0, 2.0, 3.0], **DD)
+    assert pytest.approx((2 * x).cpu().numpy()) == jacfwd(f)(x).cpu().numpy()
+
+    compiled = torch.compile(jacfwd(f), fullgraph=True, backend="aot_eager")
+    with pytest.raises(
+        Exception, match="Forward-mode derivatives|NotImplemented"
+    ):
+        compiled(x)

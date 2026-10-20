@@ -92,7 +92,12 @@ from ...autograd.nested import nested_jvp
 from ...tools.compile import is_compiling, reject_forward_mode
 from ...typing import Tensor
 from .krylov import Operator, bicgstab, cg, gmres
-from .result import STATUS_CONVERGED, LinearSolveResult, require_real
+from .result import (
+    STATUS_CONVERGED,
+    LinearSolveResult,
+    require_real,
+    require_real_params,
+)
 
 __all__ = ["implicit_solve"]
 
@@ -547,6 +552,7 @@ def implicit_solve(
     """
     require_real("right-hand side", rhs)
     require_real("initial guess", x0)
+    require_real_params(params)
     if isinstance(method, str):
         if method not in _METHODS:
             raise ValueError(

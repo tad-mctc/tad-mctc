@@ -71,7 +71,13 @@ from ...autograd.nested import nested_jvp
 from ...tools.compile import is_compiling, reject_forward_mode
 from ...typing import Tensor
 from ..linsolve.implicit import Method, implicit_solve
-from ..linsolve.result import STATUS_CONVERGED, LinearSolveResult, require_real
+from ..linsolve.result import (
+    STATUS_CONVERGED,
+    LinearSolveResult,
+    require_like,
+    require_real,
+    require_real_params,
+)
 
 __all__ = ["implicit_root", "implicit_fixed_point", "implicit_argmin"]
 
@@ -157,7 +163,9 @@ class _Root:
     def adjoint_linearization(
         self, z: Tensor, *params: Any
     ) -> Callable[[Tensor], Tensor]:
-        pullback = torch.func.vjp(self._f(params), z)[1]
+        recorded = torch.func.vjp(self._f(params), z)
+        require_like("residual", recorded[0], "root", z)
+        pullback = recorded[1]
         return lambda v: pullback(v)[0]
 
     def tangent_linearization(
@@ -167,6 +175,7 @@ class _Root:
         # JVP. Both are recorded once; no product re-evaluates `F`.
         recorded = torch.func.vjp(self._f(params), z)
         out, pullback = recorded[0], recorded[1]
+        require_like("residual", out, "root", z)
         jvp = torch.func.vjp(lambda c: pullback(c)[0], torch.zeros_like(out))[1]
         return lambda v: jvp(v)[0]
 
@@ -430,6 +439,7 @@ def implicit_root(
     2.0 0.083333
     """
     require_real("root", root)
+    require_real_params(params)
     if vdims is None:
         vdims = max(root.ndim, 1)
     squeeze = root.ndim == 0
@@ -547,9 +557,11 @@ def implicit_argmin(
 
     The root of the optimality condition :math:`\nabla_z f(z, p) = 0` (see
     :func:`implicit_root`). Its Jacobian is the Hessian
-    :math:`\nabla^2_{zz} f`, which is symmetric, and positive definite at a
-    strict minimum, so CG is the default. For saddle points or maxima, use
-    ``method="gmres"``.
+    :math:`\nabla^2_{zz} f`, which is symmetric. The derivatives require a
+    nondegenerate minimum, i.e., a positive definite Hessian (a strict
+    minimum is not enough: :math:`f(z) = z^4` has a singular Hessian at
+    :math:`z = 0`); CG, the default, relies on it as well. For
+    nondegenerate saddle points or maxima, use ``method="gmres"``.
 
     Parameters
     ----------

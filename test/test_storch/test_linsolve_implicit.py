@@ -65,7 +65,9 @@ def jacobi(r: Tensor, a: Tensor) -> Tensor:
 
 def _randn(*shape: int, seed: int) -> Tensor:
     gen = torch.Generator(device="cpu").manual_seed(seed)
-    return torch.randn(*shape, generator=gen, dtype=torch.double).to(DEVICE)
+    return torch.randn(
+        *shape, generator=gen, dtype=torch.double, device="cpu"
+    ).to(DEVICE)
 
 
 def build(method: str, s: Tensor) -> Tensor:
@@ -675,3 +677,12 @@ def test_compile_hessian_is_wrong() -> None:
 
     hessian = compile_fullgraph(jacrev(jacrev(f)))(s)
     assert_close(hessian, jacrev(jacrev(ref))(s))
+
+
+def test_rejects_complex_operator() -> None:
+    b = torch.ones(2, dtype=torch.double)
+    a = torch.eye(2, dtype=torch.cdouble)
+    with pytest.raises(DtypeError, match="Parameter 0"):
+        implicit_solve(lambda x, a: a @ x, b, a)
+    with pytest.raises(DtypeError, match="operator output"):
+        implicit_solve(lambda x: a @ x.to(a.dtype), b)

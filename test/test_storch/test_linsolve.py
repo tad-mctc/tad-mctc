@@ -29,7 +29,7 @@ import pytest
 import torch
 from torch.func import vmap
 
-from tad_mctc.exceptions import ConvergenceError, DtypeError
+from tad_mctc.exceptions import ConvergenceError, DeviceError, DtypeError
 from tad_mctc.storch import linsolve
 from tad_mctc.storch.linsolve import (
     STATUS_BREAKDOWN,
@@ -61,8 +61,10 @@ def jacobi(r: Tensor, a: Tensor) -> Tensor:
 
 def spd(n: int, dd: DD, batch: tuple[int, ...] = (), seed: int = 0) -> Tensor:
     gen = torch.Generator(device="cpu").manual_seed(seed)
-    s = torch.randn(*batch, n, n, generator=gen, dtype=torch.double)
-    a = s @ s.mT + n * torch.eye(n, dtype=torch.double)
+    s = torch.randn(
+        *batch, n, n, generator=gen, dtype=torch.double, device="cpu"
+    )
+    a = s @ s.mT + n * torch.eye(n, dtype=torch.double, device="cpu")
     return a.to(**dd)
 
 
@@ -70,13 +72,19 @@ def general(
     n: int, dd: DD, batch: tuple[int, ...] = (), seed: int = 0
 ) -> Tensor:
     gen = torch.Generator(device="cpu").manual_seed(seed)
-    s = torch.randn(*batch, n, n, generator=gen, dtype=torch.double)
-    return (s + 2 * n**0.5 * torch.eye(n, dtype=torch.double)).to(**dd)
+    s = torch.randn(
+        *batch, n, n, generator=gen, dtype=torch.double, device="cpu"
+    )
+    return (
+        s + 2 * n**0.5 * torch.eye(n, dtype=torch.double, device="cpu")
+    ).to(**dd)
 
 
 def rhs(shape: tuple[int, ...], dd: DD, seed: int = 1) -> Tensor:
     gen = torch.Generator(device="cpu").manual_seed(seed)
-    return torch.randn(*shape, generator=gen, dtype=torch.double).to(**dd)
+    return torch.randn(
+        *shape, generator=gen, dtype=torch.double, device="cpu"
+    ).to(**dd)
 
 
 def matrix(name: str, n: int, dd: DD, batch: tuple[int, ...] = ()) -> Tensor:
@@ -503,3 +511,40 @@ def test_rejects_non_real(name: str, dtype: torch.dtype) -> None:
             a,
             x0=torch.ones(2, dtype=dtype),
         )
+
+
+@pytest.mark.parametrize("name", SOLVERS)
+def test_rejects_complex_operator(name: str) -> None:
+    b = torch.ones(2, dtype=torch.double)
+    a = torch.eye(2, dtype=torch.cdouble)
+
+    # as a parameter
+    with pytest.raises(DtypeError, match="Parameter 0"):
+        SOLVERS[name](lambda x, a: a @ x, b, a)
+
+    # captured in a closure: the operator output is checked
+    with pytest.raises(DtypeError, match="operator output"):
+        SOLVERS[name](lambda x: a @ x.to(a.dtype), b)
+
+
+@pytest.mark.parametrize("name", SOLVERS)
+def test_rejects_mixed_precision_operator(name: str) -> None:
+    b = torch.ones(2, dtype=torch.float)
+    a = torch.eye(2, dtype=torch.double)
+    with pytest.raises(DtypeError, match="operator output"):
+        SOLVERS[name](lambda x: a @ x.double(), b)
+
+
+@pytest.mark.parametrize("name", SOLVERS)
+def test_integer_parameter(name: str) -> None:
+    """Integer tensors are structural arguments, not rejected."""
+    b = torch.ones(3, dtype=torch.double)
+    k = torch.tensor(1)
+    result = SOLVERS[name](lambda x, k: 2.0**k * x, b, k)
+    assert pytest.approx([0.5, 0.5, 0.5]) == result.solution.tolist()
+
+
+def test_rejects_operator_on_other_device() -> None:
+    b = torch.ones(2, dtype=torch.double)
+    with pytest.raises(DeviceError, match="operator output"):
+        cg(lambda x: x.to("meta"), b)

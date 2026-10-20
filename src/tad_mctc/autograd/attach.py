@@ -33,7 +33,7 @@ from typing import Any
 
 import torch
 
-from ..tools.compile import is_compiling
+from ..tools.compile import is_compiling, reject_forward_mode
 from ..typing import Tensor
 from .nested import nested_jvp
 
@@ -159,6 +159,8 @@ def attach_gradient(
             f"shape of the input (shape {tuple(x.shape)})."
         )
     if is_compiling():  # pragma: no cover - Dynamo-traced
+        # Dynamo would differentiate `function` instead of using `gradient`
+        reject_forward_mode("attach_gradient", x, gradient)
         # Dynamo drops the derivatives of Function inputs that are graph
         # inputs themselves (see `tad_mctc.storch.linsolve`); a view avoids it.
         return _AttachGradientReverse.apply(

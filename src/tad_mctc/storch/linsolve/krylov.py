@@ -65,7 +65,9 @@ from .result import (
     LinearSolveResult,
     convergence_target,
     finalize,
+    require_like,
     require_real,
+    require_real_params,
     safe_divide,
     vdot,
     vnorm,
@@ -92,6 +94,7 @@ def _setup(
     """
     require_real("right-hand side", rhs)
     require_real("initial guess", x0)
+    require_real_params(params)
     if vdims < 1 or vdims > rhs.ndim:
         raise ValueError(
             f"The number of vector dimensions ({vdims}) must be between 1 "
@@ -113,6 +116,7 @@ def _setup(
         )
 
     image = matvec(x0, *params)
+    require_like("operator output", image, "right-hand side", rhs)
     if image.shape != rhs.shape:
         raise ValueError(
             f"The operator maps the right-hand side shape {tuple(rhs.shape)} "

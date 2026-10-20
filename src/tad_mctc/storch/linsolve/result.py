@@ -27,12 +27,12 @@ with ``torch.compile(fullgraph=True)``.
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import torch
 
 from ...autograd.checks import is_vmapped
-from ...exceptions import ConvergenceError, DtypeError
+from ...exceptions import ConvergenceError, DeviceError, DtypeError
 from ...typing import Tensor
 
 __all__ = [
@@ -119,6 +119,42 @@ def require_real(name: str, tensor: Tensor | None) -> None:
         raise DtypeError(
             f"The {name} must be a real floating point tensor, not "
             f"{tensor.dtype}."
+        )
+
+
+def require_real_params(params: tuple[Any, ...]) -> None:
+    """
+    Raise for complex tensors among the parameters of an operator.
+
+    Integer and boolean tensors are allowed as structural arguments (e.g.
+    indices); they receive no derivatives.
+    """
+    for i, param in enumerate(params):
+        if isinstance(param, Tensor) and param.is_complex():
+            raise DtypeError(
+                f"Parameter {i} of the operator is complex ({param.dtype}); "
+                "only real tensors are supported."
+            )
+
+
+def require_like(
+    name: str, tensor: Tensor, reference_name: str, reference: Tensor
+) -> None:
+    """
+    Raise unless ``tensor`` has the dtype and device of ``reference``.
+
+    Catches operators that return complex or mixed-precision results, also
+    from tensors captured in a closure, before any iteration.
+    """
+    if tensor.dtype != reference.dtype:
+        raise DtypeError(
+            f"The {name} has dtype {tensor.dtype}, but the {reference_name} "
+            f"has dtype {reference.dtype}."
+        )
+    if tensor.device != reference.device:
+        raise DeviceError(
+            f"The {name} is on device {tensor.device}, but the "
+            f"{reference_name} is on device {reference.device}."
         )
 
 

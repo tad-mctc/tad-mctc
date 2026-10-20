@@ -41,10 +41,16 @@ DD = {"dtype": torch.double, "device": DEVICE}
 
 
 def _system(n: int = 4, symmetric: bool = False, seed: int = 0):
-    gen = torch.Generator().manual_seed(seed)
-    s = torch.randn(3, n, n, generator=gen, dtype=torch.double).to(DEVICE)
-    c = torch.randn(3, n, n, generator=gen, dtype=torch.double).to(DEVICE)
-    m = torch.randn(3, n, 2, generator=gen, dtype=torch.double).to(DEVICE)
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    s = torch.randn(
+        3, n, n, generator=gen, dtype=torch.double, device="cpu"
+    ).to(DEVICE)
+    c = torch.randn(
+        3, n, n, generator=gen, dtype=torch.double, device="cpu"
+    ).to(DEVICE)
+    m = torch.randn(
+        3, n, 2, generator=gen, dtype=torch.double, device="cpu"
+    ).to(DEVICE)
     if symmetric:
         a0 = s @ s.mT + n * torch.eye(n, **DD)
         c = c + c.mT
@@ -119,8 +125,10 @@ def test_value_and_shapes() -> None:
 
 def test_ill_conditioned() -> None:
     """`tanh(Y) = (E + I)^-1 (E - I)` with `E = exp(2Y)`, `|E| ~ 1e7`."""
-    gen = torch.Generator().manual_seed(1)
-    q, _ = torch.linalg.qr(torch.randn(4, 4, generator=gen, dtype=torch.double))
+    gen = torch.Generator(device="cpu").manual_seed(1)
+    q, _ = torch.linalg.qr(
+        torch.randn(4, 4, generator=gen, dtype=torch.double, device="cpu")
+    )
     q = q.to(DEVICE)
     y = torch.tensor([-1.0, 0.1, 5.0, 8.0], **DD)
     e = q @ torch.diag(torch.exp(2 * y)) @ q.mT
@@ -298,10 +306,14 @@ SHAPES = [
 @pytest.mark.parametrize("shapes", SHAPES)
 def test_shapes_as_linalg_solve(method, shapes) -> None:
     shape_a, shape_b = shapes
-    gen = torch.Generator().manual_seed(1)
-    s = torch.randn(*shape_a, generator=gen, dtype=torch.double).to(DEVICE)
+    gen = torch.Generator(device="cpu").manual_seed(1)
+    s = torch.randn(
+        *shape_a, generator=gen, dtype=torch.double, device="cpu"
+    ).to(DEVICE)
     a = s @ s.mT + 3 * torch.eye(3, **DD)
-    b = torch.randn(*shape_b, generator=gen, dtype=torch.double).to(DEVICE)
+    b = torch.randn(
+        *shape_b, generator=gen, dtype=torch.double, device="cpu"
+    ).to(DEVICE)
     try:
         ref = torch.linalg.solve(a, b)
     except RuntimeError:

@@ -48,8 +48,10 @@ DD = {"dtype": torch.double, "device": DEVICE}
 
 
 def _randn(*shape: int, seed: int) -> Tensor:
-    gen = torch.Generator().manual_seed(seed)
-    return torch.randn(*shape, generator=gen, dtype=torch.double).to(DEVICE)
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    return torch.randn(
+        *shape, generator=gen, dtype=torch.double, device="cpu"
+    ).to(DEVICE)
 
 
 def _nest(f: Callable, modes: str) -> Callable:
@@ -406,3 +408,21 @@ def test_package_namespace() -> None:
     assert storch.implicit.implicit_root is root.implicit_root
     assert storch.implicit_fixed_point is root.implicit_fixed_point
     assert not hasattr(storch, "krylov")
+
+
+def test_rejects_complex_parameter() -> None:
+    p = P.to(torch.cdouble)
+    with pytest.raises(DtypeError, match="Parameter 0"):
+        implicit_root(residual, newton(P), p)
+
+
+def test_rejects_mismatched_residual() -> None:
+    """The residual's dtype is checked where its derivatives are taken."""
+
+    def single(z: Tensor, p: Tensor) -> Tensor:
+        return residual(z, p).float()
+
+    p = P.clone().requires_grad_(True)
+    z = implicit_root(single, newton(P), p)
+    with pytest.raises(DtypeError, match="residual"):
+        z.sum().backward()
