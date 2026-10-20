@@ -34,6 +34,7 @@ from tad_mctc.tools import (
     has_cxx_compiler,
     is_compile_supported,
     is_compiling,
+    reject_forward_mode,
 )
 from tad_mctc.tools.testing import COMPILE_UNSUPPORTED_REASON, requires_compile
 
@@ -141,3 +142,16 @@ def test_compile_fullgraph_graph_break() -> None:
     compiled = compile_fullgraph(f, backend="aot_eager")
     with pytest.raises(Exception):
         compiled(torch.zeros(3))
+
+
+def test_reject_forward_mode() -> None:
+    x = torch.ones(2)
+    reject_forward_mode("f", x, None, 1.0)
+
+    with torch.autograd.forward_ad.dual_level():
+        dual = torch.autograd.forward_ad.make_dual(x, torch.ones(2))
+        with pytest.raises(NotImplementedError, match="'f' inside"):
+            reject_forward_mode("f", x, dual)
+
+    with pytest.raises(NotImplementedError):
+        torch.func.jacfwd(lambda x: reject_forward_mode("f", x) or x)(x)

@@ -652,3 +652,32 @@ def test_eighb_forward_mode_tensor_factor() -> None:
     fwd = torch.func.jacfwd(f)(a)
     rev = torch.func.jacrev(f)(a)
     torch.testing.assert_close(fwd, rev, atol=1e-8, rtol=1e-8)
+
+
+@pytest.mark.parametrize("bmethod", ["cond", "lorn"])
+def test_eighb_nested_forward_mode(bmethod: Literal["cond", "lorn"]) -> None:
+    """
+    Every nesting of forward and reverse mode to second order agrees, also
+    forward-over-forward, which needs `nested_jvp` (PyTorch hides a custom
+    `jvp` from enclosing forward-mode transforms).
+    """
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+    s = _rng((4, 4), dd)
+    weights = torch.arange(4, **dd)
+
+    def f(s: Tensor) -> Tensor:
+        w, v = storch.eighb(s + s.mT, broadening_method=bmethod)
+        return (w * weights).sum() + (v[:, 0] ** 4).sum()
+
+    jacrev, jacfwd = torch.func.jacrev, torch.func.jacfwd
+    ref = jacrev(jacrev(f))(s)
+    for transform in (jacfwd(jacrev(f)), jacrev(jacfwd(f)), jacfwd(jacfwd(f))):
+        torch.testing.assert_close(transform(s), ref, atol=1e-10, rtol=1e-10)
+
+    ref = jacrev(jacrev(jacrev(f)))(s)
+    third = jacfwd(jacfwd(jacrev(f)))(s)
+    torch.testing.assert_close(third, ref, atol=1e-9, rtol=1e-9)
+
+    # a third forward-mode level through the generated `vmap` rule raises
+    with pytest.raises(NotImplementedError, match="generated `vmap` rule"):
+        jacfwd(jacfwd(jacfwd(f)))(s)

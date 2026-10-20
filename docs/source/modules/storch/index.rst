@@ -6,5 +6,7 @@
 
    distance
    elemental
+   implicit
    linalg
+   linsolve
    utils

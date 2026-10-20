@@ -37,6 +37,7 @@ __all__ = [
     "has_cxx_compiler",
     "is_compile_supported",
     "is_compiling",
+    "reject_forward_mode",
 ]
 
 
@@ -71,6 +72,40 @@ def is_compile_supported() -> bool:
 def is_compiling() -> bool:
     """Whether we are currently being traced by ``torch.compile``."""
     return torch.compiler.is_compiling()
+
+
+def reject_forward_mode(name: str, *values: Any) -> None:
+    """
+    Raise if a tensor in ``values`` carries a forward-mode tangent.
+
+    Inside ``torch.compile``, Dynamo inlines the ``forward`` of a
+    ``torch.autograd.Function`` under forward-mode transforms (``jacfwd``,
+    ``jvp``) and ignores its ``jvp`` rule, so the tangents are those of the
+    plain forward computation and silently wrong for Functions whose
+    ``forward`` does not express the dependence on their inputs (PyTorch 2.7
+    to 2.14). Call this in the ``torch.compile`` branch of such Functions.
+
+    Parameters
+    ----------
+    name : str
+        Name of the function, for the error message.
+    *values : Any
+        Inputs of the Function; values that are not tensors are ignored.
+
+    Raises
+    ------
+    NotImplementedError
+        A tensor carries a forward-mode tangent.
+    """
+    for value in values:
+        if not isinstance(value, torch.Tensor):
+            continue
+        if torch.autograd.forward_ad.unpack_dual(value).tangent is not None:
+            raise NotImplementedError(
+                f"Forward-mode derivatives (jacfwd, jvp) of '{name}' inside "
+                "torch.compile are not supported. Use reverse mode (jacrev) "
+                "inside compiled code, or differentiate outside of it."
+            )
 
 
 def has_cxx_compiler() -> bool:
