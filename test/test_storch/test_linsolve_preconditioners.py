@@ -130,7 +130,8 @@ def test_coarse_space_exact() -> None:
 
 
 def test_float32_products() -> None:
-    """Stored in float32, A Z still gives a symmetric preconditioner."""
+    """Stored in float32, A Z gives a preconditioner symmetric to float32
+    precision, with which CG converges to the default tolerance."""
     pos = grid(5)
     a = coulomb(pos)
     cells, k = cell_index(pos, 4.0)
@@ -141,7 +142,7 @@ def test_float32_products() -> None:
     result = cg(matvec, b, a, preconditioner=m)
     assert result.converged.item()
     x = torch.ones_like(b)
-    assert pytest.approx((x * m(b)).sum().item(), rel=1e-12) == (
+    assert pytest.approx((x * m(b)).sum().item(), rel=1e-6) == (
         (b * m(x)).sum().item()
     )
 

@@ -96,8 +96,10 @@ def balancing(diagonal: Tensor, cells: Tensor, products: Tensor) -> Operator:
         :math:`A Z`, the sums of the columns of :math:`A` over each cell,
         shape ``(..., n, K)``, e.g. from
         :func:`~tad_mctc.storch.pairwise.pair_cell_sums` plus the
-        diagonal. It is stored as given; float32 halves the memory and
-        keeps the preconditioner symmetric.
+        diagonal. It is stored and applied in its dtype: float32 halves
+        the memory and the time of an application, and leaves the
+        preconditioner symmetric to float32 precision, which CG tolerates
+        (to relative tolerances of ``1e-13`` in the tests).
 
     Returns
     -------
@@ -153,13 +155,15 @@ def balancing(diagonal: Tensor, cells: Tensor, products: Tensor) -> Operator:
     def coarse_solve(v: Tensor) -> Tensor:  # E^-1 v
         return torch.cholesky_solve(v.unsqueeze(-1), factor).squeeze(-1)
 
+    # In the dtype of the stored products: casting the vectors, not the
+    # n x K matrix, which would be copied at every application.
     def times_products(u: Tensor) -> Tensor:  # A Z u
-        az = products.to(u.dtype) if products.dtype != u.dtype else products
-        return torch.einsum("...nk,...k->...n", az, u)
+        out = torch.einsum("...nk,...k->...n", products, u.to(products.dtype))
+        return out.to(u.dtype)
 
     def times_products_t(v: Tensor) -> Tensor:  # (A Z)^T v
-        az = products.to(v.dtype) if products.dtype != v.dtype else products
-        return torch.einsum("...nk,...n->...k", az, v)
+        out = torch.einsum("...nk,...n->...k", products, v.to(products.dtype))
+        return out.to(v.dtype)
 
     def apply(r: Tensor, *_: Any) -> Tensor:
         cr = coarse_solve(to_cells(r))

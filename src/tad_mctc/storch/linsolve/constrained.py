@@ -185,12 +185,14 @@ def constrained_solve(
         ax = matvec(x, *args) + torch.einsum("...kn,...k->...n", c, mu)
         return torch.cat((ax, torch.einsum("...kn,...n->...k", c, x)), -1)
 
-    kkt_preconditioner = None
+    kkt_preconditioner: Operator | None = None
     if preconditioner is not None:
         prec = preconditioner
 
-        def kkt_preconditioner(v: Tensor, c: Tensor, *args: Any) -> Tensor:
+        def bordered_preconditioner(v: Tensor, c: Tensor, *args: Any) -> Tensor:
             return torch.cat((prec(v[..., :n], *args), v[..., n:]), dim=-1)
+
+        kkt_preconditioner = bordered_preconditioner
 
     result = implicit_solve(
         kkt,

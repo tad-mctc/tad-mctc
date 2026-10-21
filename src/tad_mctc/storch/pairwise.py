@@ -41,16 +41,32 @@ exact as well, but keep the graphs of the tiles (``O(n^2)`` memory).
 which the balancing preconditioner needs
 (:func:`~tad_mctc.storch.linsolve.balancing`).
 
-The work is ``O(n^2)``. The products may be evaluated in a lower precision
-than the vector (``dtype``), e.g. float32 on GPUs with few float64 units:
-for 100k atoms in float32, the relative error is about ``1e-6`` (``3e-7``
-if only the terms were float32 and the sums float64, at 3x the time on an
-RTX 4070). An iterative solve then needs a refinement step with a float64
-product to reach float64 accuracy. Each tile takes about ten elementwise passes over ``rows x n``
-entries in eager mode; ``fused=True`` compiles the products into one
-kernel per tile with ``torch.compile`` (about 13x faster for 20k atoms in
-float32 on an RTX 4070), while the derivatives stay eager.
-``torch.compile`` of code that calls the Function is not supported.
+The work is ``O(n^2)``. In eager mode, each tile takes about ten
+elementwise passes over its ``rows x n`` pair terms. ``fused=True``
+compiles the product of a tile with ``torch.compile`` into one reduction,
+which never stores the pair terms: on an RTX 4070, a float32 product takes
+2.7 ms for 20k atoms and 61 ms for 100k, 35x faster than eager. The
+derivatives are evaluated eagerly; so are the products under ``torch.func``
+transforms (e.g. the derivative solves of
+:func:`~tad_mctc.storch.linsolve.implicit_solve` under ``jacrev``), while a
+plain ``.backward()`` keeps them fused. ``torch.compile`` of code that calls
+the Function is not supported.
+
+The products may be evaluated in a lower precision than the vector
+(``dtype``), e.g. float32 on GPUs with few float64 units, where a float64
+product of 100k atoms takes 3.7 s. Their relative error is then about
+``1e-6``. An iterative solve with such an operator must not ask for more
+than it can attain: use a relative tolerance of ``1e-5`` or larger, and
+reach float64 accuracy with a refinement step, a second solve for the
+correction with the float64 residual::
+
+    first = constrained_solve(fast, b, c, d, *args, rtol=1e-5)
+    r = precise(first.solution, *args) + c.mT @ first.multiplier - b
+    step = constrained_solve(fast, -r, c, 0 * d, *args, rtol=1e-5)
+    x = first.solution + step.solution
+
+For a charge model of 10k atoms, this gives charges within ``3e-9`` of a
+float64 Cholesky solve (``1e-11`` with a second step).
 """
 
 from __future__ import annotations
@@ -88,8 +104,8 @@ _TILE_PAIRS_CPU = 131_072
 _TILE_PAIRS_GPU = 1_048_576
 
 # A fused tile does not store its pair terms, so it can be much larger; on
-# an RTX 4070 (float32 terms, 100k atoms), tiles of 10 rows are 5x slower
-# than tiles of 2048 rows, which are within 3% of the optimum.
+# an RTX 4070 (float32, 100k atoms), tiles of 64 rows are 2.6x slower than
+# this default (1342 rows), and 5000 rows are 6% faster.
 _TILE_PAIRS_FUSED = 1 << 27
 
 
@@ -197,15 +213,49 @@ def _block_product(
     return product.to(x.dtype)
 
 
+def _block_product_reduction(
+    kernel: PairKernel,
+    dtype: torch.dtype | None,
+    rows: Tensor,
+    positions_i: Tensor,
+    positions_j: Tensor,
+    params_i: tuple[Tensor, ...],
+    params_j: tuple[Tensor, ...],
+    mask_i: Tensor | None,
+    mask_j: Tensor | None,
+    x: Tensor,
+) -> Tensor:  # pragma: no cover - Dynamo-traced
+    """
+    :func:`_block_product` as a sum of an elementwise product, which the
+    compiler fuses with the pair terms into one reduction (a contraction
+    is lowered to a matrix-vector call on the stored terms).
+    """
+    values = _block(
+        kernel,
+        dtype,
+        rows,
+        positions_i,
+        positions_j,
+        params_i,
+        params_j,
+        mask_i,
+        mask_j,
+    )
+    vector = x if dtype is None else x.to(dtype)
+    return (values * vector.unsqueeze(-2)).sum(-1).to(x.dtype)
+
+
 _FUSED: list[Callable[..., Tensor]] = []
-"""The compiled :func:`_block_product`, created on first use."""
+"""The compiled :func:`_block_product_reduction`, created on first use."""
 
 
 def _fused_block_product() -> Callable[..., Tensor]:
     if not _FUSED:
         _FUSED.append(
             torch.compile(
-                _block_product, dynamic=False, backend=get_compile_backend()
+                _block_product_reduction,
+                dynamic=False,
+                backend=get_compile_backend(),
             )
         )
     return _FUSED[0]
@@ -282,11 +332,55 @@ def _product(
             p.to(spec.dtype) if p.is_floating_point() else p for p in params
         )
     n = positions.shape[-2]
+    if fused and n > spec.tile:
+        return _fused_product(spec, positions, x, params, mask)
     tiles = [
         _tile_product(spec, positions, x, params, mask, start, stop, fused)
         for start, stop in _ranges(n, spec.tile)
     ]
     return torch.cat(tiles, dim=-1)
+
+
+def _fused_product(
+    spec: _Spec,
+    positions: Tensor,
+    x: Tensor,
+    params: tuple[Tensor, ...],
+    mask: Tensor | None,
+) -> Tensor:
+    """
+    The compiled tiles, all of one shape: the last tile is padded with
+    excluded rows, so that a system size compiles once, not twice (Dynamo
+    recompiles for every new shape, up to its limit).
+    """
+    n, tile = positions.shape[-2], spec.tile
+    if mask is None:
+        mask = torch.ones(
+            positions.shape[:-1], dtype=torch.bool, device=positions.device
+        )
+    product = _fused_block_product()
+    dtype = x.dtype
+    if spec.dtype is not None:
+        x = x.to(spec.dtype)  # once, as the coordinates
+    tiles = []
+    for start, stop in _ranges(n, tile):
+        rows = torch.arange(start, start + tile, device=positions.device)
+        real = rows < n
+        index = torch.where(real, rows, n - 1)
+        out = product(
+            spec.kernel,
+            spec.dtype,
+            rows,
+            positions[..., index, :],
+            positions,
+            tuple(p[..., index] for p in params),
+            params,
+            mask[..., index] & real,
+            mask,
+            x,
+        )
+        tiles.append(out[..., : stop - start])
+    return torch.cat(tiles, dim=-1).to(dtype)
 
 
 def _ranges(n: int, tile: int) -> list[tuple[int, int]]:
@@ -442,7 +536,7 @@ class _PairProduct(torch.autograd.Function):
         return tangent
 
     @staticmethod
-    def vmap(
+    def vmap(  # pyright: ignore[reportIncompatibleMethodOverride]
         info: Any,
         in_dims: tuple[Any, ...],
         positions: Tensor,
@@ -528,13 +622,18 @@ def pair_product(
     dtype : torch.dtype | None, optional
         Dtype in which the pair terms and the products are evaluated; the
         result has the dtype of ``x``. Defaults to that of ``positions``.
+        See the module documentation for the tolerance of a solve with a
+        float32 product.
     fused : bool, optional
         Compile the products of the tiles with ``torch.compile`` (see the
         module documentation). Pass a module-level ``kernel``: a new
         function object (e.g. a lambda created per call) triggers a new
-        compilation. Falls back to eager evaluation where compiling is not
-        possible (under ``torch.func`` transforms, inside
-        ``torch.compile``, or without Dynamo support). Defaults to
+        compilation, and so does every new system size and dtype (one each;
+        the last tile is padded). Beyond Dynamo's recompilation limit (8 by
+        default: four sizes in two dtypes), and where compiling is not
+        possible (under
+        ``torch.func`` transforms, inside ``torch.compile``, or without
+        Dynamo support), the products are evaluated eagerly. Defaults to
         ``False``.
 
     Returns

@@ -32,6 +32,7 @@ from torch.autograd import gradcheck, gradgradcheck
 from torch.func import jacfwd, jacrev, vmap
 
 from tad_mctc.storch.linsolve import (
+    ConstrainedSolveResult,
     balancing,
     cell_index,
     constrained_solve,
@@ -161,6 +162,10 @@ def test_fused(dtype) -> None:
     grad = torch.autograd.grad((fused**2).sum(), positions)[0]
     ref = torch.autograd.grad((eager**2).sum(), positions)[0]
     assert_close(grad, ref, 1e-10 if dtype is None else 1e-5)
+
+    # without a mask (all atoms interact)
+    out = pair_product(kernel, positions, x, s, tile=4, dtype=dtype, fused=True)
+    assert_close(out, _dense(positions, x, s), 1e-12 if dtype is None else 1e-6)
 
     # under a transform, the tiles are evaluated eagerly
     out = vmap(
@@ -331,7 +336,7 @@ def test_constrained_balancing(dtype) -> None:
     )
     prec = balancing(diag, cells, az)
 
-    def charges(pos: Tensor, preconditioner) -> Tensor:
+    def charges(pos: Tensor, preconditioner) -> ConstrainedSolveResult:
         return constrained_solve(
             _operator(),
             b,
