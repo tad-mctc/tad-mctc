@@ -73,6 +73,9 @@ def constrained_solve(
     atol: float = 1e-12,
     maxiter: int | None = None,
     early_exit: bool | None = None,
+    fast_matvec: Operator | None = None,
+    inner_rtol: float = 1e-5,
+    refinements: int = 5,
 ) -> ConstrainedSolveResult:
     r"""
     Solve :math:`\min_x \frac12 x^\mathsf{T} A x - b^\mathsf{T} x` subject
@@ -117,6 +120,17 @@ def constrained_solve(
         Whether to stop once all systems are inactive. ``None`` (default)
         stops early unless a tensor is ``vmap``-batched or
         ``torch.compile`` is tracing.
+    fast_matvec : Callable[..., Tensor] | None, optional
+        A cheaper approximation of ``matvec`` (same signature), e.g. with
+        float32 products. The solves are then iterative refinements to the
+        accuracy of ``matvec`` (see
+        :func:`~tad_mctc.storch.linsolve.implicit_solve`). Defaults to none.
+    inner_rtol : float, optional
+        Relative tolerance of the solves with ``fast_matvec``. Defaults to
+        ``1e-5``.
+    refinements : int, optional
+        Maximum number of corrections with ``fast_matvec``. Defaults to
+        ``5``.
 
     Returns
     -------
@@ -185,6 +199,17 @@ def constrained_solve(
         ax = matvec(x, *args) + torch.einsum("...kn,...k->...n", c, mu)
         return torch.cat((ax, torch.einsum("...kn,...n->...k", c, x)), -1)
 
+    fast_kkt: Operator | None = None
+    if fast_matvec is not None:
+        fast = fast_matvec
+
+        def bordered_fast(v: Tensor, c: Tensor, *args: Any) -> Tensor:
+            x, mu = v[..., :n], v[..., n:]
+            ax = fast(x, *args) + torch.einsum("...kn,...k->...n", c, mu)
+            return torch.cat((ax, torch.einsum("...kn,...n->...k", c, x)), -1)
+
+        fast_kkt = bordered_fast
+
     kkt_preconditioner: Operator | None = None
     if preconditioner is not None:
         prec = preconditioner
@@ -207,6 +232,9 @@ def constrained_solve(
         atol=atol,
         maxiter=maxiter,
         early_exit=early_exit,
+        fast_matvec=fast_kkt,
+        inner_rtol=inner_rtol,
+        refinements=refinements,
     )
     return ConstrainedSolveResult(
         solution=result.solution[..., :n],

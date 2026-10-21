@@ -26,6 +26,8 @@ implicit differentiation.
 - :func:`gmres`: restarted, preconditioned GMRES (nonsymmetric, indefinite)
 - :func:`implicit_solve`: solve with derivatives defined by the linear system
   (reverse and forward mode, any order), independent of the iterations
+  (optionally refined with a cheaper, e.g. float32, operator to the
+  accuracy of the exact one)
 - :func:`dense_solve`: LU solve with the same implicit derivatives, a
   replacement for ``torch.linalg.solve``, whose derivatives over its
   forward-mode rule and nested derivatives under ``vmap`` are wrong in

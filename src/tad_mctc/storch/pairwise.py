@@ -55,18 +55,15 @@ the Function is not supported.
 The products may be evaluated in a lower precision than the vector
 (``dtype``), e.g. float32 on GPUs with few float64 units, where a float64
 product of 100k atoms takes 3.7 s. Their relative error is then about
-``1e-6``. An iterative solve with such an operator must not ask for more
-than it can attain: use a relative tolerance of ``1e-5`` or larger, and
-reach float64 accuracy with a refinement step, a second solve for the
-correction with the float64 residual::
-
-    first = constrained_solve(fast, b, c, d, *args, rtol=1e-5)
-    r = precise(first.solution, *args) + c.mT @ first.multiplier - b
-    step = constrained_solve(fast, -r, c, 0 * d, *args, rtol=1e-5)
-    x = first.solution + step.solution
-
-For a charge model of 10k atoms, this gives charges within ``3e-9`` of a
-float64 Cholesky solve (``1e-11`` with a second step).
+``1e-6``, so a float32 operator must not be used alone where float64
+accuracy is needed. Pass it as the ``fast_matvec`` of
+:func:`~tad_mctc.storch.linsolve.implicit_solve` or
+:func:`~tad_mctc.storch.linsolve.constrained_solve` instead, with the
+float64 product as the operator: every solve, including the derivative
+solves, is then refined to the float64 tolerance, and float32 only speeds
+up the iterations. For a charge model of 10k atoms at ``rtol=1e-12``, the
+charges agree with a float64 Cholesky solve to ``4e-14`` and the forces to
+``5e-15``.
 """
 
 from __future__ import annotations
