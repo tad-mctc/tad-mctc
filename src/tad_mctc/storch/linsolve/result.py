@@ -36,6 +36,7 @@ from ...exceptions import ConvergenceError, DeviceError, DtypeError
 from ...typing import Tensor
 
 __all__ = [
+    "ConstrainedSolveResult",
     "LinearSolveResult",
     "require_convergence",
     "STATUS_CONVERGED",
@@ -106,6 +107,41 @@ class LinearSolveResult(NamedTuple):
         :attr:`status` with :data:`STATUS_CONVERGED` instead, since Dynamo
         does not trace this property.
         """
+        return self.status == STATUS_CONVERGED
+
+
+class ConstrainedSolveResult(NamedTuple):
+    """
+    Solution, Lagrange multipliers and diagnostics of a linear solve with
+    equality constraints, ``A x + C^T mu = b`` and ``C x = d`` (see
+    :func:`~tad_mctc.storch.linsolve.constrained_solve`).
+
+    The diagnostics are those of the bordered system; the batch shape is the
+    shape of the right-hand side without its last dimension.
+    """
+
+    solution: Tensor
+    """Solution ``x``, shape ``(..., n)``."""
+
+    multiplier: Tensor
+    """Lagrange multipliers ``mu`` of the constraints, shape ``(..., m)``."""
+
+    residual: Tensor
+    """Norm of the true residual of the bordered system (batch shape)."""
+
+    target: Tensor
+    """Residual norm required for convergence (batch shape)."""
+
+    iterations: Tensor
+    """Number of iterations each system took (batch shape, ``int64``)."""
+
+    status: Tensor
+    """Status code of each system (batch shape, ``int64``), see
+    :attr:`LinearSolveResult.status`."""
+
+    @property
+    def converged(self) -> Tensor:
+        """Whether each system converged (batch shape, ``bool``)."""
         return self.status == STATUS_CONVERGED
 
 
@@ -265,7 +301,9 @@ _STATUS_NAMES = {
 
 
 def require_convergence(
-    result: LinearSolveResult, vdims: int = 1, name: str = "Linear solve"
+    result: LinearSolveResult | ConstrainedSolveResult,
+    vdims: int = 1,
+    name: str = "Linear solve",
 ) -> Tensor:
     """
     Solution of a linear solve that must have converged.
@@ -277,7 +315,7 @@ def require_convergence(
 
     Parameters
     ----------
-    result : LinearSolveResult
+    result : LinearSolveResult | ConstrainedSolveResult
         Result of the solve.
     vdims : int, optional
         Number of trailing dimensions of the solution forming the vector.
