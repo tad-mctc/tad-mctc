@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
+r"""
 Linear Solve: Krylov Methods
 ============================
 
@@ -32,8 +32,19 @@ systems are frozen, so the solvers are usable under ``torch.func.vmap`` and
 ``maxiter`` trips, each with a product of the operator for all systems.
 Outside these transforms, the loop exits as soon as all systems are
 inactive. The default ``maxiter`` (twice the vector size) is a safety limit
-for eager mode; under ``vmap`` or ``torch.compile``, set it to the
-iteration count the (preconditioned) problem actually needs.
+for eager mode; under ``vmap`` or ``torch.compile``, and for large systems,
+set it to the iteration count the (preconditioned) problem actually needs,
+plus one per check of the true residual (see below).
+
+A system converges when its true residual ``b - A x`` satisfies the
+tolerance. When the recursive residual of CG or BiCGSTAB does, the next
+operator application checks the true one, which drifts from it by roundoff
+(mostly in single precision); a failed check restarts the recurrence from
+the true residual. If that does not decrease from one check (or, for
+GMRES, one restart cycle) to the next, the tolerance is below the
+attainable accuracy, about :math:`\epsilon \|A\| \|x\|`, and the system
+stops as :data:`~tad_mctc.storch.linsolve.STATUS_STAGNATED`. A true residual
+that keeps decreasing slowly is not stagnation and runs until ``maxiter``.
 
 Only real floating point tensors are supported.
 
@@ -138,6 +149,62 @@ def _exit_early(active: Tensor, early_exit: bool | None) -> bool:
     return early_exit
 
 
+def _check(
+    true_residual: Tensor,
+    checking: Tensor,
+    target: Tensor,
+    norm: Tensor,
+    checked: Tensor,
+    stagnation: Tensor,
+    vdims: int,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    """
+    Check the true residual of the systems whose recursive residual met the
+    target.
+
+    The recursive residual of CG and BiCGSTAB drifts from the true one by
+    roundoff, most in single precision. A system that fails the check
+    restarts from its true residual, unless that did not decrease since its
+    last check: the target is then below the attainable accuracy, and the
+    system stops (:data:`~tad_mctc.storch.linsolve.STATUS_STAGNATED`)
+    instead of iterating until ``maxiter``.
+
+    Returns
+    -------
+    tuple[Tensor, Tensor, Tensor, Tensor]
+        Systems to restart, and the updated true residual norms, norms at
+        the last check and stagnation flags.
+    """
+    true_norm = vnorm(true_residual, vdims)
+    failed = checking & (true_norm > target)
+    stagnated = failed & ~(true_norm < checked)
+    norm = torch.where(checking, true_norm, norm)
+    checked = torch.where(checking, true_norm, checked)
+    return failed & ~stagnated, norm, checked, stagnation | stagnated
+
+
+def _true_residual(
+    matvec: Operator,
+    rhs: Tensor,
+    x: Tensor,
+    params: tuple[Any, ...],
+    norm: Tensor,
+    stopped: bool,
+    breakdown: Tensor,
+    vdims: int,
+) -> Tensor:
+    """
+    Norm of the true residual of the solution.
+
+    If the loop stopped early without a breakdown, the solution of every
+    system was checked (or is the initial guess), and ``norm`` holds its
+    true residual; otherwise, the residual is recomputed.
+    """
+    if stopped and not bool(breakdown.any()):
+        return norm
+    return vnorm(rhs - matvec(x, *params), vdims)
+
+
 def cg(
     matvec: Operator,
     rhs: Tensor,
@@ -156,7 +223,8 @@ def cg(
     The operator must be symmetric positive definite. A direction of
     non-positive curvature stops the system and is reported as
     :data:`~tad_mctc.storch.linsolve.STATUS_BREAKDOWN`, unless the true
-    residual already satisfies the tolerance.
+    residual already satisfies the tolerance. Convergence is decided by the
+    true residual (see the module documentation).
 
     Parameters
     ----------
@@ -180,7 +248,8 @@ def cg(
         :math:`\|b - Ax\| \leq \mathrm{atol} + \max(\mathrm{rtol},
         10\epsilon) \|b\|`.
     maxiter : int | None, optional
-        Iteration limit. Defaults to twice the vector size.
+        Iteration limit, counting the checks of the true residual. Defaults
+        to twice the vector size.
     vdims : int, optional
         Number of trailing dimensions forming the vector. Defaults to ``1``.
     early_exit : bool | None, optional
@@ -216,16 +285,24 @@ def cg(
     p = z
     rz = vdot(r, z, vdims)
 
-    active = vnorm(r, vdims) > target
+    norm = vnorm(r, vdims)
+    active = norm > target
+    checking = torch.zeros_like(active)
+    checked = torch.full_like(norm, math.inf)
     breakdown = torch.zeros_like(active)
+    stagnation = torch.zeros_like(active)
     iterations = torch.zeros_like(active, dtype=torch.int64)
 
     exit_early = _exit_early(active, early_exit)
+    stopped = False
     for _ in range(maxiter):
-        if exit_early and not bool(active.any()):
+        if exit_early and not bool((active | checking).any()):
+            stopped = True
             break
 
-        ap = matvec(p, *params)
+        # One product per trip: of the search direction, or of the solution
+        # of a system whose recursive residual met the target.
+        ap = matvec(torch.where(checking, x, p), *params)
         pap = vdot(p, ap, vdims)
 
         # Non-positive curvature: the operator (or the preconditioner) is
@@ -238,17 +315,28 @@ def cg(
         x = torch.where(update, x + alpha * p, x)
         r = torch.where(update, r - alpha * ap, r)
 
+        restart, norm, checked, stagnation = _check(
+            rhs - ap, checking, target, norm, checked, stagnation, vdims
+        )
+        r = torch.where(restart, rhs - ap, r)
+
         z = precondition(r)
         rz_new = vdot(r, z, vdims)
         beta = safe_divide(rz_new, rz)
-        p = torch.where(update, z + beta * p, p)
-        rz = torch.where(update, rz_new, rz)
+        p = torch.where(update, z + beta * p, torch.where(restart, z, p))
+        rz = torch.where(update | restart, rz_new, rz)
 
         iterations = iterations + update.to(torch.int64)
-        active = update & (vnorm(r, vdims) > target)
+        met = vnorm(r, vdims) <= target
+        checking = update & met
+        active = (update & ~met) | restart
 
-    residual = vnorm(rhs - matvec(x, *params), vdims)
-    return finalize(x, residual, target, iterations, breakdown, vdims)
+    residual = _true_residual(
+        matvec, rhs, x, params, norm, stopped, breakdown, vdims
+    )
+    return finalize(
+        x, residual, target, iterations, breakdown, vdims, stagnation
+    )
 
 
 def bicgstab(
@@ -269,7 +357,8 @@ def bicgstab(
     The operator may be nonsymmetric. Each iteration applies the operator
     twice. A vanishing denominator stops the system and is reported as
     :data:`~tad_mctc.storch.linsolve.STATUS_BREAKDOWN`, unless the true
-    residual already satisfies the tolerance.
+    residual already satisfies the tolerance. Convergence is decided by the
+    true residual (see the module documentation).
 
     Parameters
     ----------
@@ -292,7 +381,8 @@ def bicgstab(
         :math:`\|b - Ax\| \leq \mathrm{atol} + \max(\mathrm{rtol},
         10\epsilon) \|b\|`.
     maxiter : int | None, optional
-        Iteration limit. Defaults to twice the vector size.
+        Iteration limit, counting the checks of the true residual. Defaults
+        to twice the vector size.
     vdims : int, optional
         Number of trailing dimensions forming the vector. Defaults to ``1``.
     early_exit : bool | None, optional
@@ -333,13 +423,19 @@ def bicgstab(
     omega_previous = scalar
     tiny = torch.finfo(rhs.dtype).tiny
 
-    active = vnorm(residual, vdims) > target
+    norm = vnorm(residual, vdims)
+    active = norm > target
+    checking = torch.zeros_like(active)
+    checked = torch.full_like(norm, math.inf)
     breakdown = torch.zeros_like(active)
+    stagnation = torch.zeros_like(active)
     iterations = torch.zeros_like(active, dtype=torch.int64)
 
     exit_early = _exit_early(active, early_exit)
+    stopped = False
     for _ in range(maxiter):
-        if exit_early and not bool(active.any()):
+        if exit_early and not bool((active | checking).any()):
+            stopped = True
             break
 
         rho = vdot(shadow, residual, vdims)
@@ -347,8 +443,10 @@ def bicgstab(
         trial_direction = residual + beta * (direction - omega_previous * image)
         direction = torch.where(active, trial_direction, direction)
 
+        # The first product is of the solution for a system whose recursive
+        # residual met the target.
         phat = precondition(direction)
-        image_new = matvec(phat, *params)
+        image_new = matvec(torch.where(checking, x, phat), *params)
         sv = vdot(shadow, image_new, vdims)
         alpha = safe_divide(rho, sv)
 
@@ -380,11 +478,34 @@ def bicgstab(
         alpha_previous = torch.where(update, alpha, alpha_previous)
         omega_previous = torch.where(update, omega, omega_previous)
 
-        iterations = iterations + update.to(torch.int64)
-        active = update & trial_active
+        # A restart begins a new recurrence from the true residual.
+        restart, norm, checked, stagnation = _check(
+            rhs - image_new,
+            checking,
+            target,
+            norm,
+            checked,
+            stagnation,
+            vdims,
+        )
+        residual = torch.where(restart, rhs - image_new, residual)
+        shadow = torch.where(restart, residual, shadow)
+        direction = torch.where(restart, 0.0, direction)
+        image = torch.where(restart, 0.0, image)
+        rho_previous = torch.where(restart, 1.0, rho_previous)
+        alpha_previous = torch.where(restart, 1.0, alpha_previous)
+        omega_previous = torch.where(restart, 1.0, omega_previous)
 
-    true_residual = vnorm(rhs - matvec(x, *params), vdims)
-    return finalize(x, true_residual, target, iterations, breakdown, vdims)
+        iterations = iterations + update.to(torch.int64)
+        checking = update & ~trial_active
+        active = (update & trial_active) | restart
+
+    true_residual = _true_residual(
+        matvec, rhs, x, params, norm, stopped, breakdown, vdims
+    )
+    return finalize(
+        x, true_residual, target, iterations, breakdown, vdims, stagnation
+    )
 
 
 def gmres(
@@ -408,9 +529,9 @@ def gmres(
     (modified Gram-Schmidt with one reorthogonalization), so the cost and
     memory grow with ``restart``. The residual norm never increases. A
     system whose true residual does not decrease over a full restart cycle
-    stops and is reported as :data:`~tad_mctc.storch.linsolve.STATUS_BREAKDOWN`
-    (stagnation, e.g. a singular operator), unless it already satisfies the
-    tolerance.
+    stops and is reported as :data:`~tad_mctc.storch.linsolve.STATUS_STAGNATED`
+    (e.g. a singular operator, or a tolerance below the attainable
+    accuracy), unless it already satisfies the tolerance.
 
     Parameters
     ----------
@@ -477,6 +598,7 @@ def gmres(
 
     active = norm > target
     breakdown = torch.zeros_like(active)
+    stagnation = torch.zeros_like(active)
     iterations = torch.zeros_like(active, dtype=torch.int64)
 
     exit_early = _exit_early(active, early_exit)
@@ -563,10 +685,12 @@ def gmres(
         residual = rhs - matvec(x, *params)
         new_norm = vnorm(residual, vdims)
         stagnated = active & ~(new_norm < norm) & (new_norm > target)
-        breakdown = breakdown | stagnated
+        stagnation = stagnation | stagnated
         iterations = iterations + torch.where(active, count, 0)
         active = active & ~stagnated & (new_norm > target)
         norm = new_norm
 
     true_residual = vnorm(rhs - matvec(x, *params), vdims)
-    return finalize(x, true_residual, target, iterations, breakdown, vdims)
+    return finalize(
+        x, true_residual, target, iterations, breakdown, vdims, stagnation
+    )

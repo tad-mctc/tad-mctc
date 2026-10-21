@@ -42,6 +42,7 @@ __all__ = [
     "STATUS_NOT_CONVERGED",
     "STATUS_BREAKDOWN",
     "STATUS_NONFINITE",
+    "STATUS_STAGNATED",
 ]
 
 
@@ -60,6 +61,13 @@ or a BiCGSTAB denominator vanished.
 
 STATUS_NONFINITE = 3
 """The residual is not finite (NaN or infinite input or iterate)."""
+
+STATUS_STAGNATED = 4
+r"""
+The true residual stopped decreasing before satisfying the tolerance:
+usually, the tolerance is below the attainable accuracy of the dtype
+(about :math:`\epsilon \|A\| \|x\|`), or the operator is singular.
+"""
 
 
 class LinearSolveResult(NamedTuple):
@@ -86,7 +94,8 @@ class LinearSolveResult(NamedTuple):
     status: Tensor
     """Status code of each system (batch shape, ``int64``), one of
     :data:`STATUS_CONVERGED`, :data:`STATUS_NOT_CONVERGED`,
-    :data:`STATUS_BREAKDOWN` or :data:`STATUS_NONFINITE`."""
+    :data:`STATUS_BREAKDOWN`, :data:`STATUS_NONFINITE` or
+    :data:`STATUS_STAGNATED`."""
 
     @property
     def converged(self) -> Tensor:
@@ -213,6 +222,7 @@ def finalize(
     iterations: Tensor,
     breakdown: Tensor,
     vdims: int,
+    stagnation: Tensor,
 ) -> LinearSolveResult:
     """
     Assemble the result from the true residual and the iteration state.
@@ -226,17 +236,13 @@ def finalize(
     residual = residual.squeeze(dims) if vdims > 0 else residual
     target = target.squeeze(dims) if vdims > 0 else target
     breakdown = breakdown.squeeze(dims) if vdims > 0 else breakdown
+    stagnation = stagnation.squeeze(dims) if vdims > 0 else stagnation
     iterations = iterations.squeeze(dims) if vdims > 0 else iterations
 
-    status = torch.where(
-        residual <= target,
-        STATUS_CONVERGED,
-        torch.where(
-            ~torch.isfinite(residual),
-            STATUS_NONFINITE,
-            torch.where(breakdown, STATUS_BREAKDOWN, STATUS_NOT_CONVERGED),
-        ),
-    )
+    status = torch.where(stagnation, STATUS_STAGNATED, STATUS_NOT_CONVERGED)
+    status = torch.where(breakdown, STATUS_BREAKDOWN, status)
+    status = torch.where(~torch.isfinite(residual), STATUS_NONFINITE, status)
+    status = torch.where(residual <= target, STATUS_CONVERGED, status)
 
     return LinearSolveResult(
         solution=solution,
@@ -251,6 +257,10 @@ _STATUS_NAMES = {
     STATUS_NOT_CONVERGED: "iteration limit reached",
     STATUS_BREAKDOWN: "breakdown (operator not positive definite?)",
     STATUS_NONFINITE: "non-finite residual",
+    STATUS_STAGNATED: (
+        "stagnation (tolerance below the attainable accuracy, or a "
+        "singular operator?)"
+    ),
 }
 
 
@@ -291,11 +301,18 @@ def require_convergence(
         if not bool(converged.all()):
             failed = result.status[~converged]
             reasons = sorted({_STATUS_NAMES[int(c)] for c in failed.unique()})
+
+            # The system furthest from its own target (NaN counts as worst).
+            ratio = (result.residual / result.target).nan_to_num(torch.inf)
+            worst = torch.where(converged, -torch.inf, ratio).argmax()
+            residual = result.residual.flatten()[worst].item()
+            target = result.target.flatten()[worst].item()
+
             raise ConvergenceError(
                 f"{name} did not converge for {failed.numel()} of "
                 f"{converged.numel()} system(s): {', '.join(reasons)}. "
-                f"Largest residual {result.residual.max().item():.3e}, "
-                f"target {result.target.max().item():.3e}."
+                f"Worst system: residual {residual:.3e}, target "
+                f"{target:.3e}."
             )
         return result.solution
 

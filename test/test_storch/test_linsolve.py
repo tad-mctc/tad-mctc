@@ -23,6 +23,7 @@ the true residual. Derivatives are tested in `test_linsolve_implicit.py`.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 import pytest
@@ -36,6 +37,7 @@ from tad_mctc.storch.linsolve import (
     STATUS_CONVERGED,
     STATUS_NONFINITE,
     STATUS_NOT_CONVERGED,
+    STATUS_STAGNATED,
     LinearSolveResult,
     bicgstab,
     cg,
@@ -282,6 +284,86 @@ def test_tolerance_floor() -> None:
     assert result.converged.item()
 
 
+def single_precision(
+    condition: float, batch: tuple[int, ...] = (), seed: int = 3
+) -> tuple[Tensor, Tensor]:
+    """SPD system of size 40 in single precision with a given condition."""
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    cpu: DD = {"device": torch.device("cpu"), "dtype": torch.double}
+    s = torch.randn(*batch, 40, 40, generator=gen, **cpu)
+    q, _ = torch.linalg.qr(s)
+    spectrum = torch.logspace(0, math.log10(condition), 40, **cpu)
+    a = ((q * spectrum.unsqueeze(-2)) @ q.mT).float()
+    b = torch.randn(*batch, 40, generator=gen, **cpu).float()
+    return (0.5 * (a + a.mT)).to(DEVICE), b.to(DEVICE)
+
+
+@pytest.mark.parametrize("name", ["cg", "bicgstab"])
+def test_true_residual_check(name: str) -> None:
+    """
+    In single precision, the recursive residual drifts from the true one.
+    A system whose recursive residual meets the target only stops if its
+    true residual does, or if that stagnated (the tolerance of 10 eps is
+    then below the attainable accuracy); it never stops early as
+    "iteration limit reached".
+    """
+    a, b = single_precision(1e2, batch=(20,))
+
+    result = SOLVERS[name](matvec, b, a, rtol=0.0, atol=0.0, maxiter=400)
+    check_result(result, a, b)
+    status = result.status.tolist()
+    assert set(status) <= {STATUS_CONVERGED, STATUS_STAGNATED}
+    assert STATUS_CONVERGED in status
+    # stagnated just above the target, at the attainable accuracy
+    assert (result.residual < 4 * result.target).all()
+
+    # the same without stopping early (as under `vmap`)
+    full = SOLVERS[name](
+        matvec, b, a, rtol=0.0, atol=0.0, maxiter=400, early_exit=False
+    )
+    assert full.status.tolist() == status
+    assert (full.solution == result.solution).all()
+
+
+@pytest.mark.parametrize("name", ["cg", "bicgstab"])
+def test_stagnation(name: str) -> None:
+    """An unattainable tolerance stops long before the iteration limit."""
+    a, b = single_precision(1e4)
+
+    result = SOLVERS[name](matvec, b, a, rtol=0.0, atol=0.0, maxiter=4000)
+
+    assert result.status.item() == STATUS_STAGNATED
+    assert result.iterations.item() < 1000
+    check_result(result, a, b)
+    with pytest.raises(ConvergenceError, match="attainable accuracy"):
+        require_convergence(result)
+
+
+@pytest.mark.parametrize("name", ["cg", "bicgstab"])
+def test_operator_applications(name: str) -> None:
+    """
+    The check of the true residual replaces its recomputation after the
+    loop: no extra product for CG, one for BiCGSTAB (whose check trip
+    applies the operator twice).
+    """
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+    a, b = matrix(name, 20, dd), rhs((20,), dd)
+    calls = []
+
+    def counted(x: Tensor, a: Tensor) -> Tensor:
+        calls.append(1)
+        return matvec(x, a)
+
+    result = SOLVERS[name](counted, b, a)
+
+    assert result.converged.item()
+    # initial residual, iterations, and the check (the final product of
+    # BiCGSTAB's check trip is part of the trip)
+    per_iteration = 1 if name == "cg" else 2
+    expected = 1 + per_iteration * (result.iterations.item() + 1)
+    assert len(calls) == expected
+
+
 @pytest.mark.parametrize("name", SOLVERS)
 def test_preconditioner(name: str) -> None:
     """Jacobi preconditioning of a badly scaled system."""
@@ -363,7 +445,11 @@ def test_singular(name: str) -> None:
     result = SOLVERS[name](matvec, b, a)
 
     assert not result.converged.item()
-    assert result.status.item() in (STATUS_BREAKDOWN, STATUS_NOT_CONVERGED)
+    assert result.status.item() in (
+        STATUS_BREAKDOWN,
+        STATUS_NOT_CONVERGED,
+        STATUS_STAGNATED,
+    )
 
 
 @pytest.mark.parametrize("name", SOLVERS)
@@ -490,6 +576,29 @@ def test_require_convergence() -> None:
     out = torch.vmap(solve)(a, b)
     assert pytest.approx(b[0].cpu()) == out[0].cpu()
     assert torch.isnan(out[1]).all()
+
+
+def test_require_convergence_worst_system() -> None:
+    """The message reports the residual and target of the same system."""
+    dd: DD = {"device": DEVICE, "dtype": torch.double}
+    result = LinearSolveResult(
+        solution=torch.zeros(3, 2, **dd),
+        residual=torch.tensor([1.0, 5.0, 0.1], **dd),
+        target=torch.tensor([2.0, 1.0, 0.01], **dd),
+        iterations=torch.zeros(3, dtype=torch.int64, device=DEVICE),
+        status=torch.tensor(
+            [STATUS_CONVERGED, STATUS_NOT_CONVERGED, STATUS_STAGNATED],
+            device=DEVICE,
+        ),
+    )
+
+    with pytest.raises(ConvergenceError) as error:
+        require_convergence(result)
+    message = str(error.value)
+    assert "2 of 3 system(s)" in message
+    assert "iteration limit reached" in message
+    assert "stagnation" in message
+    assert "residual 1.000e-01, target 1.000e-02" in message
 
 
 def test_gmres_invalid_restart() -> None:
