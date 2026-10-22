@@ -4,17 +4,24 @@ Cost of the stages of a matrix-free charge equilibration (EEQ) solve.
 
 Water droplets of increasing size; the operator is the float64 fused pair
 product, refined from float32 products (``fast_matvec``), with the balancing
-preconditioner on 12 bohr cells. Each stage is timed separately, with its
-peak memory on GPU:
+preconditioner on 12 bohr cells (not bounded with ``max_cells`` here, so
+the setup memory grows like ``n^2``). Each stage is timed separately; on
+GPU, its memory is the peak above what was allocated when it started:
 
-- ``compile``: the first fused products (one compilation per size and
-  dtype; cached for later calls of the same size).
+- ``compile``: the first fused products. A kernel compiles once per dtype
+  for all system sizes, so this is only a compilation for the first size
+  (Inductor caches it on disk, across runs); later, it is one product.
 - ``setup``: the cells, the cell sums A Z and the preconditioner.
 - ``charges``: the refined constrained solve.
 - ``forces``: the gradient of the energy with respect to the positions
   (an adjoint solve and the derivatives of the pair products).
-- ``params``: the gradient of a function of the charges with respect to
-  the parameters (an adjoint solve and the parameter derivatives).
+- ``energy params``: the gradient of the energy with respect to the
+  parameters (radii, hardnesses, electronegativities).
+- ``charge params``: the gradient of a function of the charges,
+  ``sum(q^2)``, with respect to the parameters (the charge response).
+- ``force params``: the parameter gradient of a function of the forces,
+  the mixed derivative of a fit to forces. Its graph is that of all pair
+  tiles, ``O(n^2)`` memory, so it runs only up to ``MIXED_MAX`` atoms.
 
 The derivatives evaluate the pair products eagerly in float64 (see
 :mod:`tad_mctc.storch.pairwise`), so they are slower than the solve.
@@ -37,6 +44,9 @@ from tad_mctc.storch.pairwise import pair_cell_sums, pair_product
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 dd = {"device": device, "dtype": torch.double}
 fused = device.type == "cuda"
+
+MIXED_MAX = 3000
+"""Largest system for the mixed derivative (``O(n^2)`` memory)."""
 
 # radius (bohr), hardness and electronegativity (hartree) of H and O
 PARAMS = {"H": (0.84, 0.47, 1.24), "O": (1.24, 0.17, 1.54)}
@@ -95,6 +105,7 @@ def droplet(molecules: int, seed: int = 0):
 
 
 def stage(name: str, row: dict, fn):
+    base = 0
     if device.type == "cuda":
         torch.cuda.synchronize()
         torch.cuda.reset_peak_memory_stats()
@@ -159,19 +170,30 @@ def run(atoms: int) -> dict:
 
     q = stage("charges", row, charges)
 
-    def forces():
-        energy = (params[2] * q).sum() + 0.5 * (
-            q * exact(q, pos, params[0], params[1])
-        ).sum()
-        # the graph of the charges is kept for the next stage
-        return torch.autograd.grad(energy, pos, retain_graph=True)[0]
+    def energy():
+        pairs = exact(q, pos, params[0], params[1])
+        return (params[2] * q).sum() + 0.5 * (q * pairs).sum()
 
-    stage("forces", row, forces)
+    # the graphs are kept for the later stages
+    e = energy()
+    stage("forces", row, lambda: torch.autograd.grad(e, pos, retain_graph=True))
+    stage(
+        "energy params",
+        row,
+        lambda: torch.autograd.grad(e, params, retain_graph=True),
+    )
+    stage(
+        "charge params",
+        row,
+        lambda: torch.autograd.grad((q * q).sum(), params, retain_graph=True),
+    )
 
-    def parameter_gradient():
-        return torch.autograd.grad((q * q).sum(), params)
+    def force_params():
+        (f,) = torch.autograd.grad(energy(), pos, create_graph=True)
+        return torch.autograd.grad((f * f).sum(), params)
 
-    stage("params", row, parameter_gradient)
+    if n <= MIXED_MAX:
+        stage("force params", row, force_params)
     return row
 
 
