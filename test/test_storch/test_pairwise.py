@@ -177,6 +177,22 @@ def test_fused(dtype) -> None:
     )
 
 
+@requires_compile
+def test_fused_compiles_once() -> None:
+    """Inputs that require gradients do not compile the tiles anew."""
+    positions, s, x = system(13)
+
+    def product(pos: Tensor, x: Tensor) -> Tensor:
+        return pair_product(kernel, pos, x, s, tile=4, fused=True)
+
+    first = product(positions, x)
+    pos, v = positions.clone().requires_grad_(True), x.clone().requires_grad_()
+    with torch._dynamo.config.patch(error_on_recompile=True):
+        second = product(pos, v)
+        torch.autograd.grad(second.sum(), (pos, v))
+    assert_close(first, second, 1e-12)
+
+
 def test_eager_tiles(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Whatever is evaluated eagerly stays within the eager tile budget, also

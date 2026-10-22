@@ -387,6 +387,14 @@ def _product(
         and not is_compiling()
         and not any(is_functorch_tensor(t) for t in tensors)
     )
+    if fused:
+        # The forward needs no graph. Dynamo guards on `requires_grad` and
+        # the strides (e.g. of an expanded gradient in the backward), so
+        # each pattern of them would compile anew.
+        positions = positions.detach().contiguous()
+        x = x.detach().contiguous()
+        params = tuple(p.detach().contiguous() for p in params)
+        mask = None if mask is None else mask.contiguous()
     if spec.dtype is not None:
         # Once, not per tile: in a fused tile, the cast of the coordinates
         # is not hoisted and doubles its time.
