@@ -98,6 +98,19 @@ class LinearSolveResult(NamedTuple):
     :data:`STATUS_BREAKDOWN`, :data:`STATUS_NONFINITE` or
     :data:`STATUS_STAGNATED`."""
 
+    refinement_status: Tensor | None = None
+    """With a fast operator (``fast_matvec``), the status after the
+    refinement, before a fallback (batch shape, ``int64``); e.g.
+    :data:`STATUS_STAGNATED` where the fast operator could not refine. With
+    ``fallback``, the systems where this is not :data:`STATUS_CONVERGED`
+    were solved again with the exact operator. Without a fast operator, it
+    is :attr:`status`. (``None`` only for results constructed by hand.)"""
+
+    fallback_iterations: Tensor | None = None
+    """The iterations of the fallback solves with the exact operator,
+    included in :attr:`iterations` (batch shape, ``int64``); zero where
+    there was none. (``None`` only for results constructed by hand.)"""
+
     @property
     def converged(self) -> Tensor:
         """
@@ -144,6 +157,12 @@ class ConstrainedSolveResult(NamedTuple):
     part of :attr:`residual`, and on its own at the level of rounding (the
     iterates are feasible): e.g. a check of a total charge independent of
     the tolerances, which are relative to the whole bordered system."""
+
+    refinement_status: Tensor | None = None
+    """See :attr:`LinearSolveResult.refinement_status`."""
+
+    fallback_iterations: Tensor | None = None
+    """See :attr:`LinearSolveResult.fallback_iterations`."""
 
     @property
     def converged(self) -> Tensor:
@@ -292,6 +311,8 @@ def finalize(
         target=target,
         iterations=iterations,
         status=status,
+        refinement_status=status,
+        fallback_iterations=torch.zeros_like(iterations),
     )
 
 

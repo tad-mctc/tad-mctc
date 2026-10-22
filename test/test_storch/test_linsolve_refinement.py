@@ -29,12 +29,14 @@ import torch
 from torch.func import jacfwd, jacrev, vmap
 
 from tad_mctc.storch.linsolve import (
+    STATUS_BREAKDOWN,
     STATUS_CONVERGED,
     STATUS_NOT_CONVERGED,
     STATUS_STAGNATED,
     constrained_solve,
     dense_solve,
     implicit_solve,
+    require_convergence,
 )
 from tad_mctc.storch.linsolve.implicit import Method
 from tad_mctc.typing import Tensor
@@ -200,9 +202,57 @@ def test_fallback(factor: float) -> None:
     assert (fallback.solution[0] == result.solution[0]).all()
     assert_close(solve(a, b), ref, 1e-11)
 
+    # the diagnostics tell the refinement and the fallback apart
+    assert fallback.refinement_status is not None
+    assert fallback.fallback_iterations is not None
+    assert fallback.refinement_status.tolist() == result.status.tolist()
+    assert fallback.fallback_iterations[0] == 0
+    assert fallback.fallback_iterations[1] > 0
+    assert (
+        fallback.iterations - fallback.fallback_iterations == result.iterations
+    ).all()
+
     grad = jacrev(lambda b: solve(a, b).sum())(b)
     ones = torch.ones(2, 12, **DD)
     assert_close(grad, torch.linalg.solve(a.mT, ones), 1e-10)
+
+
+def test_fallback_is_a_retry() -> None:
+    """
+    The fallback reuses the method and the preconditioner: where these do
+    not suit the exact operator either, it fails as well, and says so.
+    """
+    a, b = matrix("cg"), _randn(12, seed=1)
+
+    def indefinite(x: Tensor, a: Tensor) -> Tensor:
+        return -fast(x, a)
+
+    def negative(r: Tensor, a: Tensor) -> Tensor:
+        return -r  # not positive definite: no CG with it converges
+
+    result = implicit_solve(
+        matvec,
+        b,
+        a,
+        fast_matvec=indefinite,
+        preconditioner=negative,
+        fallback=True,
+    )
+    assert result.refinement_status is not None
+    assert result.fallback_iterations is not None
+    assert result.refinement_status.item() == STATUS_BREAKDOWN
+    assert result.status.item() == STATUS_BREAKDOWN
+    with pytest.raises(RuntimeError):
+        require_convergence(result)
+
+
+def test_diagnostics_without_fast_operator() -> None:
+    a, b = matrix("cg", batch=(2,)), _randn(2, 12, seed=1)
+    result = implicit_solve(matvec, b, a)
+    assert result.refinement_status is not None
+    assert result.fallback_iterations is not None
+    assert (result.refinement_status == result.status).all()
+    assert (result.fallback_iterations == 0).all()
 
 
 def test_initial_guess() -> None:

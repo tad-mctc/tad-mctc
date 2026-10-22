@@ -54,7 +54,7 @@ from typing import Any
 import torch
 
 from ...typing import Tensor
-from .implicit import implicit_solve
+from .implicit import _implicit_solve
 from .krylov import Operator, projected_cg
 from .result import ConstrainedSolveResult, require_real
 
@@ -233,24 +233,30 @@ def constrained_solve(
 
         kkt_preconditioner = bordered_preconditioner
 
-    result = implicit_solve(
+    # The constraint part is the same for the transposed (symmetric) system.
+    result = _implicit_solve(
         kkt,
         bordered,
-        constraint,
-        *params,
+        (constraint, *params),
         method=partial(projected_cg, constraints=m),
+        rmatvec=None,
         symmetric=True,
         preconditioner=kkt_preconditioner,
+        transpose_preconditioner=None,
+        linearize=None,
+        rlinearize=None,
         x0=x0,
         rtol=rtol,
         atol=atol,
         maxiter=maxiter,
+        vdims=1,
         early_exit=early_exit,
         fast_matvec=fast_kkt,
+        fast_rmatvec=None,
         inner_rtol=inner_rtol,
         refinements=refinements,
         fallback=fallback,
-        method_operators={"constraint": constraint_part},
+        operators=(("constraint", constraint_part),),
     )
     solution = result.solution[..., :n]
     violation = torch.einsum("...kn,...n->...k", constraint, solution) - value
@@ -264,4 +270,6 @@ def constrained_solve(
         constraint_residual=torch.linalg.vector_norm(
             violation.detach(), dim=-1
         ),
+        refinement_status=result.refinement_status,
+        fallback_iterations=result.fallback_iterations,
     )

@@ -161,6 +161,13 @@ class _LinearSystem:
     fast_rmatvec: Operator | None = None
     refinement: tuple[float, int, bool] = (1e-5, 5, False)
     operators: tuple[tuple[str, Operator], ...] = ()
+    """
+    Further operators of the method, passed to it by keyword with the
+    arguments of ``matvec`` and ``vmap``-ped like it. They are kept for the
+    transposed systems, so they must be the same for the transposed
+    operator: e.g. the constraint part of a symmetric bordered system (the
+    ``constraint`` of :func:`~tad_mctc.storch.linsolve.krylov.projected_cg`).
+    """
 
     def transposed(self) -> _LinearSystem:
         """The system with the transposed operator."""
@@ -252,6 +259,8 @@ class _LinearSystem:
             target=result.target,
             iterations=result.iterations,
             status=result.status,
+            refinement_status=result.refinement_status,
+            fallback_iterations=result.fallback_iterations,
         )
 
     def attach(
@@ -357,6 +366,10 @@ def _refine(
         iterations = iterations + torch.where(active, keep(inner.iterations), 0)
         active = accept & (norm > target)
 
+    refined = finalize(
+        x, norm, target, iterations, breakdown, vdims, stagnation
+    )
+    extra = torch.zeros_like(iterations)
     retry = norm > target
     if fallback and (not exit_early or bool(retry.any())):
         exact = system.method(
@@ -370,12 +383,24 @@ def _refine(
         )
         x = torch.where(retry, exact.solution, x)
         norm = torch.where(retry, keep(exact.residual), norm)
-        iterations = iterations + torch.where(retry, keep(exact.iterations), 0)
+        extra = torch.where(retry, keep(exact.iterations), 0)
+        iterations = iterations + extra
         status = keep(exact.status)
         breakdown = torch.where(retry, status == STATUS_BREAKDOWN, breakdown)
         stagnation = torch.where(retry, status == STATUS_STAGNATED, stagnation)
 
-    return finalize(x, norm, target, iterations, breakdown, vdims, stagnation)
+    result = finalize(x, norm, target, iterations, breakdown, vdims, stagnation)
+    for _ in range(vdims):
+        extra = extra.squeeze(-1)
+    return LinearSolveResult(
+        solution=result.solution,
+        residual=result.residual,
+        target=result.target,
+        iterations=result.iterations,
+        status=result.status,
+        refinement_status=refined.status,
+        fallback_iterations=extra,
+    )
 
 
 def _detach(value: Any) -> Any:
@@ -577,7 +602,6 @@ def implicit_solve(
     inner_rtol: float = 1e-5,
     refinements: int = 5,
     fallback: bool = False,
-    method_operators: dict[str, Operator] | None = None,
 ) -> LinearSolveResult:
     r"""
     Solve :math:`A(p)\,x = b` with implicitly defined derivatives.
@@ -672,17 +696,15 @@ def implicit_solve(
         not converge with ``matvec``, from where it stopped, instead of
         reporting them (e.g. if the fast operator is not positive definite
         where ``matvec`` is). This applies to the derivative solves as well.
-        The iterations then include those with ``matvec``, and the status is
-        that of the final solve. Where the solves cannot stop early
+        It is a retry with the same method and preconditioner, not a
+        guarantee: it fails as well where they do not suit ``matvec``. The
+        status is that of the final solve; the result reports the status of
+        the refinement and the iterations of the fallback separately
+        (:attr:`~LinearSolveResult.refinement_status`,
+        :attr:`~LinearSolveResult.fallback_iterations`). Where the solves cannot stop early
         (``early_exit=False``, or under ``vmap`` or ``torch.compile``), the
         solve with ``matvec`` always runs, for ``maxiter`` products.
         Defaults to ``False``.
-    method_operators : dict[str, Callable[..., Tensor]] | None, optional
-        Further operators of the method, passed to it by keyword with the
-        signature of ``matvec``, e.g. the ``constraint`` of
-        :func:`~tad_mctc.storch.linsolve.krylov.projected_cg`. They are
-        ``vmap``-ped like ``matvec`` and used for the transposed systems as
-        well. Defaults to none.
 
     Returns
     -------
@@ -714,6 +736,60 @@ def implicit_solve(
     >>> x.sum().backward()
     >>> torch.allclose(b.grad, torch.linalg.solve(a.T, torch.ones(2).double()))
     True
+    """
+    return _implicit_solve(
+        matvec,
+        rhs,
+        params,
+        method=method,
+        rmatvec=rmatvec,
+        symmetric=symmetric,
+        preconditioner=preconditioner,
+        transpose_preconditioner=transpose_preconditioner,
+        linearize=linearize,
+        rlinearize=rlinearize,
+        x0=x0,
+        rtol=rtol,
+        atol=atol,
+        maxiter=maxiter,
+        vdims=vdims,
+        early_exit=early_exit,
+        fast_matvec=fast_matvec,
+        fast_rmatvec=fast_rmatvec,
+        inner_rtol=inner_rtol,
+        refinements=refinements,
+        fallback=fallback,
+    )
+
+
+def _implicit_solve(
+    matvec: Operator,
+    rhs: Tensor,
+    params: tuple[Any, ...],
+    *,
+    method: Method | Callable[..., LinearSolveResult],
+    rmatvec: Operator | None,
+    symmetric: bool | None,
+    preconditioner: Operator | None,
+    transpose_preconditioner: Operator | None,
+    linearize: Linearization | None,
+    rlinearize: Linearization | None,
+    x0: Tensor | None,
+    rtol: float,
+    atol: float,
+    maxiter: int | None,
+    vdims: int,
+    early_exit: bool | None,
+    fast_matvec: Operator | None,
+    fast_rmatvec: Operator | None,
+    inner_rtol: float,
+    refinements: int,
+    fallback: bool,
+    operators: tuple[tuple[str, Operator], ...] = (),
+) -> LinearSolveResult:
+    """
+    :func:`implicit_solve`, with further operators of the method (see
+    :attr:`_LinearSystem.operators`).
     """
     require_real("right-hand side", rhs)
     require_real("initial guess", x0)
@@ -761,6 +837,6 @@ def implicit_solve(
         fast_matvec=fast_matvec,
         fast_rmatvec=fast_rmatvec,
         refinement=(inner_rtol, refinements, fallback),
-        operators=tuple((method_operators or {}).items()),
+        operators=operators,
     )
     return system.solve(rhs, params, x0=x0)
