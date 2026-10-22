@@ -95,6 +95,7 @@ from .krylov import Operator, _exit_early, bicgstab, cg, gmres
 from .result import (
     STATUS_BREAKDOWN,
     STATUS_CONVERGED,
+    STATUS_STAGNATED,
     LinearSolveResult,
     convergence_target,
     finalize,
@@ -158,7 +159,8 @@ class _LinearSystem:
     options: tuple[tuple[str, Any], ...]
     fast_matvec: Operator | None = None
     fast_rmatvec: Operator | None = None
-    refinement: tuple[float, int] = (1e-5, 5)
+    refinement: tuple[float, int, bool] = (1e-5, 5, False)
+    operators: tuple[tuple[str, Operator], ...] = ()
 
     def transposed(self) -> _LinearSystem:
         """The system with the transposed operator."""
@@ -208,6 +210,9 @@ class _LinearSystem:
                 if self.fast_rmatvec is None
                 else _vmapped(self.fast_rmatvec, dims)
             ),
+            operators=tuple(
+                (name, _vmapped(op, dims)) for name, op in self.operators
+            ),
         )
 
     def solve(
@@ -229,7 +234,7 @@ class _LinearSystem:
                     *detached,
                     x0=None if x0 is None else x0.detach(),
                     preconditioner=self.preconditioner,
-                    **dict(self.options),
+                    **dict(self.options + self.operators),
                 )
             else:
                 result = _refine(
@@ -298,12 +303,15 @@ def _refine(
     operator to the inner tolerance, the residuals are those of
     ``matvec``, which decides convergence. A correction that does not
     reduce the residual is rejected and the system stops (stagnation; a
-    breakdown if the inner solve broke down).
+    breakdown if the inner solve broke down). With the fallback, the
+    systems that did not converge are then solved with ``matvec``, from
+    where the refinement stopped.
     """
     assert system.fast_matvec is not None
     options = dict(system.options)
+    operators = dict(system.operators)
     vdims = options["vdims"]
-    inner_rtol, steps = system.refinement
+    inner_rtol, steps, fallback = system.refinement
 
     x = torch.zeros_like(rhs) if x0 is None else x0
     residual = rhs if x0 is None else rhs - matvec(x, *params)
@@ -331,7 +339,7 @@ def _refine(
             *params,
             x0=None,
             preconditioner=system.preconditioner,
-            **{**options, "rtol": inner_rtol, "atol": 0.0},
+            **{**options, **operators, "rtol": inner_rtol, "atol": 0.0},
         )
         trial = x + inner.solution
         trial_residual = rhs - matvec(trial, *params)
@@ -348,6 +356,24 @@ def _refine(
         norm = torch.where(accept, trial_norm, norm)
         iterations = iterations + torch.where(active, keep(inner.iterations), 0)
         active = accept & (norm > target)
+
+    retry = norm > target
+    if fallback and (not exit_early or bool(retry.any())):
+        exact = system.method(
+            matvec,
+            rhs,
+            *params,
+            x0=x,
+            preconditioner=system.preconditioner,
+            **options,
+            **operators,
+        )
+        x = torch.where(retry, exact.solution, x)
+        norm = torch.where(retry, keep(exact.residual), norm)
+        iterations = iterations + torch.where(retry, keep(exact.iterations), 0)
+        status = keep(exact.status)
+        breakdown = torch.where(retry, status == STATUS_BREAKDOWN, breakdown)
+        stagnation = torch.where(retry, status == STATUS_STAGNATED, stagnation)
 
     return finalize(x, norm, target, iterations, breakdown, vdims, stagnation)
 
@@ -550,6 +576,8 @@ def implicit_solve(
     fast_rmatvec: Operator | None = None,
     inner_rtol: float = 1e-5,
     refinements: int = 5,
+    fallback: bool = False,
+    method_operators: dict[str, Operator] | None = None,
 ) -> LinearSolveResult:
     r"""
     Solve :math:`A(p)\,x = b` with implicitly defined derivatives.
@@ -639,6 +667,19 @@ def implicit_solve(
     refinements : int, optional
         Maximum number of corrections after the first fast solve. Defaults
         to ``5``.
+    fallback : bool, optional
+        With ``fast_matvec``, solve the systems that the refinement does
+        not converge with ``matvec``, from where it stopped, instead of
+        reporting them (e.g. if the fast operator is not positive definite
+        where ``matvec`` is). This applies to the derivative solves as well.
+        The iterations then include those with ``matvec``, and the status is
+        that of the final solve. Defaults to ``False``.
+    method_operators : dict[str, Callable[..., Tensor]] | None, optional
+        Further operators of the method, passed to it by keyword with the
+        signature of ``matvec``, e.g. the ``constraint`` of
+        :func:`~tad_mctc.storch.linsolve.krylov.projected_cg`. They are
+        ``vmap``-ped like ``matvec`` and used for the transposed systems as
+        well. Defaults to none.
 
     Returns
     -------
@@ -716,6 +757,7 @@ def implicit_solve(
         ),
         fast_matvec=fast_matvec,
         fast_rmatvec=fast_rmatvec,
-        refinement=(inner_rtol, refinements),
+        refinement=(inner_rtol, refinements, fallback),
+        operators=tuple((method_operators or {}).items()),
     )
     return system.solve(rhs, params, x0=x0)

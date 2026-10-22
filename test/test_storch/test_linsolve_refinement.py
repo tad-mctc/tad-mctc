@@ -165,6 +165,46 @@ def test_stagnation_and_limit() -> None:
     assert result.status.item() == STATUS_CONVERGED
 
 
+@pytest.mark.parametrize(
+    "factor", [0.2, -1.0], ids=["stagnation", "indefinite"]
+)
+def test_fallback(factor: float) -> None:
+    """
+    With the fallback, systems the fast operator cannot refine (rejected
+    corrections, an indefinite fast operator) are solved with the exact
+    one, including the derivative solves; the others are unaffected.
+    """
+    a, b = matrix("cg", batch=(2,)), _randn(2, 12, seed=1)
+    ref = torch.linalg.solve(a, b)
+
+    def fast_or_bad(x: Tensor, a: Tensor) -> Tensor:
+        good = fast(x, a)
+        return torch.cat((good[:1], factor * matvec(x, a)[1:]))
+
+    result = implicit_solve(matvec, b, a, fast_matvec=fast_or_bad, rtol=1e-12)
+    assert result.status[0].item() == STATUS_CONVERGED
+    assert result.status[1].item() != STATUS_CONVERGED
+
+    def solve(a: Tensor, b: Tensor) -> Tensor:
+        out = implicit_solve(
+            matvec, b, a, fast_matvec=fast_or_bad, rtol=1e-12, fallback=True
+        )
+        assert out.converged.all()
+        return out.solution
+
+    fallback = implicit_solve(
+        matvec, b, a, fast_matvec=fast_or_bad, rtol=1e-12, fallback=True
+    )
+    assert fallback.converged.all()
+    assert fallback.iterations[1] > result.iterations[1]
+    assert (fallback.solution[0] == result.solution[0]).all()
+    assert_close(solve(a, b), ref, 1e-11)
+
+    grad = jacrev(lambda b: solve(a, b).sum())(b)
+    ones = torch.ones(2, 12, **DD)
+    assert_close(grad, torch.linalg.solve(a.mT, ones), 1e-10)
+
+
 def test_initial_guess() -> None:
     a, b = matrix("cg"), _randn(12, seed=1)
     ref = torch.linalg.solve(a, b)

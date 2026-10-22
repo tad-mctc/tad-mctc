@@ -717,6 +717,7 @@ def projected_cg(
     rhs: Tensor,
     *params: Any,
     constraints: int,
+    constraint: Operator | None = None,
     x0: Tensor | None = None,
     preconditioner: Operator | None = None,
     rtol: float = 1e-10,
@@ -749,7 +750,7 @@ def projected_cg(
     ``matvec(v, *params)`` maps the bordered vector ``v = (x, mu)`` of size
     ``n + m`` to ``(A x + C^T mu, C x)``. The rows of :math:`C` are
     recovered from ``m`` products at the start, so the setup costs
-    ``m + 1`` products. Convergence is decided by the true residual of the
+    ``m + 1`` products, or one with ``constraint``. Convergence is decided by the true residual of the
     bordered system (see the module documentation).
 
     Parameters
@@ -762,6 +763,11 @@ def projected_cg(
         Additional arguments of ``matvec`` and ``preconditioner``.
     constraints : int
         Number of constraints ``m``.
+    constraint : Callable[..., Tensor] | None, optional
+        The constraint part of the bordered operator, ``constraint(v,
+        *params) -> (C^T mu, C x)``, from which the rows of :math:`C` are
+        recovered without products with :math:`A`. Defaults to
+        ``matvec``.
     x0 : Tensor | None, optional
         Bordered initial guess. Its ``x`` block is moved onto the
         constraints (minimum-norm correction). Defaults to zero.
@@ -834,7 +840,7 @@ def projected_cg(
     rows = []
     for k in range(m):
         e = join(torch.zeros_like(b), unit[k].expand_as(d))
-        image = matvec(e, *params)
+        image = (matvec if constraint is None else constraint)(e, *params)
         if k == 0:
             _check_image(image, rhs)
         rows.append(image[..., :n])

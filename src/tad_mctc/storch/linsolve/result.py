@@ -139,6 +139,12 @@ class ConstrainedSolveResult(NamedTuple):
     """Status code of each system (batch shape, ``int64``), see
     :attr:`LinearSolveResult.status`."""
 
+    constraint_residual: Tensor
+    """Norm of the constraint violation ``C x - d`` (batch shape). It is
+    part of :attr:`residual`, and on its own at the level of rounding (the
+    iterates are feasible): e.g. a check of a total charge independent of
+    the tolerances, which are relative to the whole bordered system."""
+
     @property
     def converged(self) -> Tensor:
         """Whether each system converged (batch shape, ``bool``)."""

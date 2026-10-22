@@ -33,7 +33,6 @@ from torch.func import jacfwd, jacrev, vmap
 from tad_mctc.exceptions import DtypeError
 from tad_mctc.storch.linsolve import (
     STATUS_BREAKDOWN,
-    STATUS_CONVERGED,
     ConstrainedSolveResult,
     constrained_solve,
     dense_solve,
@@ -164,6 +163,85 @@ def test_breakdown() -> None:
 
 def _dd() -> dict:
     return {"dtype": torch.double, "device": DEVICE}
+
+
+@pytest.mark.parametrize("fast", [False, True], ids=["exact", "refined"])
+def test_constraint_residual(fast: bool) -> None:
+    """
+    The constraints hold to rounding, independent of the tolerance of the
+    bordered system: here a loose one, with a large right-hand side, in a
+    padded batch with two constraints.
+    """
+    n, real = 200, 150
+    a, b = spd(n, (2,)), 1e3 * _randn(2, n, seed=1)
+    a[1, real:, :] = 0.0
+    a[1, :, real:] = 0.0
+    a[1, real:, real:] = torch.eye(n - real, **_dd())
+    b[1, real:] = 0.0
+    c = _randn(2, 2, n, seed=2)
+    c[1, :, real:] = 0.0
+    d = _randn(2, 2, seed=3)
+
+    def fast_matvec(x: Tensor, a: Tensor) -> Tensor:
+        return matvec(x.float(), a.float()).double()
+
+    result = constrained_solve(
+        matvec, b, c, d, a, rtol=1e-6, fast_matvec=fast_matvec if fast else None
+    )
+    assert result.converged.all()
+    violation = (c @ result.solution.unsqueeze(-1)).squeeze(-1) - d
+    assert_close(result.constraint_residual, violation.norm(dim=-1), 1e-15)
+
+    # rounding: far below the tolerance of the bordered system
+    eps = torch.finfo(torch.double).eps
+    scale = (c.abs() * result.solution.abs().unsqueeze(-2)).sum(-1).amax(-1)
+    assert (result.constraint_residual <= 100 * eps * scale).all()
+    assert (result.constraint_residual < 1e-6 * result.target).all()
+    assert (result.solution[1, real:] == 0).all()
+
+
+def test_total_charge_derivatives() -> None:
+    """The total is fixed: its derivative is zero for the operator and the
+    right-hand side, and one for the value."""
+    n = 12
+    a, b = spd(n), _randn(n, seed=1)
+    c, d = torch.ones(1, n, **_dd()), torch.tensor([0.5], **_dd())
+
+    def total(a: Tensor, b: Tensor, d: Tensor) -> Tensor:
+        return constrained_solve(matvec, b, c, d, a, rtol=1e-12).solution.sum()
+
+    da, db, dd = jacrev(total, argnums=(0, 1, 2))(a, b, d)
+    assert da.abs().max() < 1e-13 and db.abs().max() < 1e-13
+    assert_close(dd, torch.ones(1, **_dd()), 1e-12)
+
+
+def test_constraint_operator() -> None:
+    """With the constraint part, the rows of C need no products with A."""
+    a, b = spd(10), _randn(10, seed=1)
+    c, d = _randn(3, 10, seed=2), _randn(3, seed=3)
+
+    calls = []
+
+    def bordered(v: Tensor, a: Tensor, c: Tensor) -> Tensor:
+        calls.append(1)
+        return constraint(v, a, c) + torch.cat(
+            (matvec(v[..., :10], a), torch.zeros_like(d))
+        )
+
+    def constraint(v: Tensor, a: Tensor, c: Tensor) -> Tensor:
+        x, mu = v[..., :10], v[..., 10:]
+        return torch.cat((c.mT @ mu, c @ x))
+
+    rhs = torch.cat((b, d))
+    out = projected_cg(bordered, rhs, a, c, constraints=3)
+    without = len(calls)
+    calls.clear()
+    ref = projected_cg(
+        bordered, rhs, a, c, constraints=3, constraint=constraint
+    )
+    assert len(calls) == without - 3
+    assert_close(out.solution, ref.solution, 1e-10)
+    assert_close(ref.solution[:10], reference(a, b, c, d)[0])
 
 
 def test_padding() -> None:

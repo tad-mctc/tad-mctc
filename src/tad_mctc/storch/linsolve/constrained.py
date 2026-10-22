@@ -76,6 +76,7 @@ def constrained_solve(
     fast_matvec: Operator | None = None,
     inner_rtol: float = 1e-5,
     refinements: int = 5,
+    fallback: bool = False,
 ) -> ConstrainedSolveResult:
     r"""
     Solve :math:`\min_x \frac12 x^\mathsf{T} A x - b^\mathsf{T} x` subject
@@ -131,12 +132,20 @@ def constrained_solve(
     refinements : int, optional
         Maximum number of corrections with ``fast_matvec``. Defaults to
         ``5``.
+    fallback : bool, optional
+        Solve the systems that the refinement with ``fast_matvec`` does not
+        converge with ``matvec`` (see
+        :func:`~tad_mctc.storch.linsolve.implicit_solve`). Defaults to
+        ``False``.
 
     Returns
     -------
     ConstrainedSolveResult
-        Solution :math:`x`, multipliers :math:`\mu` and the diagnostics of
-        the bordered system. Convergence is not enforced: use
+        Solution :math:`x`, multipliers :math:`\mu`, the diagnostics of the
+        bordered system, and the violation of the constraints,
+        :math:`\lVert C x - d \rVert`. The iterates of projected CG are
+        feasible, so the violation is that of rounding, independent of the
+        tolerances. Convergence is not enforced: use
         :func:`~tad_mctc.storch.linsolve.require_convergence`. Derivative
         solves that do not converge give NaN.
 
@@ -210,6 +219,11 @@ def constrained_solve(
 
         fast_kkt = bordered_fast
 
+    def constraint_part(v: Tensor, c: Tensor, *_: Any) -> Tensor:
+        x, mu = v[..., :n], v[..., n:]
+        ct_mu = torch.einsum("...kn,...k->...n", c, mu)
+        return torch.cat((ct_mu, torch.einsum("...kn,...n->...k", c, x)), -1)
+
     kkt_preconditioner: Operator | None = None
     if preconditioner is not None:
         prec = preconditioner
@@ -235,12 +249,19 @@ def constrained_solve(
         fast_matvec=fast_kkt,
         inner_rtol=inner_rtol,
         refinements=refinements,
+        fallback=fallback,
+        method_operators={"constraint": constraint_part},
     )
+    solution = result.solution[..., :n]
+    violation = torch.einsum("...kn,...n->...k", constraint, solution) - value
     return ConstrainedSolveResult(
-        solution=result.solution[..., :n],
+        solution=solution,
         multiplier=result.solution[..., n:],
         residual=result.residual,
         target=result.target,
         iterations=result.iterations,
         status=result.status,
+        constraint_residual=torch.linalg.vector_norm(
+            violation.detach(), dim=-1
+        ),
     )

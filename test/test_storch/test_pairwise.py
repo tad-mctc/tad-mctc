@@ -31,6 +31,7 @@ import torch
 from torch.autograd import gradcheck, gradgradcheck
 from torch.func import jacfwd, jacrev, vmap
 
+from tad_mctc.storch import pairwise
 from tad_mctc.storch.linsolve import (
     ConstrainedSolveResult,
     balancing,
@@ -39,7 +40,6 @@ from tad_mctc.storch.linsolve import (
     dense_solve,
     implicit_solve,
 )
-from tad_mctc.storch import pairwise
 from tad_mctc.storch.pairwise import pair_cell_sums, pair_product
 from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import Tensor
@@ -220,8 +220,12 @@ def test_eager_tiles(monkeypatch: pytest.MonkeyPatch) -> None:
         check(out, dense(positions, s).sum(-2))
 
     # the compiled tile, run eagerly by Dynamo
-    args = pairwise._tile_arguments(positions, (s,), None, 0, n)
-    out = pairwise._block_product_reduction(kernel, None, *args, x)
+    args = (
+        kernel,
+        None,
+        *pairwise._tile_arguments(positions, (s,), None, 0, n),
+    )
+    out = pairwise._block_product_reduction(*args, x)  # pyright: ignore
     check(out, ref)
 
 
