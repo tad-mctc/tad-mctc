@@ -179,7 +179,10 @@ def test_fused(dtype) -> None:
 
 @requires_compile
 def test_fused_compiles_once() -> None:
-    """Inputs that require gradients do not compile the tiles anew."""
+    """
+    Neither inputs that require gradients nor new system sizes compile the
+    tiles anew.
+    """
     positions, s, x = system(13)
 
     def product(pos: Tensor, x: Tensor) -> Tensor:
@@ -190,6 +193,10 @@ def test_fused_compiles_once() -> None:
     with torch._dynamo.config.patch(error_on_recompile=True):
         second = product(pos, v)
         torch.autograd.grad(second.sum(), (pos, v))
+        for n in (7, 29):
+            positions, s, x = system(n)
+            out = pair_product(kernel, positions, x, s, tile=4, fused=True)
+            assert_close(out, _dense(positions, x, s), 1e-12)
     assert_close(first, second, 1e-12)
 
 

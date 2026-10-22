@@ -673,7 +673,10 @@ def implicit_solve(
         reporting them (e.g. if the fast operator is not positive definite
         where ``matvec`` is). This applies to the derivative solves as well.
         The iterations then include those with ``matvec``, and the status is
-        that of the final solve. Defaults to ``False``.
+        that of the final solve. Where the solves cannot stop early
+        (``early_exit=False``, or under ``vmap`` or ``torch.compile``), the
+        solve with ``matvec`` always runs, for ``maxiter`` products.
+        Defaults to ``False``.
     method_operators : dict[str, Callable[..., Tensor]] | None, optional
         Further operators of the method, passed to it by keyword with the
         signature of ``matvec``, e.g. the ``constraint`` of

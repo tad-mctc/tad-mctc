@@ -163,12 +163,12 @@ def run(atoms: int) -> dict:
         energy = (params[2] * q).sum() + 0.5 * (
             q * exact(q, pos, params[0], params[1])
         ).sum()
-        return torch.autograd.grad(energy, pos)[0]
+        # the graph of the charges is kept for the next stage
+        return torch.autograd.grad(energy, pos, retain_graph=True)[0]
 
     stage("forces", row, forces)
 
     def parameter_gradient():
-        q = charges()
         return torch.autograd.grad((q * q).sum(), params)
 
     stage("params", row, parameter_gradient)

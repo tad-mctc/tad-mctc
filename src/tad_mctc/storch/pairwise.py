@@ -104,10 +104,12 @@ for ``r > 0``; excluded pairs are evaluated at ``r = 1`` and dropped.
 _TILE_PAIRS_CPU = 131_072
 _TILE_PAIRS_GPU = 1_048_576
 
-# A fused tile does not store its pair terms, so it can be much larger; on
-# an RTX 4070 (float32, 100k atoms), tiles of 64 rows are 2.6x slower than
-# this default (1342 rows), and 5000 rows are 6% faster.
-_TILE_PAIRS_FUSED = 1 << 27
+# A fused tile does not store its pair terms, so it can be much larger. Its
+# rows are fixed and the number of atoms is a dynamic dimension, so that a
+# kernel compiles once for all system sizes. On an RTX 4070 (float32), 2048
+# rows are as fast as 4096 from 1k to 100k atoms, and 1.8x faster than 1024
+# at 10k; tiles of 64 rows are 2.6x slower at 100k.
+_TILE_ROWS_FUSED = 2048
 
 
 def _eager_rows(n: int, device: torch.device) -> int:
@@ -134,7 +136,7 @@ def _tile_rows(
     if not fused:
         return (eager, eager) if tile is None else (tile, tile)
     if tile is None:
-        tile = max(1, _TILE_PAIRS_FUSED // max(n, 1))
+        tile = _TILE_ROWS_FUSED
     return tile, min(tile, eager)
 
 
@@ -364,13 +366,9 @@ def _tile_product(
     mask: Tensor | None,
     start: int,
     stop: int,
-    fused: bool = False,
 ) -> Tensor:
     args = _tile_arguments(positions, params, mask, start, stop)
-    product: Callable[..., Tensor] = (
-        _fused_block_product() if fused else _block_product
-    )
-    return product(spec.kernel, spec.dtype, *args, x)
+    return _block_product(spec.kernel, spec.dtype, *args, x)
 
 
 def _product(
@@ -402,13 +400,11 @@ def _product(
         params = tuple(
             p.to(spec.dtype) if p.is_floating_point() else p for p in params
         )
-    n = positions.shape[-2]
-    if fused and n > spec.tile:
+    if fused:
         return _fused_product(spec, positions, x, params, mask)
-    tile = spec.tile if fused else spec.eager_tile
     tiles = [
-        _tile_product(spec, positions, x, params, mask, start, stop, fused)
-        for start, stop in _ranges(n, tile)
+        _tile_product(spec, positions, x, params, mask, start, stop)
+        for start, stop in _ranges(positions.shape[-2], spec.eager_tile)
     ]
     return torch.cat(tiles, dim=-1)
 
@@ -422,8 +418,9 @@ def _fused_product(
 ) -> Tensor:
     """
     The compiled tiles, all of one shape: the last tile is padded with
-    excluded rows, so that a system size compiles once, not twice (Dynamo
-    recompiles for every new shape, up to its limit).
+    excluded rows, and the number of atoms is a dynamic dimension, so that
+    all system sizes compile once (Dynamo recompiles for every new shape,
+    up to its limit).
     """
     n, tile = positions.shape[-2], spec.tile
     if mask is None:
@@ -434,6 +431,9 @@ def _fused_product(
     dtype = x.dtype
     if spec.dtype is not None:
         x = x.to(spec.dtype)  # once, as the coordinates
+    for t in (positions, x, mask, *params):
+        dim = t.ndim - (2 if t is positions else 1)
+        torch._dynamo.maybe_mark_dynamic(t, dim)
     tiles = []
     for start, stop in _ranges(n, tile):
         rows = torch.arange(start, start + tile, device=positions.device)
@@ -688,7 +688,7 @@ def pair_product(
         (e.g. padding) are zero. Defaults to all.
     tile : int | None, optional
         Rows per tile. Defaults to about a million pairs per tile on GPU
-        and 131k on CPU, or 134 million with ``fused`` (whose tiles do not
+        and 131k on CPU, or 2048 rows with ``fused`` (whose tiles do not
         store their terms). With ``fused``, it sets the compiled tiles
         only: whatever is evaluated eagerly (the derivatives and the
         fallbacks below) uses tiles of at most the eager default, so that
@@ -702,9 +702,10 @@ def pair_product(
         Compile the products of the tiles with ``torch.compile`` (see the
         module documentation). Pass a module-level ``kernel``: a new
         function object (e.g. a lambda created per call) triggers a new
-        compilation, and so does every new system size and dtype (one each;
-        the last tile is padded). Beyond Dynamo's recompilation limit (8 by
-        default: four sizes in two dtypes), and where compiling is not
+        compilation, and so does every new dtype, tile size and batch
+        shape, but not a new number of atoms (a dynamic dimension; the
+        last tile is padded). Beyond Dynamo's recompilation limit (8 by
+        default), and where compiling is not
         possible (under ``torch.func`` transforms, inside
         ``torch.compile``, or without Dynamo support), the products are
         evaluated eagerly, in eager tiles. Defaults to ``False``.
