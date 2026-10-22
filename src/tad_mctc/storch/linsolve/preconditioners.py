@@ -39,6 +39,15 @@ Preconditioners ``M r ~ A^{-1} r`` for the Krylov solvers, as functions
   does not help there.
 - :func:`cell_index`: a partition of points into cubic cells.
 
+The balancing preconditioner stores the ``n x K`` matrix :math:`A Z` and
+factorizes the dense ``K x K`` matrix :math:`E`: ``O(n K + K^2)`` memory,
+``O(K^3)`` setup and ``O(n K)`` work per application, for ``K`` cells. For
+cells of a fixed size, ``K`` grows like ``n``, so :math:`A Z` grows like
+``n^2``, with a small constant: for liquid water in 12 bohr cells,
+``K ~ n / 23``, i.e. 4405 cells and 1.8 GB of float32 :math:`A Z` for 100k
+atoms. Bound ``K`` with the ``max_cells`` of :func:`cell_index`, which
+enlarges the cells instead (at the price of more iterations).
+
 The preconditioners are built once from detached data, outside of
 ``vmap`` and ``torch.compile``, and are then applied under any transform
 (the derivative solves of
@@ -176,7 +185,10 @@ def balancing(diagonal: Tensor, cells: Tensor, products: Tensor) -> Operator:
 
 
 def cell_index(
-    positions: Tensor, edge: float, mask: Tensor | None = None
+    positions: Tensor,
+    edge: float,
+    mask: Tensor | None = None,
+    max_cells: int | None = None,
 ) -> tuple[Tensor, int]:
     """
     Partition points into cubic cells of a given edge length.
@@ -196,6 +208,11 @@ def cell_index(
     mask : Tensor | None, optional
         Points to partition, shape ``(..., n)``; the others get cell
         ``-1``. Defaults to all.
+    max_cells : int | None, optional
+        Upper bound of ``K``, which sets the memory of the balancing
+        preconditioner (see the module documentation): if the cells of
+        ``edge`` are more, the edge is enlarged until they are not.
+        Defaults to no bound.
 
     Returns
     -------
@@ -205,7 +222,7 @@ def cell_index(
     Raises
     ------
     ValueError
-        ``edge`` is not positive.
+        ``edge`` or ``max_cells`` is not positive.
 
     Example
     -------
@@ -214,11 +231,28 @@ def cell_index(
     >>> positions = torch.tensor([[0.0, 0, 0], [0.5, 0, 0], [3.0, 0, 0]])
     >>> cell_index(positions, 2.0)
     (tensor([0, 0, 1]), 2)
+    >>> cell_index(positions, 2.0, max_cells=1)
+    (tensor([0, 0, 0]), 1)
     """
     if not edge > 0:
         raise ValueError(f"The cell edge ({edge}) must be positive.")
+    if max_cells is not None and max_cells < 1:
+        raise ValueError(
+            f"The bound of the cells ({max_cells}) must be positive."
+        )
 
-    positions = positions.detach()
+    cells, k = _cells(positions.detach(), edge, mask)
+    while max_cells is not None and k > max_cells:
+        # About K ~ edge^-3 for space-filling points; at least 1% larger,
+        # so that the loop ends (one cell, at the latest).
+        edge *= max((k / max_cells) ** (1 / 3), 1.01)
+        cells, k = _cells(positions.detach(), edge, mask)
+    return cells, k
+
+
+def _cells(
+    positions: Tensor, edge: float, mask: Tensor | None
+) -> tuple[Tensor, int]:
     batch, n = positions.shape[:-2], positions.shape[-2]
     pos = positions.reshape(-1, n, 3)
     real = (

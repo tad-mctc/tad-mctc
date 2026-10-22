@@ -252,3 +252,27 @@ def test_cell_index() -> None:
 
     cells, k = cell_index(pos[0], 2.0)
     assert (k, cells.tolist()) == (3, [0, 0, 2, 1])
+
+
+def test_max_cells() -> None:
+    """A bound of the cells enlarges them; the preconditioner still works."""
+    pos = grid(6)
+    cells, k = cell_index(pos, 4.0)
+    assert k == 27
+
+    for bound in (8, 5, 1):
+        bounded, kb = cell_index(pos, 4.0, max_cells=bound)
+        assert 1 <= kb <= bound
+        assert bounded.min() == 0 and int(bounded.max()) == kb - 1
+    unchanged, kb = cell_index(pos, 4.0, max_cells=27)
+    assert kb == 27 and unchanged.equal(cells)
+
+    a = coulomb(pos)
+    b = torch.sin(pos[:, 0])
+    bounded, kb = cell_index(pos, 4.0, max_cells=8)
+    m = balancing(a.diagonal(), bounded, cell_products(a, bounded, kb))
+    result = cg(matvec, b, a, preconditioner=m)
+    assert result.converged.item()
+
+    with pytest.raises(ValueError, match="positive"):
+        cell_index(pos, 4.0, max_cells=0)
