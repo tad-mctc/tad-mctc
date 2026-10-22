@@ -36,7 +36,10 @@ derivatives with respect to the positions, the parameters and the vector
 also take ``O(n * tile)`` memory, and it composes with ``torch.func``
 transforms and with the implicit derivatives of
 :func:`~tad_mctc.storch.linsolve.implicit_solve`. Higher derivatives are
-exact as well, but keep the graphs of the tiles (``O(n^2)`` memory).
+exact as well, but keep the graphs of the tiles (``O(n^2)`` memory). That
+includes the mixed derivatives of a parameter fit to forces
+(:math:`\partial^2 E / \partial R \, \partial \theta`) and Hessians: these
+are bounded by the memory of the dense matrix, not by the tiles.
 :func:`pair_cell_sums` gives the sums of the matrix columns over cells,
 which the balancing preconditioner needs
 (:func:`~tad_mctc.storch.linsolve.balancing`).
@@ -49,8 +52,9 @@ which never stores the pair terms: on an RTX 4070, a float32 product takes
 derivatives are evaluated eagerly; so are the products under ``torch.func``
 transforms (e.g. the derivative solves of
 :func:`~tad_mctc.storch.linsolve.implicit_solve` under ``jacrev``), while a
-plain ``.backward()`` keeps them fused. ``torch.compile`` of code that calls
-the Function is not supported.
+plain ``.backward()`` keeps them fused. Everything evaluated eagerly uses
+the eager tiles, so the memory bound holds on every path. ``torch.compile``
+of code that calls the Function is not supported.
 
 The products may be evaluated in a lower precision than the vector
 (``dtype``), e.g. float32 on GPUs with few float64 units, where a float64
@@ -106,19 +110,32 @@ _TILE_PAIRS_GPU = 1_048_576
 _TILE_PAIRS_FUSED = 1 << 27
 
 
-def _tile_rows(positions: Tensor, tile: int | None, fused: bool) -> int:
-    if tile is not None:
-        if tile < 1:
-            raise ValueError(f"The tile size ({tile}) must be positive.")
-        return tile
-    n = max(positions.shape[-2], 1)
-    if fused:
-        pairs = _TILE_PAIRS_FUSED
-    elif positions.device.type == "cpu":
+def _eager_rows(n: int, device: torch.device) -> int:
+    """Rows of an eager tile, which stores its pair terms."""
+    if device.type == "cpu":
         pairs = _TILE_PAIRS_CPU
     else:  # pragma: no cover - GPU only
         pairs = _TILE_PAIRS_GPU
-    return max(1, pairs // n)
+    return max(1, pairs // max(n, 1))
+
+
+def _tile_rows(
+    positions: Tensor, tile: int | None, fused: bool
+) -> tuple[int, int]:
+    """
+    Rows of the compiled and of the eager tiles. With ``fused``, a given
+    ``tile`` sets the compiled tiles; the eager ones (derivatives and
+    fallbacks) never exceed the eager default, as they store their terms.
+    """
+    if tile is not None and tile < 1:
+        raise ValueError(f"The tile size ({tile}) must be positive.")
+    n = positions.shape[-2]
+    eager = _eager_rows(n, positions.device)
+    if not fused:
+        return (eager, eager) if tile is None else (tile, tile)
+    if tile is None:
+        tile = max(1, _TILE_PAIRS_FUSED // max(n, 1))
+    return tile, min(tile, eager)
 
 
 class _Spec:
@@ -130,14 +147,14 @@ class _Spec:
         tile: int,
         dtype: torch.dtype | None,
         fused: bool = False,
-        grad_tile: int | None = None,
+        eager_tile: int | None = None,
     ) -> None:
         self.kernel = kernel
         self.tile = tile
         self.dtype = dtype
         self.fused = fused
-        # The derivatives evaluate the tiles eagerly, which stores them.
-        self.grad_tile = tile if grad_tile is None else grad_tile
+        # Eager tiles (derivatives, fallbacks of `fused`) store their terms.
+        self.eager_tile = tile if eager_tile is None else eager_tile
 
 
 def _block(
@@ -226,7 +243,24 @@ def _block_product_reduction(
     :func:`_block_product` as a sum of an elementwise product, which the
     compiler fuses with the pair terms into one reduction (a contraction
     is lowered to a matrix-vector call on the stored terms).
+
+    Beyond its recompilation limit, Dynamo runs this function eagerly, on
+    a tile sized for the compiled reduction: it is then split into eager
+    tiles, which store their terms.
     """
+    if not is_compiling():
+        return _split_block_product(
+            kernel,
+            dtype,
+            rows,
+            positions_i,
+            positions_j,
+            params_i,
+            params_j,
+            mask_i,
+            mask_j,
+            x,
+        )
     values = _block(
         kernel,
         dtype,
@@ -240,6 +274,38 @@ def _block_product_reduction(
     )
     vector = x if dtype is None else x.to(dtype)
     return (values * vector.unsqueeze(-2)).sum(-1).to(x.dtype)
+
+
+def _split_block_product(
+    kernel: PairKernel,
+    dtype: torch.dtype | None,
+    rows: Tensor,
+    positions_i: Tensor,
+    positions_j: Tensor,
+    params_i: tuple[Tensor, ...],
+    params_j: tuple[Tensor, ...],
+    mask_i: Tensor | None,
+    mask_j: Tensor | None,
+    x: Tensor,
+) -> Tensor:
+    """:func:`_block_product` in eager tiles of the rows."""
+    size = _eager_rows(positions_j.shape[-2], positions_j.device)
+    tiles = [
+        _block_product(
+            kernel,
+            dtype,
+            rows[start:stop],
+            positions_i[..., start:stop, :],
+            positions_j,
+            tuple(p[..., start:stop] for p in params_i),
+            params_j,
+            None if mask_i is None else mask_i[..., start:stop],
+            mask_j,
+            x,
+        )
+        for start, stop in _ranges(rows.shape[-1], size)
+    ]
+    return torch.cat(tiles, dim=-1).to(x.dtype)
 
 
 _FUSED: list[Callable[..., Tensor]] = []
@@ -331,9 +397,10 @@ def _product(
     n = positions.shape[-2]
     if fused and n > spec.tile:
         return _fused_product(spec, positions, x, params, mask)
+    tile = spec.tile if fused else spec.eager_tile
     tiles = [
         _tile_product(spec, positions, x, params, mask, start, stop, fused)
-        for start, stop in _ranges(n, spec.tile)
+        for start, stop in _ranges(n, tile)
     ]
     return torch.cat(tiles, dim=-1)
 
@@ -453,7 +520,7 @@ class _PairProduct(torch.autograd.Function):
         grads: list[Tensor | None] = [None] * len(params)
         if needs[0] or len(index) > 0:
             totals: list[Tensor] = []
-            for start, stop in _ranges(positions.shape[-2], spec.grad_tile):
+            for start, stop in _ranges(positions.shape[-2], spec.eager_tile):
 
                 def tile(pos: Tensor, *values: Tensor) -> Tensor:
                     full = list(params)
@@ -507,7 +574,7 @@ class _PairProduct(torch.autograd.Function):
                 else positions_dot
             )
             tiles = []
-            for start, stop in _ranges(positions.shape[-2], spec.grad_tile):
+            for start, stop in _ranges(positions.shape[-2], spec.eager_tile):
 
                 def tile(pos: Tensor, *values: Tensor) -> Tensor:
                     full = list(params)
@@ -614,8 +681,10 @@ def pair_product(
     tile : int | None, optional
         Rows per tile. Defaults to about a million pairs per tile on GPU
         and 131k on CPU, or 134 million with ``fused`` (whose tiles do not
-        store their terms). The derivatives are evaluated eagerly, in tiles
-        of the given size or of the eager default.
+        store their terms). With ``fused``, it sets the compiled tiles
+        only: whatever is evaluated eagerly (the derivatives and the
+        fallbacks below) uses tiles of at most the eager default, so that
+        the memory stays bounded.
     dtype : torch.dtype | None, optional
         Dtype in which the pair terms and the products are evaluated; the
         result has the dtype of ``x``. Defaults to that of ``positions``.
@@ -628,10 +697,9 @@ def pair_product(
         compilation, and so does every new system size and dtype (one each;
         the last tile is padded). Beyond Dynamo's recompilation limit (8 by
         default: four sizes in two dtypes), and where compiling is not
-        possible (under
-        ``torch.func`` transforms, inside ``torch.compile``, or without
-        Dynamo support), the products are evaluated eagerly. Defaults to
-        ``False``.
+        possible (under ``torch.func`` transforms, inside
+        ``torch.compile``, or without Dynamo support), the products are
+        evaluated eagerly, in eager tiles. Defaults to ``False``.
 
     Returns
     -------
@@ -659,13 +727,8 @@ def pair_product(
                 f"The {name} must have the size n = {n} of the positions "
                 f"in its last dimension, not {tuple(t.shape)}."
             )
-    spec = _Spec(
-        kernel,
-        _tile_rows(positions, tile, fused),
-        dtype,
-        fused,
-        grad_tile=_tile_rows(positions, tile, False),
-    )
+    rows, eager_rows = _tile_rows(positions, tile, fused)
+    spec = _Spec(kernel, rows, dtype, fused, eager_tile=eager_rows)
     return _PairProduct.apply(positions, x, mask, spec, *params)
 
 
@@ -715,7 +778,7 @@ def pair_cell_sums(
     Tensor
         Cell sums, shape ``(..., n, size)``.
     """
-    spec = _Spec(kernel, _tile_rows(positions, tile, False), dtype)
+    spec = _Spec(kernel, _tile_rows(positions, tile, False)[0], dtype)
     n = positions.shape[-2]
     index = torch.where(cells < 0, size, cells).long()
 

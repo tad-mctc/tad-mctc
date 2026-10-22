@@ -39,6 +39,7 @@ from tad_mctc.storch.linsolve import (
     dense_solve,
     implicit_solve,
 )
+from tad_mctc.storch import pairwise
 from tad_mctc.storch.pairwise import pair_cell_sums, pair_product
 from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import Tensor
@@ -174,6 +175,54 @@ def test_fused(dtype) -> None:
     assert_close(
         out, _dense(positions[0].expand(2, 9, 3), x, s[0].expand(2, 9))
     )
+
+
+def test_eager_tiles(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Whatever is evaluated eagerly stays within the eager tile budget, also
+    with ``fused`` (whose tiles are much larger): the products without
+    compiling, under transforms, beyond Dynamo's recompilation limit (which
+    runs the compiled tile eagerly), and the derivatives.
+    """
+    n = 600
+    positions, s, x = system(n)
+    positions = positions.cpu().requires_grad_(True)
+    s, x = s.cpu(), x.cpu()
+    budget = pairwise._TILE_PAIRS_CPU // n
+    ref = _dense(positions, x, s)
+    ref_grad = torch.autograd.grad((ref**2).sum(), positions)[0]
+
+    rows: list[int] = []
+    block = pairwise._block
+
+    def recorded(*args):
+        rows.append(args[2].shape[-1])
+        return block(*args)
+
+    monkeypatch.setattr(pairwise, "_block", recorded)
+    monkeypatch.setattr(pairwise, "is_compile_supported", lambda: False)
+
+    def check(out: Tensor, expected: Tensor) -> None:
+        assert_close(out, expected)
+        assert len(rows) > 1 and max(rows) <= budget
+        rows.clear()
+
+    for tile in (None, 10 * n):
+        out = pair_product(kernel, positions, x, s, tile=tile, fused=True)
+        check(out, ref)
+
+        grad = torch.autograd.grad((out**2).sum(), positions)[0]
+        check(grad, ref_grad)
+
+        out = jacrev(
+            lambda v: pair_product(kernel, positions, v, s, fused=True).sum()
+        )(x)
+        check(out, dense(positions, s).sum(-2))
+
+    # the compiled tile, run eagerly by Dynamo
+    args = pairwise._tile_arguments(positions, (s,), None, 0, n)
+    out = pairwise._block_product_reduction(kernel, None, *args, x)
+    check(out, ref)
 
 
 def test_cell_sums() -> None:
