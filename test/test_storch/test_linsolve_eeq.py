@@ -79,15 +79,17 @@ def diagonal(alpha: Tensor, eta: Tensor) -> Tensor:
 def structure(side: tuple[int, int, int]) -> tuple[Tensor, ...]:
     """Atoms on a jittered grid of 2.6 bohr, with H, C, N and O."""
     gen = torch.Generator(device="cpu").manual_seed(0)
-    axes = [torch.arange(s, dtype=torch.double) for s in side]
+    axes = [torch.arange(s, dtype=torch.double, device="cpu") for s in side]
     grid = torch.stack(torch.meshgrid(*axes, indexing="ij"), -1).reshape(-1, 3)
     positions = 2.6 * grid + 0.5 * torch.rand(
-        grid.shape, generator=gen, dtype=torch.double
+        grid.shape, generator=gen, dtype=torch.double, device="cpu"
     )
     n = positions.shape[0]
     symbols = [list(PARAMS)[i % 4] for i in range(n)]
     alpha, eta, chi = (
-        torch.tensor([PARAMS[s][k] for s in symbols], dtype=torch.double)
+        torch.tensor(
+            [PARAMS[s][k] for s in symbols], dtype=torch.double, device="cpu"
+        )
         for k in range(3)
     )
     return tuple(t.to(DEVICE) for t in (positions, alpha, eta, chi))
