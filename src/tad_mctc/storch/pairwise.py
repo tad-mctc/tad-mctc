@@ -368,7 +368,8 @@ def _tile_product(
     stop: int,
 ) -> Tensor:
     args = _tile_arguments(positions, params, mask, start, stop)
-    return _block_product(spec.kernel, spec.dtype, *args, x)
+    product: Callable[..., Tensor] = _block_product
+    return product(spec.kernel, spec.dtype, *args, x)
 
 
 def _product(
