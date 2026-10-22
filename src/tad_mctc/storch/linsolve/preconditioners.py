@@ -254,11 +254,14 @@ def _cells(
     positions: Tensor, edge: float, mask: Tensor | None
 ) -> tuple[Tensor, int]:
     batch, n = positions.shape[:-2], positions.shape[-2]
-    pos = positions.reshape(-1, n, 3)
+    if n == 0:
+        empty = torch.empty(batch + (0,), dtype=torch.long)
+        return empty.to(positions.device), 0
+    pos = positions.reshape(math.prod(batch), n, 3)
     real = (
         torch.ones(pos.shape[:2], dtype=torch.bool, device=pos.device)
         if mask is None
-        else mask.expand(*batch, n).reshape(-1, n)
+        else mask.expand(*batch, n).reshape(pos.shape[0], n)
     )
 
     # Integer cell coordinates from the lower corner of each system.

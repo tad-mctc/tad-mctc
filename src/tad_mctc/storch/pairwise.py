@@ -96,6 +96,11 @@ PairKernel = Callable[[Tensor, tuple[Tensor, ...], tuple[Tensor, ...]], Tensor]
 (``(..., rows, 1)`` each) and of the columns (``(..., 1, n)`` each). It must
 be symmetric, ``kernel(r, p_i, p_j) == kernel(r, p_j, p_i)``, and smooth
 for ``r > 0``; excluded pairs are evaluated at ``r = 1`` and dropped.
+The positions of distinct atoms must differ: at ``r = 0``, the derivative
+of the distance is infinite, so a coincident pair gives NaN (in the values
+for a kernel such as ``erf(a r) / r``, in the derivatives for any kernel).
+Kernels with a finite limit at ``r = 0`` belong to the model, which can
+handle such pairs explicitly.
 """
 
 # Pair entries per tile, as for the coordination number (see
@@ -385,6 +390,7 @@ def _product(
         and is_compile_supported()
         and not is_compiling()
         and not any(is_functorch_tensor(t) for t in tensors)
+        and positions.shape[-2] > 0
     )
     if fused:
         # The forward needs no graph. Dynamo guards on `requires_grad` and

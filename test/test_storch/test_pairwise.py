@@ -41,6 +41,7 @@ from tad_mctc.storch.linsolve import (
     implicit_solve,
 )
 from tad_mctc.storch.pairwise import pair_cell_sums, pair_product
+from tad_mctc.tools.compile import is_compile_supported
 from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import Tensor
 
@@ -250,6 +251,43 @@ def test_eager_tiles(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     out = pairwise._block_product_reduction(*args, x)  # pyright: ignore
     check(out, ref)
+
+
+@pytest.mark.parametrize("fused", [False, True], ids=["eager", "fused"])
+def test_empty_and_masked(fused: bool) -> None:
+    """No atoms, and all atoms masked."""
+    if fused and not is_compile_supported():
+        pytest.skip("No compile support.")
+    empty = torch.zeros(2, 0, 3, **DD)
+    out = pair_product(kernel, empty, empty[..., 0], empty[..., 0], fused=fused)
+    assert out.shape == (2, 0)
+
+    positions, s, x = system(5)
+    mask = torch.zeros(5, dtype=torch.bool, device=DEVICE)
+    out = pair_product(kernel, positions, x, s, mask=mask, fused=fused)
+    assert (out == 0).all()
+
+
+def test_coincident_atoms() -> None:
+    """
+    Distinct atoms at the same position are outside of the domain: they
+    give NaN, not a silently wrong product.
+    """
+    positions, s, x = system(5)
+    positions = positions.clone().requires_grad_(True)
+    with torch.no_grad():
+        positions[1] = positions[0]
+
+    out = pair_product(kernel, positions, x, s)
+    assert out[:2].isnan().all() and out[2:].isfinite().all()
+
+    def coulomb(r: Tensor, *_: tuple[Tensor, ...]) -> Tensor:
+        return 1.0 / (1.0 + r)  # finite at r = 0, the distance is not
+
+    out = pair_product(coulomb, positions, x, s)
+    assert out.isfinite().all()
+    grad = torch.autograd.grad(out.sum(), positions)[0]
+    assert grad[:2].isnan().all()
 
 
 def test_cell_sums() -> None:

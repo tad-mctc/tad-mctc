@@ -253,6 +253,12 @@ def test_cell_index() -> None:
     cells, k = cell_index(pos[0], 2.0)
     assert (k, cells.tolist()) == (3, [0, 0, 2, 1])
 
+    # no points, and no points in the mask
+    cells, k = cell_index(pos[..., :0, :], 2.0)
+    assert (k, cells.shape) == (0, (2, 0))
+    cells, k = cell_index(pos, 2.0, torch.zeros_like(mask))
+    assert k == 0 and (cells == -1).all()
+
 
 def test_max_cells() -> None:
     """A bound of the cells enlarges them; the preconditioner still works."""
