@@ -91,12 +91,17 @@ from torch._C._functorch import (  # pylint: disable=no-name-in-module
 from ...autograd.nested import nested_jvp
 from ...tools.compile import is_compiling, reject_forward_mode
 from ...typing import Tensor
-from .krylov import Operator, bicgstab, cg, gmres
+from .krylov import Operator, _exit_early, bicgstab, cg, gmres
 from .result import (
+    STATUS_BREAKDOWN,
     STATUS_CONVERGED,
+    STATUS_STAGNATED,
     LinearSolveResult,
+    convergence_target,
+    finalize,
     require_real,
     require_real_params,
+    vnorm,
 )
 
 __all__ = ["implicit_solve"]
@@ -152,6 +157,17 @@ class _LinearSystem:
     linearize: Linearization | None
     rlinearize: Linearization | None
     options: tuple[tuple[str, Any], ...]
+    fast_matvec: Operator | None = None
+    fast_rmatvec: Operator | None = None
+    refinement: tuple[float, int, bool] = (1e-5, 5, False)
+    operators: tuple[tuple[str, Operator], ...] = ()
+    """
+    Further operators of the method, passed to it by keyword with the
+    arguments of ``matvec`` and ``vmap``-ped like it. They are kept for the
+    transposed systems, so they must be the same for the transposed
+    operator: e.g. the constraint part of a symmetric bordered system (the
+    ``constraint`` of :func:`~tad_mctc.storch.linsolve.krylov.projected_cg`).
+    """
 
     def transposed(self) -> _LinearSystem:
         """The system with the transposed operator."""
@@ -165,6 +181,8 @@ class _LinearSystem:
             transpose_preconditioner=self.preconditioner,
             linearize=self.rlinearize,
             rlinearize=self.linearize,
+            fast_matvec=self.fast_rmatvec,
+            fast_rmatvec=self.fast_matvec,
         )
 
     def batched(self, dims: tuple[Any, ...]) -> _LinearSystem:
@@ -189,6 +207,19 @@ class _LinearSystem:
             # The `vmap`-ped operator is evaluated directly.
             linearize=None,
             rlinearize=None,
+            fast_matvec=(
+                None
+                if self.fast_matvec is None
+                else _vmapped(self.fast_matvec, dims)
+            ),
+            fast_rmatvec=(
+                None
+                if self.fast_rmatvec is None
+                else _vmapped(self.fast_rmatvec, dims)
+            ),
+            operators=tuple(
+                (name, _vmapped(op, dims)) for name, op in self.operators
+            ),
         )
 
     def solve(
@@ -203,14 +234,23 @@ class _LinearSystem:
                 operator = self.linearize(*detached)
                 matvec = lambda x, *_: operator(x)  # noqa: E731
 
-            result = self.method(
-                matvec,
-                rhs.detach(),
-                *detached,
-                x0=None if x0 is None else x0.detach(),
-                preconditioner=self.preconditioner,
-                **dict(self.options),
-            )
+            if self.fast_matvec is None:
+                result = self.method(
+                    matvec,
+                    rhs.detach(),
+                    *detached,
+                    x0=None if x0 is None else x0.detach(),
+                    preconditioner=self.preconditioner,
+                    **dict(self.options + self.operators),
+                )
+            else:
+                result = _refine(
+                    self,
+                    matvec,
+                    rhs.detach(),
+                    detached,
+                    None if x0 is None else x0.detach(),
+                )
 
         # Not `result._replace`, which Dynamo (PyTorch 2.7) does not trace
         return LinearSolveResult(
@@ -219,6 +259,8 @@ class _LinearSystem:
             target=result.target,
             iterations=result.iterations,
             status=result.status,
+            refinement_status=result.refinement_status,
+            fallback_iterations=result.fallback_iterations,
         )
 
     def attach(
@@ -256,6 +298,109 @@ class _LinearSystem:
             result.solution,
             torch.full_like(result.solution, torch.nan),
         )
+
+
+def _refine(
+    system: _LinearSystem,
+    matvec: Operator,
+    rhs: Tensor,
+    params: tuple[Any, ...],
+    x0: Tensor | None,
+) -> LinearSolveResult:
+    """
+    Iterative refinement: the corrections are solved with the fast
+    operator to the inner tolerance, the residuals are those of
+    ``matvec``, which decides convergence. A correction that does not
+    reduce the residual is rejected and the system stops (stagnation; a
+    breakdown if the inner solve broke down). With the fallback, the
+    systems that did not converge are then solved with ``matvec``, from
+    where the refinement stopped.
+    """
+    assert system.fast_matvec is not None
+    options = dict(system.options)
+    operators = dict(system.operators)
+    vdims = options["vdims"]
+    inner_rtol, steps, fallback = system.refinement
+
+    x = torch.zeros_like(rhs) if x0 is None else x0
+    residual = rhs if x0 is None else rhs - matvec(x, *params)
+    norm = vnorm(residual, vdims)
+    target = convergence_target(rhs, options["rtol"], options["atol"], vdims)
+
+    active = norm > target
+    breakdown = torch.zeros_like(active)
+    stagnation = torch.zeros_like(active)
+    iterations = torch.zeros_like(active, dtype=torch.int64)
+
+    def keep(t: Tensor) -> Tensor:  # batch shape -> shape of `norm`
+        for _ in range(vdims):
+            t = t.unsqueeze(-1)
+        return t
+
+    exit_early = _exit_early(active, options["early_exit"])
+    for _ in range(steps + 1):
+        if exit_early and not bool(active.any()):
+            break
+
+        inner = system.method(
+            system.fast_matvec,
+            residual,
+            *params,
+            x0=None,
+            preconditioner=system.preconditioner,
+            **{**options, **operators, "rtol": inner_rtol, "atol": 0.0},
+        )
+        trial = x + inner.solution
+        trial_residual = rhs - matvec(trial, *params)
+        trial_norm = vnorm(trial_residual, vdims)
+
+        worse = active & ~(trial_norm < norm)
+        failed = worse & keep(inner.status == STATUS_BREAKDOWN)
+        breakdown = breakdown | failed
+        stagnation = stagnation | (worse & ~failed)
+        accept = active & ~worse
+
+        x = torch.where(accept, trial, x)
+        residual = torch.where(accept, trial_residual, residual)
+        norm = torch.where(accept, trial_norm, norm)
+        iterations = iterations + torch.where(active, keep(inner.iterations), 0)
+        active = accept & (norm > target)
+
+    refined = finalize(
+        x, norm, target, iterations, breakdown, vdims, stagnation
+    )
+    extra = torch.zeros_like(iterations)
+    retry = norm > target
+    if fallback and (not exit_early or bool(retry.any())):
+        exact = system.method(
+            matvec,
+            rhs,
+            *params,
+            x0=x,
+            preconditioner=system.preconditioner,
+            **options,
+            **operators,
+        )
+        x = torch.where(retry, exact.solution, x)
+        norm = torch.where(retry, keep(exact.residual), norm)
+        extra = torch.where(retry, keep(exact.iterations), 0)
+        iterations = iterations + extra
+        status = keep(exact.status)
+        breakdown = torch.where(retry, status == STATUS_BREAKDOWN, breakdown)
+        stagnation = torch.where(retry, status == STATUS_STAGNATED, stagnation)
+
+    result = finalize(x, norm, target, iterations, breakdown, vdims, stagnation)
+    for _ in range(vdims):
+        extra = extra.squeeze(-1)
+    return LinearSolveResult(
+        solution=result.solution,
+        residual=result.residual,
+        target=result.target,
+        iterations=result.iterations,
+        status=result.status,
+        refinement_status=refined.status,
+        fallback_iterations=extra,
+    )
 
 
 def _detach(value: Any) -> Any:
@@ -452,6 +597,11 @@ def implicit_solve(
     maxiter: int | None = None,
     vdims: int = 1,
     early_exit: bool | None = None,
+    fast_matvec: Operator | None = None,
+    fast_rmatvec: Operator | None = None,
+    inner_rtol: float = 1e-5,
+    refinements: int = 5,
+    fallback: bool = False,
 ) -> LinearSolveResult:
     r"""
     Solve :math:`A(p)\,x = b` with implicitly defined derivatives.
@@ -518,6 +668,43 @@ def implicit_solve(
         Number of trailing dimensions forming the vector. Defaults to ``1``.
     early_exit : bool | None, optional
         Loop exit policy, see :func:`~tad_mctc.storch.linsolve.cg`.
+    fast_matvec : Callable[..., Tensor] | None, optional
+        A cheaper approximation of the operator, e.g. one evaluated in
+        float32 (:func:`~tad_mctc.storch.pairwise.pair_product` with
+        ``dtype``). If given, every solve, including the derivative solves,
+        is an iterative refinement: the method solves for corrections with
+        ``fast_matvec`` to ``inner_rtol``, and the residuals and the
+        convergence (``rtol``, ``atol``) are those of ``matvec``. The
+        results therefore have the accuracy of ``matvec``, at one product
+        of ``matvec`` per refinement step. A correction that does not
+        reduce the residual stops the system as
+        :data:`~tad_mctc.storch.linsolve.STATUS_STAGNATED` (the fast
+        operator is too far from ``matvec``). The derivatives always use
+        ``matvec``. Defaults to none.
+    fast_rmatvec : Callable[..., Tensor] | None, optional
+        Transposed fast operator. Defaults to ``fast_matvec`` for symmetric
+        operators and to its pullback otherwise.
+    inner_rtol : float, optional
+        Relative tolerance of the solves with ``fast_matvec``. It must be
+        attainable with the fast operator: about ``1e-5`` for float32
+        products. Defaults to ``1e-5``.
+    refinements : int, optional
+        Maximum number of corrections after the first fast solve. Defaults
+        to ``5``.
+    fallback : bool, optional
+        With ``fast_matvec``, solve the systems that the refinement does
+        not converge with ``matvec``, from where it stopped, instead of
+        reporting them (e.g. if the fast operator is not positive definite
+        where ``matvec`` is). This applies to the derivative solves as well.
+        It is a retry with the same method and preconditioner, not a
+        guarantee: it fails as well where they do not suit ``matvec``. The
+        status is that of the final solve; the result reports the status of
+        the refinement and the iterations of the fallback separately
+        (:attr:`~LinearSolveResult.refinement_status`,
+        :attr:`~LinearSolveResult.fallback_iterations`). Where the solves cannot stop early
+        (``early_exit=False``, or under ``vmap`` or ``torch.compile``), the
+        solve with ``matvec`` always runs, for ``maxiter`` products.
+        Defaults to ``False``.
 
     Returns
     -------
@@ -532,7 +719,7 @@ def implicit_solve(
     Raises
     ------
     ValueError
-        Unknown method.
+        Unknown method, or a negative number of refinements.
     DtypeError
         ``rhs`` or ``x0`` is not real floating point.
     NotImplementedError
@@ -549,6 +736,60 @@ def implicit_solve(
     >>> x.sum().backward()
     >>> torch.allclose(b.grad, torch.linalg.solve(a.T, torch.ones(2).double()))
     True
+    """
+    return _implicit_solve(
+        matvec,
+        rhs,
+        params,
+        method=method,
+        rmatvec=rmatvec,
+        symmetric=symmetric,
+        preconditioner=preconditioner,
+        transpose_preconditioner=transpose_preconditioner,
+        linearize=linearize,
+        rlinearize=rlinearize,
+        x0=x0,
+        rtol=rtol,
+        atol=atol,
+        maxiter=maxiter,
+        vdims=vdims,
+        early_exit=early_exit,
+        fast_matvec=fast_matvec,
+        fast_rmatvec=fast_rmatvec,
+        inner_rtol=inner_rtol,
+        refinements=refinements,
+        fallback=fallback,
+    )
+
+
+def _implicit_solve(
+    matvec: Operator,
+    rhs: Tensor,
+    params: tuple[Any, ...],
+    *,
+    method: Method | Callable[..., LinearSolveResult],
+    rmatvec: Operator | None,
+    symmetric: bool | None,
+    preconditioner: Operator | None,
+    transpose_preconditioner: Operator | None,
+    linearize: Linearization | None,
+    rlinearize: Linearization | None,
+    x0: Tensor | None,
+    rtol: float,
+    atol: float,
+    maxiter: int | None,
+    vdims: int,
+    early_exit: bool | None,
+    fast_matvec: Operator | None,
+    fast_rmatvec: Operator | None,
+    inner_rtol: float,
+    refinements: int,
+    fallback: bool,
+    operators: tuple[tuple[str, Operator], ...] = (),
+) -> LinearSolveResult:
+    """
+    :func:`implicit_solve`, with further operators of the method (see
+    :attr:`_LinearSystem.operators`).
     """
     require_real("right-hand side", rhs)
     require_real("initial guess", x0)
@@ -570,6 +811,12 @@ def implicit_solve(
         transpose_preconditioner = preconditioner
     if rlinearize is None and symmetric:
         rlinearize = linearize
+    if fast_matvec is not None and fast_rmatvec is None:
+        fast_rmatvec = fast_matvec if symmetric else _transpose(fast_matvec)
+    if refinements < 0:
+        raise ValueError(
+            f"The number of refinements ({refinements}) is negative."
+        )
 
     system = _LinearSystem(
         matvec=matvec,
@@ -587,5 +834,9 @@ def implicit_solve(
             ("vdims", vdims),
             ("early_exit", early_exit),
         ),
+        fast_matvec=fast_matvec,
+        fast_rmatvec=fast_rmatvec,
+        refinement=(inner_rtol, refinements, fallback),
+        operators=operators,
     )
     return system.solve(rhs, params, x0=x0)

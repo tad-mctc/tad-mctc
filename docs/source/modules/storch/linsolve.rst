@@ -12,6 +12,18 @@ Implicit linear solve
 .. automodule:: tad_mctc.storch.linsolve.implicit
    :members:
 
+Equality constraints
+--------------------
+
+.. automodule:: tad_mctc.storch.linsolve.constrained
+   :members:
+
+Preconditioners
+---------------
+
+.. automodule:: tad_mctc.storch.linsolve.preconditioners
+   :members:
+
 Dense solve
 -----------
 

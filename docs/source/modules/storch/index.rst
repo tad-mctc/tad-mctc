@@ -9,4 +9,5 @@
    implicit
    linalg
    linsolve
+   pairwise
    utils

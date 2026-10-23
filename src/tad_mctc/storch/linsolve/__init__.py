@@ -26,10 +26,18 @@ implicit differentiation.
 - :func:`gmres`: restarted, preconditioned GMRES (nonsymmetric, indefinite)
 - :func:`implicit_solve`: solve with derivatives defined by the linear system
   (reverse and forward mode, any order), independent of the iterations
+  (optionally refined with a cheaper, e.g. float32, operator to the
+  accuracy of the exact one)
 - :func:`dense_solve`: LU solve with the same implicit derivatives, a
   replacement for ``torch.linalg.solve``, whose derivatives over its
   forward-mode rule and nested derivatives under ``vmap`` are wrong in
   PyTorch 2.7 to 2.14
+- :func:`constrained_solve`: minimizer of a quadratic form under linear
+  equality constraints (projected CG on the bordered system), with the same
+  implicit derivatives
+- :func:`jacobi`, :func:`balancing`: preconditioners; the balancing (BNN)
+  preconditioner on a partition into cells (:func:`cell_index`) keeps the
+  iteration count of Coulomb-like operators nearly independent of the size
 
 All solvers are batched, report a structured :class:`LinearSolveResult`
 with tensor-valued status codes, and work under ``torch.func`` transforms.
@@ -47,16 +55,20 @@ Example
 ([0.0909, 0.6364], True)
 """
 
-from . import dense, implicit, krylov, result
+from . import constrained, dense, implicit, krylov, preconditioners, result
+from .constrained import *
 from .dense import *
 from .implicit import *
 from .krylov import *
+from .preconditioners import *
 from .result import *
 
 # Explicit, so that the star import of this package does not also export
 # its submodules (`implicit` would shadow `tad_mctc.storch.implicit`).
 __all__: list[str] = []
+__all__ += constrained.__all__
 __all__ += dense.__all__
 __all__ += implicit.__all__
 __all__ += krylov.__all__
+__all__ += preconditioners.__all__
 __all__ += result.__all__

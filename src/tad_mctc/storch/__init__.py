@@ -30,4 +30,5 @@ from .elemental import *
 from .implicit import *
 from .linalg import *
 from .linsolve import *
+from .pairwise import *
 from .utils import *

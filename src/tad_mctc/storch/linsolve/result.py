@@ -36,6 +36,7 @@ from ...exceptions import ConvergenceError, DeviceError, DtypeError
 from ...typing import Tensor
 
 __all__ = [
+    "ConstrainedSolveResult",
     "LinearSolveResult",
     "require_convergence",
     "STATUS_CONVERGED",
@@ -97,6 +98,19 @@ class LinearSolveResult(NamedTuple):
     :data:`STATUS_BREAKDOWN`, :data:`STATUS_NONFINITE` or
     :data:`STATUS_STAGNATED`."""
 
+    refinement_status: Tensor | None = None
+    """With a fast operator (``fast_matvec``), the status after the
+    refinement, before a fallback (batch shape, ``int64``); e.g.
+    :data:`STATUS_STAGNATED` where the fast operator could not refine. With
+    ``fallback``, the systems where this is not :data:`STATUS_CONVERGED`
+    were solved again with the exact operator. Without a fast operator, it
+    is :attr:`status`. (``None`` only for results constructed by hand.)"""
+
+    fallback_iterations: Tensor | None = None
+    """The iterations of the fallback solves with the exact operator,
+    included in :attr:`iterations` (batch shape, ``int64``); zero where
+    there was none. (``None`` only for results constructed by hand.)"""
+
     @property
     def converged(self) -> Tensor:
         """
@@ -106,6 +120,53 @@ class LinearSolveResult(NamedTuple):
         :attr:`status` with :data:`STATUS_CONVERGED` instead, since Dynamo
         does not trace this property.
         """
+        return self.status == STATUS_CONVERGED
+
+
+class ConstrainedSolveResult(NamedTuple):
+    """
+    Solution, Lagrange multipliers and diagnostics of a linear solve with
+    equality constraints, ``A x + C^T mu = b`` and ``C x = d`` (see
+    :func:`~tad_mctc.storch.linsolve.constrained_solve`).
+
+    The diagnostics are those of the bordered system; the batch shape is the
+    shape of the right-hand side without its last dimension.
+    """
+
+    solution: Tensor
+    """Solution ``x``, shape ``(..., n)``."""
+
+    multiplier: Tensor
+    """Lagrange multipliers ``mu`` of the constraints, shape ``(..., m)``."""
+
+    residual: Tensor
+    """Norm of the true residual of the bordered system (batch shape)."""
+
+    target: Tensor
+    """Residual norm required for convergence (batch shape)."""
+
+    iterations: Tensor
+    """Number of iterations each system took (batch shape, ``int64``)."""
+
+    status: Tensor
+    """Status code of each system (batch shape, ``int64``), see
+    :attr:`LinearSolveResult.status`."""
+
+    constraint_residual: Tensor
+    """Norm of the constraint violation ``C x - d`` (batch shape). It is
+    part of :attr:`residual`, and on its own at the level of rounding (the
+    iterates are feasible): e.g. a check of a total charge independent of
+    the tolerances, which are relative to the whole bordered system."""
+
+    refinement_status: Tensor | None = None
+    """See :attr:`LinearSolveResult.refinement_status`."""
+
+    fallback_iterations: Tensor | None = None
+    """See :attr:`LinearSolveResult.fallback_iterations`."""
+
+    @property
+    def converged(self) -> Tensor:
+        """Whether each system converged (batch shape, ``bool``)."""
         return self.status == STATUS_CONVERGED
 
 
@@ -250,6 +311,8 @@ def finalize(
         target=target,
         iterations=iterations,
         status=status,
+        refinement_status=status,
+        fallback_iterations=torch.zeros_like(iterations),
     )
 
 
@@ -265,7 +328,9 @@ _STATUS_NAMES = {
 
 
 def require_convergence(
-    result: LinearSolveResult, vdims: int = 1, name: str = "Linear solve"
+    result: LinearSolveResult | ConstrainedSolveResult,
+    vdims: int = 1,
+    name: str = "Linear solve",
 ) -> Tensor:
     """
     Solution of a linear solve that must have converged.
@@ -277,7 +342,7 @@ def require_convergence(
 
     Parameters
     ----------
-    result : LinearSolveResult
+    result : LinearSolveResult | ConstrainedSolveResult
         Result of the solve.
     vdims : int, optional
         Number of trailing dimensions of the solution forming the vector.
