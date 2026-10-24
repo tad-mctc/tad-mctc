@@ -30,6 +30,7 @@ from tad_mctc.storch.linsolve import (
     ConstrainedSolveResult,
     LinearSolveResult,
     implicit_solve,
+    mask_converged,
     require_convergence,
 )
 from tad_mctc.tools.testing import requires_compile
@@ -80,6 +81,95 @@ def _checked(
             solution, residual, target, iterations, status
         )
     return require_convergence(result, vdims=vdims)
+
+
+def test_public_mask_exports_and_broadcasting() -> None:
+    """The public mask preserves shape and broadcasts a per-system boolean mask."""
+    from tad_mctc import storch
+
+    assert storch.mask_converged is mask_converged
+    solution = torch.arange(6, dtype=torch.double, device=DEVICE).reshape(2, 3)
+    accepted = torch.tensor([[True], [False]], device=DEVICE)
+    masked = mask_converged(solution, accepted)
+    assert masked.shape == solution.shape
+    assert torch.equal(masked[0], solution[0])
+    assert torch.isnan(masked[1]).all()
+    assert torch.equal(
+        mask_converged(solution, accepted.new_tensor(True)), solution
+    )
+    assert torch.isnan(
+        mask_converged(solution, accepted.new_tensor(False))
+    ).all()
+
+
+def test_public_mask_rejects_invalid_masks() -> None:
+    """Reject nonboolean masks and broadcasting that would expand the solution."""
+    solution = torch.ones(2, 3, dtype=torch.double, device=DEVICE)
+    with pytest.raises(TypeError, match="boolean"):
+        mask_converged(solution, torch.ones(2, 1, device=DEVICE))
+    with pytest.raises(RuntimeError):
+        mask_converged(
+            solution, torch.ones(4, 2, 3, dtype=torch.bool, device=DEVICE)
+        )
+
+
+@pytest.mark.parametrize("derivative", DERIVATIVES)
+def test_linear_solution_zero_higher_derivatives(derivative: str) -> None:
+    """For x(b)=b, valid derivatives are 1/0/0 while failed derivatives stay NaN."""
+    values = torch.tensor([1.0, 2.0], dtype=torch.double, device=DEVICE)
+    accepted = torch.tensor([True, False], device=DEVICE)
+
+    def checked(value: Tensor, valid: Tensor) -> Tensor:
+        return mask_converged(value, valid)
+
+    actual = vmap(DERIVATIVES[derivative](checked))(values, accepted)
+    expected = values.new_tensor(
+        1.0 if derivative in ("reverse", "forward") else 0.0
+    )
+    assert torch.equal(actual[0], expected)
+    assert torch.isnan(actual[1])
+
+
+def test_select_before_nonlinear_downstream_operations() -> None:
+    """Selection after a nonlinear NaN operation can poison even first derivatives."""
+    accepted = torch.tensor([True, False], device=DEVICE)
+    value = torch.tensor(2.0, dtype=torch.double, device=DEVICE)
+
+    def masked(value: Tensor) -> Tensor:
+        return mask_converged(torch.stack((value, 2 * value)), accepted)
+
+    def select_after_square(value: Tensor) -> Tensor:
+        return masked(value).square()[0]
+
+    def select_before_square(value: Tensor) -> Tensor:
+        return masked(value)[0].square()
+
+    assert select_after_square(value) == 4.0
+    # Squaring the failed lane creates 0 * NaN before the mask sees its VJP.
+    # This is an explicit limitation, not a guarantee about downstream code.
+    assert torch.isnan(jacrev(select_after_square)(value))
+    assert jacrev(select_before_square)(value) == 4.0
+
+
+def test_reverse_only_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise the compiled dispatch in Python as well as the real Dynamo test."""
+    from tad_mctc.storch.linsolve import _mask
+
+    # Dynamo executes these lines while tracing bytecode, so coverage does
+    # not see them in the compile test. Force just the dispatch decision
+    # here to check its reverse-only AD class with normal autograd too.
+    monkeypatch.setattr(_mask, "is_compiling", lambda: True)
+    values = torch.tensor(
+        [1.0, 2.0], dtype=torch.double, device=DEVICE, requires_grad=True
+    )
+    accepted = torch.tensor([True, False], device=DEVICE)
+    masked = mask_converged(values, accepted)
+    gradient = torch.autograd.grad(masked.sum(), values)[0]
+    assert gradient[0] == 1.0
+    assert torch.isnan(gradient[1])
+
+    with pytest.raises(NotImplementedError, match="Forward-mode"):
+        jacfwd(lambda value: mask_converged(value, accepted))(values.detach())
 
 
 @pytest.mark.parametrize("vdims", [1, 2])

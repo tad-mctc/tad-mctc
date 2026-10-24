@@ -35,6 +35,8 @@ implicit differentiation.
 - :func:`constrained_solve`: minimizer of a quadratic form under linear
   equality constraints (projected CG on the bordered system), with the same
   implicit derivatives
+- :func:`mask_converged`: apply the same derivative-aware failure mask to
+  application-specific convergence checks
 - :func:`jacobi`, :func:`balancing`: preconditioners; the balancing (BNN)
   preconditioner on a partition into cells (:func:`cell_index`) keeps the
   iteration count of Coulomb-like operators nearly independent of the size
@@ -56,6 +58,7 @@ Example
 """
 
 from . import constrained, dense, implicit, krylov, preconditioners, result
+from ._mask import mask_converged
 from .constrained import *
 from .dense import *
 from .implicit import *
@@ -65,7 +68,7 @@ from .result import *
 
 # Explicit, so that the star import of this package does not also export
 # its submodules (`implicit` would shadow `tad_mctc.storch.implicit`).
-__all__: list[str] = []
+__all__: list[str] = ["mask_converged"]
 __all__ += constrained.__all__
 __all__ += dense.__all__
 __all__ += implicit.__all__
