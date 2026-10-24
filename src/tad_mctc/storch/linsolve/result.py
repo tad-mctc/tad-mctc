@@ -34,6 +34,7 @@ import torch
 from ...autograd.checks import is_vmapped
 from ...exceptions import ConvergenceError, DeviceError, DtypeError
 from ...typing import Tensor
+from ._mask import mask_converged
 
 __all__ = [
     "ConstrainedSolveResult",
@@ -339,6 +340,25 @@ def require_convergence(
     not converge raises. Under these transforms, the status cannot be
     inspected in Python, and the solution of every such system is replaced
     by NaN instead (fail-closed), while the other systems are unaffected.
+    The output uses :func:`~tad_mctc.storch.linsolve.mask_converged`, whose
+    active failed-system derivatives are NaN. A constant NaN branch of
+    ``torch.where`` alone would incorrectly give zero derivatives.
+
+    Select accepted systems before nonlinear downstream operations: even
+    first derivatives can be contaminated if, for example, a square runs
+    on NaNs before selecting valid entries. The nonlinear backward can
+    produce ``0 * NaN`` before its cotangent reaches this mask. Computing
+    finite intermediates and masking only the final output is another safe
+    pattern. See :func:`~tad_mctc.storch.linsolve.mask_converged` for an example.
+
+    For higher derivatives with shared inputs, select accepted outputs
+    first or use ``vmap`` over per-system derivatives.
+    Joint higher derivatives including failed outputs can propagate NaNs
+    through ordinary ``0 * NaN`` operations outside the convergence mask.
+    Compiled first reverse derivatives support ordinary batched tensors.
+    Compiling a ``vmap`` around the mask is unsupported: Dynamo can inline
+    the custom Function's forward and lose its derivative rules. Compiled
+    forward mode and higher derivatives are unsupported as for implicit_solve.
 
     Parameters
     ----------
@@ -383,5 +403,4 @@ def require_convergence(
 
     for _ in range(vdims):
         converged = converged.unsqueeze(-1)
-    nan = torch.full_like(result.solution, torch.nan)
-    return torch.where(converged, result.solution, nan)
+    return mask_converged(result.solution, converged)
