@@ -91,6 +91,7 @@ from torch._C._functorch import (  # pylint: disable=no-name-in-module
 from ...autograd.nested import nested_jvp
 from ...tools.compile import is_compiling, reject_forward_mode
 from ...typing import Tensor
+from ._mask import _nan_mask
 from .krylov import Operator, _exit_early, bicgstab, cg, gmres
 from .result import (
     STATUS_BREAKDOWN,
@@ -293,11 +294,7 @@ class _LinearSystem:
         converged = result.status == STATUS_CONVERGED
         for _ in range(dict(self.options)["vdims"]):
             converged = converged.unsqueeze(-1)
-        return torch.where(
-            converged,
-            result.solution,
-            torch.full_like(result.solution, torch.nan),
-        )
+        return _nan_mask(result.solution, converged)
 
 
 def _refine(

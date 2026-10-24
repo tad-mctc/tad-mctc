@@ -34,6 +34,7 @@ import torch
 from ...autograd.checks import is_vmapped
 from ...exceptions import ConvergenceError, DeviceError, DtypeError
 from ...typing import Tensor
+from ._mask import _nan_mask
 
 __all__ = [
     "ConstrainedSolveResult",
@@ -339,6 +340,17 @@ def require_convergence(
     not converge raises. Under these transforms, the status cannot be
     inspected in Python, and the solution of every such system is replaced
     by NaN instead (fail-closed), while the other systems are unaffected.
+    Failed systems also have NaN derivatives; a constant NaN branch of
+    ``torch.where`` alone would incorrectly give zero derivatives.
+
+    For higher derivatives with shared inputs, select accepted outputs
+    before differentiation or use ``vmap`` over per-system derivatives.
+    Joint higher derivatives including failed outputs can propagate NaNs
+    through ordinary ``0 * NaN`` operations outside the convergence mask.
+    Compiled first reverse derivatives support ordinary batched tensors.
+    Compiling a ``vmap`` around the mask is unsupported: Dynamo can inline
+    the custom Function's forward and lose its derivative rules. Compiled
+    forward mode and higher derivatives are unsupported as for implicit_solve.
 
     Parameters
     ----------
@@ -383,5 +395,4 @@ def require_convergence(
 
     for _ in range(vdims):
         converged = converged.unsqueeze(-1)
-    nan = torch.full_like(result.solution, torch.nan)
-    return torch.where(converged, result.solution, nan)
+    return _nan_mask(result.solution, converged)
