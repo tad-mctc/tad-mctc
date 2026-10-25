@@ -36,6 +36,7 @@ from tad_mctc.storch.linsolve import (
     implicit_solve,
     require_convergence,
 )
+from tad_mctc.tools.testing import requires_compile
 from tad_mctc.typing import Tensor
 
 from ..conftest import DEVICE
@@ -350,3 +351,178 @@ def test_mapped_operator_with_shared_rhs(transform: Callable[..., Any]) -> None:
     expected_gradient[1, :, 1] = -rhs / parameters[1].square()
     torch.testing.assert_close(gradient, expected_gradient)
     assert calls["operator"] < 25
+
+
+@pytest.mark.parametrize("mapped_parameter", [False, True])
+@pytest.mark.parametrize(
+    "transform,order",
+    [
+        (None, 0),
+        (jacrev, 1),
+        (jacfwd, 1),
+        (jacrev, 2),
+        (jacfwd, 2),
+        (jacrev, 3),
+        (jacfwd, 3),
+    ],
+)
+def test_mapped_linearization(
+    mapped_parameter: bool, transform: Callable[..., Any] | None, order: int
+) -> None:
+    """Mapped cached solves agree with loops and a dense derivative oracle."""
+    dd = {"device": DEVICE, "dtype": torch.double}
+    matrices = torch.tensor(
+        [[[2.0, 0.2], [0.2, 3.0]], [[3.0, 0.1], [0.1, 4.0]]], **dd
+    )
+    rhs = torch.tensor([[1.0, 2.0], [3.0, 1.0]], **dd)
+    shared = torch.tensor(0.3, **dd)
+    calls: Counter[str] = Counter()
+
+    def matrix(parameter: Tensor, offset: Tensor) -> Tensor:
+        return parameter @ parameter.mT + (2.0 + offset) * torch.eye(2, **dd)
+
+    def matvec(vector: Tensor, parameter: Tensor, offset: Tensor) -> Tensor:
+        calls["ordinary"] += 1
+        return matrix(parameter, offset) @ vector
+
+    def linearize(
+        parameter: Tensor, offset: Tensor
+    ) -> Callable[[Tensor], Tensor]:
+        calls["setup"] += 1
+        cached = matrix(parameter, offset)
+
+        def product(vector: Tensor) -> Tensor:
+            calls["cached"] += 1
+            return cached @ vector
+
+        return product
+
+    def solve(
+        parameter: Tensor, right_hand_side: Tensor, offset: Tensor
+    ) -> Tensor:
+        result = implicit_solve(
+            matvec,
+            right_hand_side,
+            parameter,
+            offset,
+            linearize=linearize,
+            rlinearize=linearize,
+            maxiter=40,
+        )
+        return result.solution
+
+    def dense(
+        parameter: Tensor, right_hand_side: Tensor, offset: Tensor
+    ) -> Tensor:
+        factor = torch.linalg.cholesky(matrix(parameter, offset))
+        return torch.cholesky_solve(right_hand_side[:, None], factor).squeeze(
+            -1
+        )
+
+    # Map RHS columns and optionally operator matrices along nonleading
+    # axes. The scalar operator parameter is shared by both systems.
+    matrix_values = matrices.movedim(0, -1) if mapped_parameter else matrices[0]
+    rhs_columns = rhs.mT
+    dimensions = (2 if mapped_parameter else None, 1, None)
+    mapped_solve = vmap(solve, in_dims=dimensions)
+
+    def evaluate(offset: Tensor) -> Tensor:
+        return mapped_solve(matrix_values, rhs_columns, offset)
+
+    def independent(offset: Tensor, operator: Callable[..., Tensor]) -> Tensor:
+        values = []
+        for index in range(2):
+            parameter = matrices[index] if mapped_parameter else matrices[0]
+            values.append(operator(parameter, rhs[index], offset))
+        return torch.stack(values)
+
+    def loop(offset: Tensor) -> Tensor:
+        return independent(offset, solve)
+
+    def oracle(offset: Tensor) -> Tensor:
+        return independent(offset, dense)
+
+    for _ in range(order):
+        assert transform is not None
+        evaluate = transform(evaluate)
+        loop = transform(loop)
+        oracle = transform(oracle)
+
+    expected = oracle(shared)
+    loop_result = loop(shared)
+    loop_calls = calls.copy()
+    calls.clear()
+
+    with no_vmap_fallback():
+        actual = evaluate(shared)
+
+    torch.testing.assert_close(actual, expected, rtol=1e-10, atol=1e-11)
+    torch.testing.assert_close(actual, loop_result, rtol=1e-10, atol=1e-11)
+    assert loop_calls["cached"] > 0
+
+    if mapped_parameter:
+        # A general factory returns a Python closure, which cannot be
+        # batched as an output through the public vmap API.
+        assert calls["cached"] == 0
+        assert calls["setup"] == 0
+        assert calls["ordinary"] > 0
+    else:
+        assert calls["cached"] > 0
+        assert calls["setup"] > 0
+        if order == 0:
+            assert calls["ordinary"] == 0
+        else:
+            assert calls["setup"] >= 2
+            assert calls["ordinary"] > 0
+
+
+@requires_compile
+@pytest.mark.usefixtures("reset_dynamo")
+@pytest.mark.parametrize("refined", [False, True])
+def test_compiled_fixed_budget(refined: bool) -> None:
+    """Compiled solves keep their existing Krylov and fallback budgets."""
+    import operator
+
+    rhs = torch.ones(3, device=DEVICE, dtype=torch.double)
+    matrix = torch.eye(3, device=DEVICE, dtype=torch.double)
+    budget = 7
+    product_counts: list[int] = []
+
+    def matvec(vector: Tensor, values: Tensor) -> Tensor:
+        return values @ vector
+
+    def solve(right_hand_side: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        result = implicit_solve(
+            matvec,
+            right_hand_side,
+            matrix,
+            maxiter=budget,
+            fast_matvec=matvec if refined else None,
+            refinements=0,
+            fallback=True,
+        )
+        return result.solution, result.iterations, result.fallback_iterations
+
+    def backend(
+        graph: torch.fx.GraphModule, inputs: list[Tensor]
+    ) -> Callable[..., Any]:
+        product_counts.append(
+            sum(
+                node.op == "call_function" and node.target is operator.matmul
+                for node in graph.graph.nodes
+            )
+        )
+        return graph.forward
+
+    compiled_solve = torch.compile(solve, backend=backend, fullgraph=True)
+    solution, iterations, fallback_iterations = compiled_solve(rhs)
+
+    torch.testing.assert_close(solution, rhs)
+    assert iterations == 1
+    assert fallback_iterations == 0
+
+    # Setup and final true-residual checks surround every fixed-budget
+    # Krylov loop. Refinement adds one exact check and an exact fallback,
+    # even though that fallback reports zero accepted iterations.
+    expected = 2 * (budget + 2) + 1 if refined else budget + 2
+    assert product_counts == [expected]

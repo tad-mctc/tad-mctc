@@ -151,6 +151,20 @@ def _vmapped(fn: Operator, dims: tuple[Any, ...]) -> Operator:
     return torch.vmap(fn, in_dims=(0, *dims))
 
 
+def _batched_linearization(
+    factory: Linearization | None, dims: tuple[Any, ...]
+) -> Linearization | None:
+    """Reuse a shared numerical cache without batching a Python closure."""
+    if factory is None or any(dim is not None for dim in dims):
+        return None
+
+    def linearize(*params: Any) -> Callable[[Tensor], Tensor]:
+        operator = factory(*params)
+        return torch.vmap(operator)
+
+    return linearize
+
+
 @dataclass(frozen=True)
 class _LinearSystem:
     """Static (non-tensor) description of a linear system and its solver."""
@@ -211,9 +225,11 @@ class _LinearSystem:
                 if self.transpose_preconditioner is None
                 else _vmapped(self.transpose_preconditioner, dims)
             ),
-            # The `vmap`-ped operator is evaluated directly.
-            linearize=None,
-            rlinearize=None,
+            # A shared factory can run once on ordinary arguments. A
+            # mapped factory would return per-system Python closures,
+            # which cannot cross the public vmap output boundary.
+            linearize=_batched_linearization(self.linearize, dims),
+            rlinearize=_batched_linearization(self.rlinearize, dims),
             fast_matvec=(
                 None
                 if self.fast_matvec is None
@@ -369,11 +385,6 @@ class _BatchedNumericalSolve(torch.autograd.Function):
         return result, tuple(
             0 if isinstance(value, Tensor) else None for value in result
         )
-
-    @staticmethod
-    def jvp(ctx: Any, *tangents: Any) -> tuple[None, ...]:
-        # The numerical history never participates in differentiation.
-        return (None,) * len(LinearSolveResult._fields)
 
 
 def _refine(
@@ -729,6 +740,12 @@ def implicit_solve(
         once per solve, e.g. the forward pass of a pullback
         (``torch.func.vjp``). It is called on detached arguments; the
         derivatives always use ``matvec``. Must agree with ``matvec``.
+        Under mapped numerical solves, the cache is retained when all
+        operator parameters are shared. If any parameter is mapped,
+        products use ``matvec`` instead: public ``vmap`` cannot return
+        per-system Python operator closures. This can repeat expensive
+        setup, so transform performance with mapped parameters depends on
+        the cost of ``matvec`` as well as the iteration count.
     rlinearize : Callable[..., Callable[[Tensor], Tensor]] | None, optional
         As ``linearize``, for the transposed operator. Defaults to
         ``linearize`` for symmetric operators.
