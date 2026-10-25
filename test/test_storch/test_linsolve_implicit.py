@@ -614,13 +614,24 @@ def test_linearize() -> None:
         ).solution
         return (x**2).sum()
 
+    # Cached numerical products replace the original operator in the
+    # primal solve. Derivative products must still use the original.
+    f(s, linearize=linearize)
+    assert calls["linearize"] == 1
+    assert calls["operator"] > 0
+    assert calls["matvec"] == 0
+
     ref = jacfwd(jacrev(lambda s: f(s)))(s)
     calls.update(matvec=0, linearize=0, operator=0)
 
     hess = jacfwd(jacrev(lambda s: f(s, linearize=linearize)))(s)
     assert_close(hess, ref)
     assert calls["linearize"] > 0
-    assert calls["operator"] > calls["matvec"]
+
+    # Early termination can make numerical products fewer than AD
+    # products; their relative counts are not a linearization contract.
+    assert calls["operator"] > 0
+    assert calls["matvec"] > 0
 
     # the transposed linearization of a symmetric operator is the same
     out = implicit_solve(

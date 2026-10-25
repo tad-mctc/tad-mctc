@@ -52,9 +52,14 @@ Implementation notes
 The derivatives are attached by a ``torch.autograd.Function`` whose forward
 is the identity on the detached solution (as dxtb's implicit SCF root).
 
-- ``vmap``: a batching rule moves the ``vmap`` dimension to the front, where
-  it becomes a batch dimension of the solves, and ``vmap``-s the operator.
-  The derivative rules then run on ordinary batched tensors.
+- ``vmap``: public ``torch.autograd.Function.vmap`` rules move mapped
+  dimensions to ordinary leading batch dimensions before the detached
+  numerical solve and before attaching implicit derivatives. Operators
+  retain their per-system shapes through ``vmap``. Krylov, refinement and
+  fallback decisions can stop once all systems in that batch are inactive;
+  individual systems keep their original acceptance checks and diagnostics.
+  Nested maps are promoted one level at a time, without private unwrapping.
+  Compiled execution keeps the fixed-budget path.
 - ``jvp``: PyTorch hides a custom ``jvp`` from enclosing forward-mode
   transforms, see :func:`~tad_mctc.autograd.nested_jvp`, which fixes it.
   With the batching rule above, every nesting of ``jacfwd`` is correct.
@@ -88,6 +93,7 @@ from torch._C._functorch import (  # pylint: disable=no-name-in-module
     peek_interpreter_stack,
 )
 
+from ...autograd.checks import is_vmapped
 from ...autograd.nested import nested_jvp
 from ...tools.compile import is_compiling, reject_forward_mode
 from ...typing import Tensor
@@ -229,29 +235,25 @@ class _LinearSystem:
         """Solve on detached inputs and attach the implicit derivatives."""
         with torch.no_grad():
             detached = tuple(_detach(p) for p in params)
+            rhs_value = rhs.detach()
+            initial = None if x0 is None else x0.detach()
 
-            matvec = self.matvec
-            if self.linearize is not None:
-                operator = self.linearize(*detached)
-                matvec = lambda x, *_: operator(x)  # noqa: E731
-
-            if self.fast_matvec is None:
-                result = self.method(
-                    matvec,
-                    rhs.detach(),
-                    *detached,
-                    x0=None if x0 is None else x0.detach(),
-                    preconditioner=self.preconditioner,
-                    **dict(self.options + self.operators),
+            # Promote mapped dimensions before entering numerical control
+            # flow. Compilation keeps the existing fixed-budget path.
+            values = (rhs_value, initial, *detached)
+            mapped = not is_compiling() and any(
+                is_vmapped(value)
+                for value in values
+                if isinstance(value, Tensor)
+            )
+            if mapped:
+                result = LinearSolveResult(
+                    *_BatchedNumericalSolve.apply(
+                        rhs_value, initial, self, *detached
+                    )
                 )
             else:
-                result = _refine(
-                    self,
-                    matvec,
-                    rhs.detach(),
-                    detached,
-                    None if x0 is None else x0.detach(),
-                )
+                result = self.numerical(rhs_value, detached, initial)
 
         # Not `result._replace`, which Dynamo (PyTorch 2.7) does not trace
         return LinearSolveResult(
@@ -262,6 +264,29 @@ class _LinearSystem:
             status=result.status,
             refinement_status=result.refinement_status,
             fallback_iterations=result.fallback_iterations,
+        )
+
+    def numerical(
+        self, rhs: Tensor, params: tuple[Any, ...], x0: Tensor | None
+    ) -> LinearSolveResult:
+        """Evaluate the detached iteration without attaching derivatives."""
+        matvec = self.matvec
+        if self.linearize is not None:
+            operator = self.linearize(*params)
+
+            def matvec(x: Tensor, *_: Any) -> Tensor:
+                return operator(x)
+
+        if self.fast_matvec is not None:
+            return _refine(self, matvec, rhs, params, x0)
+
+        return self.method(
+            matvec,
+            rhs,
+            *params,
+            x0=x0,
+            preconditioner=self.preconditioner,
+            **dict(self.options + self.operators),
         )
 
     def attach(
@@ -295,6 +320,60 @@ class _LinearSystem:
         for _ in range(dict(self.options)["vdims"]):
             converged = converged.unsqueeze(-1)
         return mask_converged(result.solution, converged)
+
+
+class _BatchedNumericalSolve(torch.autograd.Function):
+    """
+    Move mapped numerical inputs into explicit solver batch dimensions.
+
+    Only detached values cross this boundary. The public Function.vmap rule
+    removes one mapping level at a time, including nested/non-leading maps;
+    operators retain their original per-system shapes through vmap. Once
+    the convergence masks are ordinary tensors, the unchanged Krylov and
+    refinement loops can inspect them and stop when every lane is inactive.
+    Implicit derivatives are attached separately by _LinearSystem.solve.
+    """
+
+    @staticmethod
+    def forward(
+        rhs: Tensor, x0: Tensor | None, system: _LinearSystem, *params: Any
+    ) -> tuple[Tensor | None, ...]:
+        return tuple(system.numerical(rhs, params, x0))
+
+    @staticmethod
+    def setup_context(
+        ctx: Any, inputs: tuple[Any, ...], output: tuple[Tensor | None, ...]
+    ) -> None:
+        ctx.mark_non_differentiable(
+            *(value for value in output if isinstance(value, Tensor))
+        )
+
+    @staticmethod
+    def vmap(
+        info: Any,
+        in_dims: tuple[Any, ...],
+        rhs: Tensor,
+        x0: Tensor | None,
+        system: _LinearSystem,
+        *params: Any,
+    ) -> tuple[tuple[Tensor | None, ...], tuple[int | None, ...]]:
+        def front(value: Tensor, dim: int | None) -> Tensor:
+            if dim is None:
+                return value.expand(info.batch_size, *value.shape)
+            return value.movedim(dim, 0)
+
+        rhs = front(rhs, in_dims[0])
+        initial = None if x0 is None else front(x0, in_dims[1])
+        batched = system.batched(tuple(in_dims[3:]))
+        result = _BatchedNumericalSolve.apply(rhs, initial, batched, *params)
+        return result, tuple(
+            0 if isinstance(value, Tensor) else None for value in result
+        )
+
+    @staticmethod
+    def jvp(ctx: Any, *tangents: Any) -> tuple[None, ...]:
+        # The numerical history never participates in differentiation.
+        return (None,) * len(LinearSolveResult._fields)
 
 
 def _refine(
@@ -665,6 +744,9 @@ def implicit_solve(
         Number of trailing dimensions forming the vector. Defaults to ``1``.
     early_exit : bool | None, optional
         Loop exit policy, see :func:`~tad_mctc.storch.linsolve.cg`.
+        Eager mapped numerical solves use ordinary batch dimensions, so
+        the default can stop when every system is inactive. Compilation
+        retains fixed-budget execution.
     fast_matvec : Callable[..., Tensor] | None, optional
         A cheaper approximation of the operator, e.g. one evaluated in
         float32 (:func:`~tad_mctc.storch.pairwise.pair_product` with
@@ -698,8 +780,8 @@ def implicit_solve(
         status is that of the final solve; the result reports the status of
         the refinement and the iterations of the fallback separately
         (:attr:`~LinearSolveResult.refinement_status`,
-        :attr:`~LinearSolveResult.fallback_iterations`). Where the solves cannot stop early
-        (``early_exit=False``, or under ``vmap`` or ``torch.compile``), the
+        :attr:`~LinearSolveResult.fallback_iterations`). Where the solves
+        cannot stop early (``early_exit=False`` or ``torch.compile``), the
         solve with ``matvec`` always runs, for ``maxiter`` products.
         Defaults to ``False``.
 
