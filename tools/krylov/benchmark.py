@@ -16,9 +16,8 @@ from unittest.mock import patch
 import torch
 from torch.func import jacfwd, jacrev, jvp, vmap
 
-from tad_mctc.storch.linsolve import constrained_solve
+from tad_mctc.storch.linsolve import constrained_solve, implicit_solve, krylov
 from tad_mctc.storch.linsolve import implicit as implementation
-from tad_mctc.storch.linsolve import implicit_solve, krylov
 
 MODES = (
     "eager",
