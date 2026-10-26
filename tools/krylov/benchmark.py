@@ -386,6 +386,12 @@ def main() -> None:
             result = dict(
                 vars(args),
                 torch=torch.__version__,
+                maxiter=None if args.case == "eeq" else args.maxiter,
+                iteration_budget=(
+                    2 * (args.size + 1) if args.case == "eeq" else args.maxiter
+                ),
+                rtol=1e-12 if args.case == "eeq" else 1e-10,
+                atol=1e-14 if args.case == "eeq" else 1e-12,
                 dtype="float64",
                 solver_source=implementation.__file__,
                 status="ok",

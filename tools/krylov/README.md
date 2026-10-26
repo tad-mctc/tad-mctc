@@ -33,7 +33,7 @@ PYTHONPATH=src OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 Repeat for sizes 300 and 999 and modes `native`, `jacfwd`, and `vmap`.
 `jacfwd` uses a single displacement direction; `jacrev` uses a scalar
 observable. Water geometry, charge -1, sparse coordination neighbors,
-solver defaults and `sum(energy) + 0.01 * sum(charges**2)` match PR #69.
+solver defaults (`--maxiter` applies only to synthetic cases) and `sum(energy) + 0.01 * sum(charges**2)` match PR #69.
 
 The default is three warm repeats after one separately reported cold run.
 CUDA timing synchronizes both boundaries. Dense references run outside the
@@ -49,10 +49,12 @@ Diagnostic snapshots unwrap functorch tensors only for readout. They never
 change numerical inputs or control flow. Production uses public batching
 rules. Run benchmarks without concurrent GPU tests or other GPU workloads.
 
-Shared operator parameters retain their numerical cache under mapped solves.
-If any operator parameter is mapped, the factory is bypassed: public vmap
-cannot return per-system Python closures. Expensive setup inside ordinary
-matvecs can therefore outweigh the iteration savings. Both ordinary and
-cached operators must remain mathematically equivalent; implicit AD always
-uses the original operator. A general mapped-cache interface requires
-separate design work. Compilation retains fixed-budget execution.
+Shared operator parameters retain their cache and dynamic termination.
+With mapped operator parameters and no fast operator, numerical execution
+keeps the base's cached fixed-budget path. This avoids replacing an expensive
+cache with repeated ordinary-matvec setup. With a fast operator, mapped
+factories are still bypassed for exact residual checks, since public vmap
+cannot return per-system Python closures. Measure expensive setup in that
+configuration. A general mapped-cache interface needs separate design work.
+Implicit AD remains independent of numerical iterations and uses the original
+operator. Compilation retains fixed-budget execution.

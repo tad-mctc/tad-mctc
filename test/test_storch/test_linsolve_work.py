@@ -460,20 +460,19 @@ def test_mapped_linearization(
     torch.testing.assert_close(actual, loop_result, rtol=1e-10, atol=1e-11)
     assert loop_calls["cached"] > 0
 
-    if mapped_parameter:
-        # A general factory returns a Python closure, which cannot be
-        # batched as an output through the public vmap API.
-        assert calls["cached"] == 0
-        assert calls["setup"] == 0
-        assert calls["ordinary"] > 0
-    else:
-        assert calls["cached"] > 0
-        assert calls["setup"] > 0
-        if order == 0:
-            assert calls["ordinary"] == 0
+    assert calls["cached"] > 0
+    assert calls["setup"] > 0
+    if order == 0:
+        assert calls["ordinary"] == 0
+        if mapped_parameter:
+            # Preserve the base implementation's cache and fixed budget.
+            assert calls["cached"] == 42
         else:
+            assert calls["cached"] < 40
+    else:
+        assert calls["ordinary"] > 0
+        if not mapped_parameter:
             assert calls["setup"] >= 2
-            assert calls["ordinary"] > 0
 
 
 @requires_compile
@@ -526,3 +525,42 @@ def test_compiled_fixed_budget(refined: bool) -> None:
     # even though that fallback reports zero accepted iterations.
     expected = 2 * (budget + 2) + 1 if refined else budget + 2
     assert product_counts == [expected]
+
+
+def test_mapped_refinement_with_linearization() -> None:
+    """Mapped refinement retains dynamic termination and a correct oracle."""
+    rhs = torch.ones(3, device=DEVICE, dtype=torch.double)
+    scales = torch.tensor([1.0, 2.0], device=DEVICE, dtype=torch.double)
+    calls: Counter[str] = Counter()
+
+    def matvec(vector: Tensor, scale: Tensor) -> Tensor:
+        calls["ordinary"] += 1
+        return scale * vector
+
+    def linearize(scale: Tensor) -> Callable[[Tensor], Tensor]:
+        calls["setup"] += 1
+
+        def product(vector: Tensor) -> Tensor:
+            calls["cached"] += 1
+            return scale * vector
+
+        return product
+
+    def solve(scale: Tensor) -> Tensor:
+        result = implicit_solve(
+            matvec,
+            rhs,
+            scale,
+            linearize=linearize,
+            fast_matvec=matvec,
+            fallback=True,
+            maxiter=40,
+        )
+        return result.solution
+
+    actual = vmap(solve)(scales)
+
+    torch.testing.assert_close(actual, rhs / scales[:, None])
+    assert calls["setup"] == 0
+    assert calls["cached"] == 0
+    assert calls["ordinary"] < 10

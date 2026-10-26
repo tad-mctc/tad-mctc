@@ -262,7 +262,20 @@ class _LinearSystem:
                 for value in values
                 if isinstance(value, Tensor)
             )
-            if mapped:
+            # Keep the original mapped numerical path when promoting it
+            # would discard a per-system cache. Fewer iterations can be
+            # slower if every product must rebuild an expensive operator.
+            preserve_cache = (
+                mapped
+                and self.linearize is not None
+                and self.fast_matvec is None
+                and any(
+                    is_vmapped(value)
+                    for value in detached
+                    if isinstance(value, Tensor)
+                )
+            )
+            if mapped and not preserve_cache:
                 result = LinearSolveResult(
                     *_BatchedNumericalSolve.apply(
                         rhs_value, initial, self, *detached
@@ -740,12 +753,14 @@ def implicit_solve(
         once per solve, e.g. the forward pass of a pullback
         (``torch.func.vjp``). It is called on detached arguments; the
         derivatives always use ``matvec``. Must agree with ``matvec``.
-        Under mapped numerical solves, the cache is retained when all
-        operator parameters are shared. If any parameter is mapped,
-        products use ``matvec`` instead: public ``vmap`` cannot return
-        per-system Python operator closures. This can repeat expensive
-        setup, so transform performance with mapped parameters depends on
-        the cost of ``matvec`` as well as the iteration count.
+        Mapped solves retain shared-parameter caches. If operator
+        parameters are mapped and no fast operator is given, the numerical
+        solve keeps the original mapped execution and its fixed iteration
+        budget to preserve the cache. With a fast operator, mapped factories
+        are bypassed: public ``vmap`` cannot return per-system Python
+        closures. Exact residual checks then use ``matvec``; benchmark
+        expensive setup in that configuration. Implicit derivatives still
+        use the original operator in every case.
     rlinearize : Callable[..., Callable[[Tensor], Tensor]] | None, optional
         As ``linearize``, for the transposed operator. Defaults to
         ``linearize`` for symmetric operators.
