@@ -106,6 +106,10 @@ def synthetic(args: argparse.Namespace, records: dict[str, Any]) -> Case:
     identity = torch.eye(args.size, **dd)
     parameter = parameter / math.sqrt(args.size)
 
+    # Shared arguments must be created outside vmap; constructors inside
+    # the mapped function can themselves acquire a mapped dimension.
+    shared_shift = rhs.new_zeros(())
+
     def matrix(values: Tensor, shift: Tensor) -> Tensor:
         return values @ values.mT + (2.0 + shift) * identity
 
@@ -172,15 +176,13 @@ def synthetic(args: argparse.Namespace, records: dict[str, Any]) -> Case:
         )
         current_rhs = rhs + displacement
         if dense:
-            factor = torch.linalg.cholesky(
-                matrix(values, displacement.new_zeros(()))
-            )
+            factor = torch.linalg.cholesky(matrix(values, shared_shift))
             return torch.cholesky_solve(current_rhs[:, None], factor).sum()
         result = implicit_solve(
             matvec,
             current_rhs,
             values,
-            displacement.new_zeros(()),
+            shared_shift,
             linearize=linearize,
             maxiter=args.maxiter,
         )
