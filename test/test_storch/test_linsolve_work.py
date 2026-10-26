@@ -505,9 +505,12 @@ def test_compiled_fixed_budget(refined: bool) -> None:
     def backend(
         graph: torch.fx.GraphModule, inputs: list[Tensor]
     ) -> Callable[..., Any]:
+        # A default-device context (used by CUDA tests) represents the
+        # same product as Tensor.matmul rather than operator.matmul.
         product_counts.append(
             sum(
-                node.op == "call_function" and node.target is operator.matmul
+                (node.op == "call_function" and node.target is operator.matmul)
+                or (node.op == "call_method" and node.target == "matmul")
                 for node in graph.graph.nodes
             )
         )
